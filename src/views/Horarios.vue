@@ -1,6 +1,6 @@
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, reactive } from 'vue';
 import { FilterMatchMode, FilterService } from 'primevue/api';
 import { MaeInfoService } from '@/service/MaeInfoService';
 
@@ -21,7 +21,10 @@ const horario = ref([
 ]);
 
 const statuses = ref(['Remota', 'Presencial', 'Híbrida']);
-const loading = ref(true);
+const loading = ref([]);
+
+const visibleSubjectModals = ref({});
+
 
 onMounted(() => {
     MaeInfoService.getCustomersMedium().then((data) => {
@@ -33,6 +36,8 @@ onMounted(() => {
     FilterService.register(ARRAY_CONTAINS.value, (value, filter) => {
         // Filter -> value entered by user
         // Value -> array of objects, where each object represents a subject given by a mae
+
+        console.log("value:", value);
 
         if (filter === undefined || filter === null || filter.trim() === '') {
             return true;
@@ -72,17 +77,17 @@ onMounted(() => {
             return false;
         }
 
-        window.console.log("value:", value);
-        window.console.log("filter:", filter);
+        // window.console.log("value:", value);
+        // window.console.log("filter:", filter);
 
         for (let i = 0; i < filter.length; i++) {
-            window.console.log("filter:", filter[i]);
+            // window.console.log("filter:", filter[i]);
             for (let j = 0; j < value.length; j++) {
                 const dayNorm = value[j][0].normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
                 const filterNorm = filter[i].normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
                 if (dayNorm === filterNorm) {
-                    window.console.log("TRUE:", dayNorm, "is", filterNorm);
+                    // window.console.log("TRUE:", dayNorm, "is", filterNorm);
                     return true;
                 }
             }
@@ -93,6 +98,11 @@ onMounted(() => {
     });
 });
 
+const showModal = (itemId) => {
+    // Set the visibility for the clicked item's modal to true
+    visibleSubjectModals.value[itemId] = true;
+};
+
 const getCustomers = (data) => {
     return [...(data || [])].map((d) => {
         d.date = new Date(d.date);
@@ -100,6 +110,29 @@ const getCustomers = (data) => {
         return d;
     });
 };
+
+
+// TODO: cache generated horarios
+const generateHorario = (horario) => {
+    let horarioString = "";
+
+
+    for (let i = 0; i < horario[1].length; i++) {
+        let hours = Math.floor(horario[1][i]);
+        horarioString += hours;
+
+        if (horario[1][i] - hours !== 0) {
+            let minutes = Math.floor(60 * (horario[1][i] - hours));
+            horarioString += ":";
+            horarioString += minutes;
+        } else {
+            horarioString += ":00";
+        }
+        horarioString += "\n";
+    }
+
+    return horarioString;
+}
 
 const getSeverity = (status) => {
     switch (status) {
@@ -145,7 +178,7 @@ const getDayColor = (day) => {
             <div class="flex justify-content-end">
                 <span class="p-input-icon-left">
                     <i class="pi pi-search" />
-                    <InputText v-model="filters['global'].value" placeholder="Busqueda general" />
+                    <InputText v-model="filters['global'].value" placeholder="Búsqueda general" />
                 </span>
             </div>
         </template>
@@ -162,10 +195,23 @@ const getDayColor = (day) => {
         </Column>
         <Column header="Materias" filterField="materias" :showFilterMenu="false" style="min-width: 12rem">
             <template #body="{ data }">
-                <!-- TODO: ask for handling when data.materias.length > x -->
-                <div class="flex flex-row flex-wrap column-gap-3">
-                    <Tag class="bg-blue-300 text-md" :value="item.id" rounded v-for="item in data.materias"/>
+                <div class="flex flex-row flex-wrap column-gap-3 row-gap-2 mb-3">
+                    <Tag class="bg-blue-300 text-md" :value="item.id" rounded v-for="item in data.materias.slice(0, 3)"
+                        v-tooltip.top="item.name" />
                 </div>
+                <Button label="Ver todas las materias" icon="pi pi-external-link" @click="showModal(data.id)"
+                    v-if="data.materias.length >= 3" />
+
+                <Dialog v-if="data.materias.length >= 3" v-model:visible="visibleSubjectModals[data.id]" maximizable modal
+                    :header="'Materias de ' + data.name" :style="{ width: '50rem' }"
+                    :breakpoints="{ '1199px': '75vw', '575px': '90vw' }">
+                    <div class="flex flex-column flex-wrap column-gap-3 row-gap-2 mb-3 w-fit">
+                        <div v-for="item in data.materias" class="flex flex-row flex-wrap column-gap-3 row-gap-3">
+                            <Tag class="bg-blue-300 text-md" :value="item.id" rounded />
+                            <p>{{ item.name }}</p>
+                        </div>
+                    </div>
+                </Dialog>
             </template>
             <template #filter="{ filterModel, filterCallback }">
                 <InputText v-model="filterModel.value" type="text" @input="filterCallback()" class="p-column-filter"
@@ -175,9 +221,11 @@ const getDayColor = (day) => {
         <Column header="Horario" filterField="horario" :showFilterMenu="false" :filterMenuStyle="{ width: '14rem' }"
             style="min-width: 14rem">
             <template #body="{ data }">
-                <!-- TODO: ask for hour display implementation -->
                 <div class="flex flex-row flex-wrap column-gap-3">
-                    <Tag class="text-lg" :class="getDayColor(item[0])" :value="item[0]" rounded v-for="item in data.horario"/>
+                    <div v-for="item in data.horario">
+                        <Tag class="text-lg" :class="getDayColor(item[0])" :value="item[0]" rounded
+                            v-tooltip.left="generateHorario(item)" />
+                    </div>
                 </div>
             </template>
             <template #filter="{ filterModel, filterCallback }">

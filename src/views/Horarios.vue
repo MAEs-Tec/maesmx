@@ -198,11 +198,14 @@ const getDayColor = (day) => {
                 <div class="flex flex-row flex-wrap column-gap-3 row-gap-2 mb-3">
                     <Tag class="bg-blue-300 text-md" :value="item.id" rounded v-for="item in data.materias.slice(0, 3)"
                         v-tooltip.top="item.name" />
+                    <Tag class="text-md" icon="pi pi-ellipsis-h" :value="'Ver más'" rounded @click="showModal(data.id)"
+                        />
+                        
                 </div>
-                <Button label="Ver todas las materias" icon="pi pi-external-link" @click="showModal(data.id)"
-                    v-if="data.materias.length >= 3" />
+                <!-- <Button label="" icon="pi pi-external-link" @click="showModal(data.id)"
+                    v-if="data.materias.length >= 0" /> -->
 
-                <Dialog v-if="data.materias.length >= 3" v-model:visible="visibleSubjectModals[data.id]" maximizable modal
+                <Dialog v-if="data.materias.length >= 0" v-model:visible="visibleSubjectModals[data.id]" maximizable modal
                     :header="'Materias de ' + data.name" :style="{ width: '50rem' }"
                     :breakpoints="{ '1199px': '75vw', '575px': '90vw' }">
                     <div class="flex flex-column flex-wrap column-gap-3 row-gap-2 mb-3 w-fit">

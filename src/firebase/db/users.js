@@ -219,7 +219,6 @@ export async function stopActiveSession(userId) {
     try {
         const userRef = doc(firestoreDB, "users", userId);
         const userDoc = await getDoc(userRef);
-
         if (!userDoc.exists()) {
             throw new Error("User not found");
         }
@@ -237,6 +236,11 @@ export async function stopActiveSession(userId) {
         const differenceInMinutes = Math.floor((currentTime - startTime) / (1000 * 60));
 
         if (differenceInMinutes > 310) {
+            
+            await updateDoc(userRef, {
+                totalTime: userData.totalTime  + 0,
+                activeSession: deleteField()
+            });
             throw new Error('Exceded time limit')
         }
 
@@ -248,13 +252,12 @@ export async function stopActiveSession(userId) {
             activeSession: deleteField()
         });
 
-        return { totalTime, differenceInMinutes, activeSessionDeleted: true };
+        return { totalTime, differenceInMinutes, activeSessionDeleted: true ,};
     } catch (error) {
         console.error("Error stopping active session: ", error);
-        return { timeLimit: error == 'Exceded time limit', activeSessionDeleted: false };
+        return { timeLimit: error == 'Exceded time limit', activeSessionDeleted: true, differenceInMinutes: 0 };
     }
 }
-
 export async function incrementTotalTime(userId, time) {
     const userRef = doc(firestoreDB, "users", userId);
 

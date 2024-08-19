@@ -220,7 +220,7 @@ const isZoomLink = (location) => {
                     <!-- Contenedor del texto con manejo de desbordamiento -->
                     <a :href="`/#/mae/${mae.uid}`"
                         class="font-semibold text-xl text-black-alpha-90 hover:underline hover:text-primary truncate"
-                        style="display: block; max-width: 80%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
+                        style="display: block; max-width: 65%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
                         {{ mae.name }}
                     </a>
                     <div class="absolute bottom-0 w-full">

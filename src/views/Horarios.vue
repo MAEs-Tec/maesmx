@@ -23,7 +23,7 @@ const horario = ref([
     "Lunes", "Martes", "Miercoles", "Jueves", "Viernes"
 ]);
 
-const statuses = ref(['Remota', 'Presencial', 'Híbrida']);
+// const statuses = ref(['Remota', 'Presencial', 'Híbrida']);
 const loading = ref(true);
 
 onMounted(() => {

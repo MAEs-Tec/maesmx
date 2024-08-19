@@ -40,6 +40,16 @@ watch(route, async (newroute, oldroute) => {
   newSchedule.value = JSON.parse(JSON.stringify(maeInfo.value.weekSchedule));
 })
 
+const areaOptions = ref([
+  { label: 'Todas', value: null },
+  { label: 'ING', value: 'ING' },
+  { label: 'NEG', value: 'NEG' },
+  { label: 'SLD', value: 'SLD' },
+  { label: 'CIS', value: 'CIS' },
+  { label: 'AMC', value: 'AMC' },
+  { label: 'ART', value: 'ART' }
+]);
+
 const showMoreTags = ref(false);
 
 const filteredSubjects = computed(() => {
@@ -52,6 +62,9 @@ const filteredSubjects = computed(() => {
         return nameNormalized.includes(searchQueryNormalized) || idNormalized.includes(searchQueryNormalized);
       }
     );
+  }
+  if (subjectTableFilter.value.area) {
+    return subjects.value.filter(subject => subject.area === subjectTableFilter.value.area);
   }
   return [];
 });
@@ -76,12 +89,12 @@ const getSubjectColor = (area) => {
 }
 
 const searchQuery = ref('');
+
 const showDialogMaterias = ref(false);
 const subjectTableFilter = ref({
-    global: { value: null, matchMode: FilterMatchMode.CONTAINS }
+    global: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    area:null
 });
-
-const areas = ref(["ING", "NEG", "CIS", "SLD","GEN","AMC"])
 
 const saveSubjectChanges = async () => {
   toast.add({ severity: 'info', summary: 'Guardando cambios', detail: 'Se están guardando los cambios en tus materias', life: 3000 });
@@ -341,39 +354,29 @@ const stopSession = async () => {
   </Dialog>
 
   <Dialog v-model:visible="showDialogMaterias" modal header="Editar materias" class="md:w-9">
-    <DataTable :value="subjects" paginator :rows="10" :rowsPerPageOptions="[10, 25, 50, 100]"
-      v-model:filters="subjectTableFilter" :globalFilterFields="['id', 'name', 'area']"
-      v-model:selection="selectedSubjects" responsiveLayout="stack">
-      <template #header>
-      <div class="flex gap-2">
-        <InputText v-model="subjectTableFilter['global'].value" placeholder="Buscar materia" class="w-full" />
-        <Dropdown v-model="subjectTableFilter['global'].value" @change="filterCallback()" :options="areas" 
-          placeholder="Buscar por área" class="p-column-filter" style="min-width: 14rem" :maxSelectedLabels="1">
-          <template #option="slotProps">
-            <div class="flex align-items-center gap-2">
-              <span class="uppercase">{{ slotProps.option }}</span>
-            </div>
-          </template>
-        </Dropdown>
-      </div>
+  <DataTable :value="subjects" paginator :rows="10" :rowsPerPageOptions="[10, 25, 50, 100]"
+    v-model:filters="subjectTableFilter" :globalFilterFields="['id', 'name']"
+    v-model:selection="selectedSubjects" responsiveLayout="stack">
+    <template #header>
+      <InputText v-model="subjectTableFilter['global'].value" placeholder="Buscar materia" class="w-full" />
     </template>
-      <template #empty>No se encontraron resultados.</template>
-      <Column selectionMode="multiple" headerStyle="visibility:hidden"></Column>
-      <Column field="id" header="Código"></Column>
-      <Column field="name" class="text-right sm:text-left" header="Nombre"></Column>
-      <Column field="semester" header="Semestre"></Column>
-      <Column field="area" header="Área" ></Column>
-      <Column field="top" header="Top">
-        <template #body="slotProps">
-          <i v-if="slotProps.data.top" class="pi pi-star-fill" style="color: gold;"></i>
-        </template>
-      </Column>
-    </DataTable>
-    <div class="flex justify-content-end gap-2">
-      <Button type="button" label="Cerrar" severity="secondary" @click="showDialogMaterias = false"></Button>
-      <Button type="button" label="Guardar cambios" @click="saveSubjectChanges"></Button>
-    </div>
-  </Dialog>
+    <template #empty>No se encontraron resultados.</template>
+    <Column selectionMode="multiple" headerStyle="visibility:hidden"></Column>
+    <Column field="id" header="Código"></Column>
+    <Column field="name" class="text-right sm:text-left" header="Nombre"></Column>
+    <Column field="semester" header="Semestre"></Column>
+    <Column field="area" header="Area"></Column>
+    <Column field="top" header="Top">
+      <template #body="slotProps">
+         <i v-if="slotProps.data.top" class="pi pi-star-fill" style="color: gold;"></i>
+      </template>
+    </Column>
+  </DataTable>
+  <div class="flex justify-content-end gap-2">
+    <Button type="button" label="Cerrar" severity="secondary" @click="showDialogMaterias = false"></Button>
+    <Button type="button" label="Guardar cambios" @click="saveSubjectChanges"></Button>
+  </div>
+</Dialog>
 
 
   <Dialog v-model:visible="showDialogAsesoria" modal header="Registrar asesoría" class="md:w-4">

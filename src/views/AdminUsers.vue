@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import { FilterMatchMode } from 'primevue/api';
+import { FilterMatchMode, FilterService } from 'primevue/api';
 import { useToast } from 'primevue/usetoast';
 import { getMaes, updateUserInfo } from '../firebase/db/users';
 
@@ -14,9 +14,8 @@ const deleteDialog = ref(false);
 const selectedUser = ref(null);
 
 const filters = ref({
-    name: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    uid: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    role: { value: null, matchMode: FilterMatchMode.IN },
+  searchKey: { value: null, matchMode: 'customSearch' },
+  role: { value: null, matchMode: FilterMatchMode.IN },
 });
 
 const roles = ref(["mae", "coordi", "subjectCoordi", "admin","publi","tec"])
@@ -25,12 +24,25 @@ const editRoles = ref(["admin", "coordi", "mae"]);
 onMounted(() => {
   getMaes()
     .then((data) => {
-      maes.value = data;
-      loading.value =false;
+      maes.value = data.map((user) => {
+        const name = `${user.firstname ?? ''} ${user.lastname ?? ''}`.trim();
+        return {
+          ...user,
+          name,
+          searchKey: `${name} ${user.uid}`.toLowerCase()
+        };
+      });
+      loading.value = false;
     })
     .catch(() => {
       maes.value = [];
-    })
+      loading.value = false;
+    });
+});
+
+FilterService.register('customSearch', (value, filter) => {
+  if (!filter) return true;
+  return value?.toLowerCase().includes(filter.toLowerCase());
 });
 
 const openEditDialog = (user) => {
@@ -104,20 +116,13 @@ const deleteUser = async () => {
             >
             <template #empty>No se encontraron Maes. </template>
             <template #loading>Cargando información. Por favor espera.</template>
-            <Column header="Matricula" field="uid">
+            <Column header="Nombre / Matrícula" field="searchKey" :sortable="false">
                 <template #body="{ data }">
+                    <p class="text-lg font-semibold"> {{ data.name }} </p>
                     <a :href="`#/mae/${data.uid}`" class="text-lg uppercase cursor-pointer font-semibold underline text-primary">{{ data.uid }}</a>
                 </template>
                 <template #filter="{ filterModel, filterCallback }">
-                    <InputText v-model="filterModel.value" type="text" @input="filterCallback()" class="p-column-filter" placeholder="Matricula" />
-                </template>
-            </Column>
-            <Column header="Nombre" field="name">
-                <template #body="{ data }">
-                    <p class="text-lg font-semibold">{{ data.name }}</p>
-                </template>
-                <template #filter="{ filterModel, filterCallback }">
-                    <InputText v-model="filterModel.value" type="text" @input="filterCallback()" class="p-column-filter" placeholder="Nombre" />
+                    <InputText v-model="filterModel.value" type="text" @input="filterCallback()" class="p-column-filter" placeholder="Buscar por nombre o matrícula" />
                 </template>
             </Column>
             <Column header="Rol" field="role">

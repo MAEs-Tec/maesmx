@@ -2,12 +2,16 @@
 import { ref, onMounted } from 'vue';
 import { FilterMatchMode } from 'primevue/api';
 import { useToast } from 'primevue/usetoast';
-import { getMaes } from '../firebase/db/users';
+import { getMaes, updateUserInfo } from '../firebase/db/users';
 
 const toast = useToast();
 
 const loading = ref(true);
 const maes = ref(null);
+
+const editDialog = ref(false);
+const deleteDialog = ref(false);
+const selectedUser = ref(null);
 
 const filters = ref({
     name: { value: null, matchMode: FilterMatchMode.CONTAINS },
@@ -16,6 +20,7 @@ const filters = ref({
 });
 
 const roles = ref(["mae", "coordi", "subjectCoordi", "admin","publi","tec"])
+const editRoles = ref(["admin", "coordi", "mae"]);
 
 onMounted(() => {
   getMaes()
@@ -28,6 +33,58 @@ onMounted(() => {
     })
 });
 
+const openEditDialog = (user) => {
+  selectedUser.value = { ...user };
+  editDialog.value = true;
+};
+
+const openDeleteDialog = (user) => {
+  selectedUser.value = { ...user };
+  deleteDialog.value = true;
+};
+
+const updateRole = async () => {
+  try {
+    loading.value = true;
+    await updateUserInfo(selectedUser.value.uid, { 
+        role: selectedUser.value.role,
+        firstname: selectedUser.value.firstname,
+        lastname: selectedUser.value.lastname
+    });
+    
+    // Actualizar datos locales
+    const index = maes.value.findIndex(m => m.uid === selectedUser.value.uid);
+    if (index !== -1) {
+      maes.value[index].role = selectedUser.value.role;
+    }
+    
+    toast.add({ severity: 'success', summary: 'Éxito', detail: 'Rol actualizado correctamente', life: 3000 });
+    editDialog.value = false;
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Error al actualizar el rol', life: 3000 });
+    console.error('Error updating role:', error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+const deleteUser = async () => {
+  try {
+    loading.value = true;
+    await updateUserInfo(selectedUser.value.uid, { role: "exmae" });
+    
+    // Quitar usuario de la tabla
+    maes.value = maes.value.filter(m => m.uid !== selectedUser.value.uid);
+    
+    toast.add({ severity: 'success', summary: 'Éxito', detail: 'Usuario marcado como exmae correctamente', life: 3000 });
+    deleteDialog.value = false;
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Error al marcar el usuario como exmae', life: 3000 });
+    console.error('Error deleting user:', error);
+  } finally {
+    loading.value = false;
+  }
+};
 </script>
 
 
@@ -98,6 +155,44 @@ onMounted(() => {
                     <p class="text-lg font-semibold">{{ data.subjects ? data.subjects.length : 0 }}</p>
                 </template>
             </Column>
+            <Column header="Acciones" :exportable="false" style="min-width:8rem">
+                <template #body="{ data }">
+                    <div class="flex gap-2">
+                        <Button icon="pi pi-pencil" outlined rounded severity="info" @click="openEditDialog(data)" />
+                        <Button icon="pi pi-trash" outlined rounded severity="danger" @click="openDeleteDialog(data)" />
+                    </div>
+                </template>
+            </Column>
         </DataTable>
     </div>
+
+    <!-- Dialogo de editar -->
+    <Dialog v-model:visible="editDialog" modal header="Editar Usuario" :style="{ width: '30rem' }" :closable="false">
+        <div class="flex flex-column gap-4">
+            <div>
+                <label for="name" class="block text-lg font-medium mb-2">Nombre</label>
+                <InputText id="name" v-model="selectedUser.name" disabled class="w-full" />
+            </div>
+            <div>
+                <label for="role" class="block text-lg font-medium mb-2">Rol</label>
+                <Dropdown id="role" v-model="selectedUser.role" :options="editRoles" class="w-full" optionLabel="" placeholder="Selecciona un rol" />
+            </div>
+        </div>
+        <template #footer>
+            <Button label="Cancelar" icon="pi pi-times" class="p-button-text" @click="editDialog = false" :disabled="loading" />
+            <Button label="Guardar" icon="pi pi-check" @click="updateRole" :loading="loading" />
+        </template>
+    </Dialog>
+
+    <!-- Dialogo de borrar -->
+    <Dialog v-model:visible="deleteDialog" modal header="Confirmar Eliminación" :style="{ width: '30rem' }" :closable="false">
+        <div class="flex flex-column gap-4">
+            <p class="m-0">¿Estás seguro que deseas eliminar este usuario? El usuario no será eliminado completamente, solo cambiará su rol a "exmae" y dejará de aparecer en las listas.</p>
+            <p class="m-0 font-medium">Usuario: {{ selectedUser?.name }}</p>
+        </div>
+        <template #footer>
+            <Button label="No" icon="pi pi-times" class="p-button-text" @click="deleteDialog = false" :disabled="loading" />
+            <Button label="Sí" icon="pi pi-check" severity="danger" @click="deleteUser" :loading="loading" />
+        </template>
+    </Dialog>
 </template>

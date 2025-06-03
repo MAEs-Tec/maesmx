@@ -117,9 +117,14 @@ const deleteUser = async () => {
             <template #empty>No se encontraron Maes. </template>
             <template #loading>Cargando información. Por favor espera.</template>
             <Column header="Nombre / Matrícula" field="searchKey" :sortable="false">
-                <template #body="{ data }">
-                    <p class="text-lg font-semibold"> {{ data.name }} </p>
-                    <a :href="`#/mae/${data.uid}`" class="text-lg uppercase cursor-pointer font-semibold underline text-primary">{{ data.uid }}</a>
+                <template #body="{ data }" >
+                    <div class="flex items-center gap-4">
+                        <img :src="data.photoURL || 'https://ui-avatars.com/api/?name='+data.name" alt="Foto" class="border-circle h-4rem w-4rem"/>
+                        <div>
+                            <p class="text-lg font-semibold"> {{ data.name }} </p>
+                            <a :href="`#/mae/${data.uid}`" class="text-lg uppercase cursor-pointer font-semibold underline text-primary">{{ data.uid }}</a>
+                        </div>
+                    </div>
                 </template>
                 <template #filter="{ filterModel, filterCallback }">
                     <InputText v-model="filterModel.value" type="text" @input="filterCallback()" class="p-column-filter" placeholder="Buscar por nombre o matrícula" />

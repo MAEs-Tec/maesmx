@@ -48,10 +48,10 @@
                     <div class="flex justify-content-between flex-column sm:flex-row align-items-start sm:align-items-center mb-4">
                         <h2 class="text-2xl font-normal m-0 selection-title">Nuestra selección para ti</h2>
                         <div class="flex align-items-center gap-2 mt-3 sm:mt-0">
-                            <Dropdown v-model="selectedTag" :options="tags" optionLabel="name" placeholder="Etiqueta" class="w-full md:w-14rem" />
-                            <Dropdown v-model="selectedCareer" :options="careers" optionLabel="name" placeholder="Carrera" class="w-full md:w-14rem" />
-                            <Dropdown v-model="selectedSemester" :options="semesters" optionLabel="name" placeholder="Semestre" class="w-full md:w-14rem" />
-                            <Dropdown v-model="selectedType" :options="types" optionLabel="name" placeholder="Tipo" class="w-full md:w-14rem" />
+                            <Dropdown v-model="selectedTag" :options="tags" optionLabel="name" placeholder="Etiqueta" class="w-full md:w-10rem custom-dropdown" />
+                            <Dropdown v-model="selectedCareer" :options="careers" optionLabel="name" placeholder="Carrera" class="w-full md:w-10rem custom-dropdown" />
+                            <Dropdown v-model="selectedSemester" :options="semesters" optionLabel="name" placeholder="Semestre" class="w-full md:w-10rem custom-dropdown" />
+                            <Dropdown v-model="selectedType" :options="types" optionLabel="name" placeholder="Tipo" class="w-full md:w-10rem custom-dropdown" />
                         </div>
                     </div>
 
@@ -251,10 +251,22 @@ const bandColors = ['band--red', 'band--purple', 'band--green'];
     letter-spacing: -1.5px !important;
 }
 
+.custom-dropdown {
+    border-radius: 15px !important;
+    border: 2px solid #BDBDBD !important;
+    background: #FFF !important;
+}
+
+.custom-dropdown .p-dropdown {
+    border-radius: 15px !important;
+    border: 2px solid #BDBDBD !important;
+    background: #FFF !important;
+}
+
 /* Variantes de color para las bandas */
-.band--red { background: linear-gradient(90deg, #B85954 0%, #D29787 100%); }
-.band--purple { background: linear-gradient(90deg, #6D5BD0 0%, #B490FF 100%); }
-.band--green { background: linear-gradient(90deg, #4CAF50 0%, #9BE7A5 100%); }
+.band--red { background: linear-gradient(90deg, #A74444 0%, #AC8551 100%); }
+.band--purple { background: linear-gradient(90deg, #6D55B3 0%, #D689D8 100%); }
+.band--green { background: linear-gradient(90deg, #44A79B 0%, #69AC51 100%); }
 .band--info { background: linear-gradient(90deg, #4466A7 0%, #51A3AC 100%); }
 
 /* Grid con separación de 25px entre tarjetas */

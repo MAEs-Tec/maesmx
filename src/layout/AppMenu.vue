@@ -14,6 +14,8 @@ const model = ref([
             { label: 'Horarios', icon: 'pi pi-fw pi-clock', to: '/horarios' },
             { label: 'Asesorías grupales', icon: 'pi pi-fw pi-calendar', to: '/asesoriasGrupales' },
             { label: 'Sala de honor', icon: 'pi pi-fw pi-heart-fill', to: '/halloffame' },
+            { label: 'Maeteca', icon: 'pi pi-fw pi-desktop', to: '/maeteca' }
+
 
         ]
     },

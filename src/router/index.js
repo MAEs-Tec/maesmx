@@ -76,6 +76,11 @@ const router = createRouter({
 
                 },
                 {
+                    path: '/maeteca',
+                    name: 'maeteca',
+                    component: () => import('@/views/Maeteca.vue')
+                },
+                {
                     path: '/misasesorias',
                     name: 'misasesorias',
                     component: () => import('@/views/Asesorias.vue'),

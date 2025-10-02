@@ -78,7 +78,10 @@ const router = createRouter({
                 {
                     path: '/maeteca',
                     name: 'maeteca',
-                    component: () => import('@/views/Maeteca.vue')
+                    component: () => import('@/views/Maeteca.vue'),
+                    meta: {
+                        roles: ['admin', 'coordi', 'mae', 'tec', 'publi']
+                    }
                 },
                 {
                     path: '/misasesorias',

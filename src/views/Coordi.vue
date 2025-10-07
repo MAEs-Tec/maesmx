@@ -328,6 +328,7 @@ const handleAutoMarkAbsence = async (startTime, endTime, uid) => {
             </Column>
         </DataTable>
     </div>
+    <!-- Agregar horas al MAE -->
     <Dialog v-model:visible="showDialogRegister" modal header="Crear registro" class="md:w-4">
         
         <p class="font-bold text-lg">Matricula del MAE</p>

@@ -11,11 +11,22 @@ import {
 } from 'firebase/firestore';
 import { getCurrentUser } from './users';
 
+const VIDEO_MANAGER_ROLES = ['admin', 'tec'];
+
+function assertVideoPermissions(user) {
+    if (!VIDEO_MANAGER_ROLES.includes(user?.role)) {
+        const role = user?.role ?? 'unknown';
+        throw new Error(`Insufficient permissions for role '${role}' to manage Maeteca videos`);
+    }
+}
+
 // ✅ CREAR documentos
 export async function addVideoToMaeteca(videoData) {
     try {
         const user = await getCurrentUser();
         if (!user) throw new Error('No authenticated user for write');
+
+        assertVideoPermissions(user);
 
         const payload = {
             ...videoData,
@@ -86,6 +97,10 @@ export async function getVideosByRelated(relacionadoItem) {
 
 
 export async function createSampleVideos() {
+    const user = await getCurrentUser();
+    if (!user) throw new Error('No authenticated user for write');
+    assertVideoPermissions(user);
+    console.log("Usuario autenticado:", user); // Verifica la información del usuario
     try {
         // Video con ID automático
         await addVideoToMaeteca({
@@ -115,6 +130,7 @@ export async function addVideoWithFixedId(id, videoData) {
     try {
         const user = await getCurrentUser();
         if (!user) throw new Error('No authenticated user for write');
+    assertVideoPermissions(user);
         const videoRef = doc(firestoreDB, "videos", id);
         await setDoc(
             videoRef,

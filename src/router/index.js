@@ -93,7 +93,7 @@ const router = createRouter({
                 },
                 {
                     path: '/misevaluaciones',
-                    name: 'misevaluaciones',
+                    name: 'misevaluaciones', 
                     component: () => import('@/views/Evaluaciones.vue'),
                     meta: {
                         roles: ['admin', 'coordi', 'mae','tec','publi']

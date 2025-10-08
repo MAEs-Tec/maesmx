@@ -6,7 +6,28 @@
                 <div class="flex justify-content-between flex-column sm:flex-row align-items-start sm:align-items-center mb-5 header-container">
                     <h1 class="text-black text-6xl font-bold mb-2 text-center sm:text-left">Maeteca</h1>
                     <div class="flex align-items-center mt-3 sm:mt-0">
-                        <Button icon="pi pi-plus" class="p-button-rounded mr-2 custom-add-button cruz p-button-lg" style="font-size: 2rem;" />
+                        <Button
+                            v-if="canManageVideos"
+                            icon="pi pi-plus"
+                            class="p-button-rounded mr-2 custom-add-button cruz p-button-lg"
+                            style="font-size: 2rem;"
+                        />
+                        <!-- Botón temporal para probar carga de videos de ejemplo -->
+                        <Button
+                            v-if="canManageVideos"
+                            label="Cargar ejemplos"
+                            icon="pi pi-database"
+                            class="ml-2"
+                            @click="onCreateSamples"
+                            :disabled="loadingSamples"
+                        />
+                        <Button
+                            label="Probar lectura"
+                            icon="pi pi-eye"
+                            class="ml-2"
+                            @click="onTestRead"
+                            :disabled="testingRead"
+                        />
                         <span class="p-input-icon-left">
                             <i class="pi pi-search" />
                             <InputText placeholder="Buscar" class="custom-search-input" />
@@ -56,15 +77,42 @@
                     </div>
 
                     <!-- Cards de Selección -->
-                    <div class="mae-cards-grid">
-                        <div v-for="n in 3" :key="n" class="mae-card">
-                            <div :class="['mae-card__band', bandColors[(n - 1) % bandColors.length]]"></div>
+                    <div v-if="videos.length" class="mae-cards-grid">
+                        <div
+                            v-for="(video, index) in videos"
+                            :key="video.id || index"
+                            class="mae-card"
+                        >
+                            <div :class="['mae-card__band', bandColors[index % bandColors.length]]"></div>
                             <Button icon="pi pi-ellipsis-h" class="p-button-text p-button-rounded mae-card__menu" />
                             <div class="mae-card__body">
-                                <!-- Contenido de ejemplo -->
-                                <div class="surface-200 border-round w-full h-full"></div>
+                                <h3 class="mae-card__title">{{ video.Titulo || 'Video sin título' }}</h3>
+                                <p class="mae-card__description">
+                                    {{ video.Informacion || 'Este video no tiene descripción disponible.' }}
+                                </p>
+                                <div class="mae-card__tags" v-if="Array.isArray(video.Relacionado) && video.Relacionado.length">
+                                    <Tag
+                                        v-for="tag in video.Relacionado"
+                                        :key="tag"
+                                        :value="`#${tag}`"
+                                        class="custom-tag"
+                                    ></Tag>
+                                </div>
+                                <div class="mae-card__actions">
+                                    <Button
+                                        v-if="video.Video"
+                                        label="Ver video"
+                                        icon="pi pi-play"
+                                        class="p-button-sm"
+                                        @click="openVideo(video.Video)"
+                                    />
+                                </div>
                             </div>
                         </div>
+                    </div>
+                    <div v-else class="mae-empty-state">
+                        <i class="pi pi-info-circle"></i>
+                        <p>No se encontraron videos en la Maeteca.</p>
                     </div>
                 </div>
             
@@ -73,7 +121,10 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { useToast } from 'primevue/usetoast';
+import { createSampleVideos, getAllVideos } from '../firebase/db/maeteca';
+import { getCurrentUser } from '../firebase/db/users';
 
 // Datos de ejemplo para los dropdowns
 const selectedTag = ref();
@@ -106,6 +157,79 @@ const types = ref([
 
 // Colores alternos para bandas de cartas
 const bandColors = ['band--red', 'band--purple', 'band--green'];
+
+// Acción: crear videos de ejemplo en Firestore
+const toast = useToast();
+const loadingSamples = ref(false);
+const testingRead = ref(false);
+const allowedVideoRoles = ['admin', 'tec'];
+const currentUserRole = ref(null);
+const canManageVideos = computed(() => allowedVideoRoles.includes(currentUserRole.value));
+const videos = ref([]);
+
+const loadVideos = async ({ showToast = false } = {}) => {
+    try {
+        testingRead.value = true;
+        const data = await getAllVideos();
+        videos.value = Array.isArray(data) ? data : [];
+        if (showToast) {
+            const count = videos.value.length;
+            toast.add({
+                severity: 'info',
+                summary: 'Lectura completada',
+                detail: `Se encontraron ${count} videos en la Maeteca.`,
+                life: 4000
+            });
+        }
+        console.log('Videos obtenidos:', videos.value);
+    } catch (error) {
+        const msg = error?.message || 'No se pudieron leer los videos';
+        if (showToast) {
+            toast.add({ severity: 'error', summary: 'Error', detail: msg, life: 4000 });
+        }
+        console.error('Error cargando videos de la Maeteca:', error);
+    } finally {
+        testingRead.value = false;
+    }
+};
+
+onMounted(async () => {
+    try {
+        const user = await getCurrentUser();
+        currentUserRole.value = user?.role ?? null;
+    } catch (error) {
+        console.error('Error fetching current user for Maeteca:', error);
+        currentUserRole.value = null;
+    }
+    await loadVideos();
+});
+
+const onCreateSamples = async () => {
+    if (!canManageVideos.value) {
+        toast.add({ severity: 'warn', summary: 'Permiso requerido', detail: 'Tu rol no permite cargar videos en la Maeteca.', life: 4000 });
+        return;
+    }
+    try {
+        loadingSamples.value = true;
+        await createSampleVideos();
+        toast.add({ severity: 'success', summary: 'Éxito', detail: 'Videos de ejemplo creados', life: 3000 });
+        await loadVideos();
+    } catch (e) {
+        const msg = e?.message || 'No se pudieron crear los videos de ejemplo';
+        toast.add({ severity: 'error', summary: 'Error', detail: msg, life: 4000 });
+    } finally {
+        loadingSamples.value = false;
+    }
+};
+
+const onTestRead = async () => {
+    await loadVideos({ showToast: true });
+};
+
+const openVideo = (url) => {
+    if (!url || typeof window === 'undefined') return;
+    window.open(url, '_blank', 'noopener');
+};
 </script>
 
 <style scoped>
@@ -223,6 +347,19 @@ const bandColors = ['band--red', 'band--purple', 'band--green'];
     letter-spacing: -1px !important;
 }
 
+.mae-card__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: auto;
+}
+
+.mae-card__actions {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: flex-start;
+}
+
 .custom-tag {
     border-radius: 26px !important;
     background: linear-gradient(0deg, #4466A7 0%, #4466A7 100%) !important;
@@ -274,6 +411,20 @@ const bandColors = ['band--red', 'band--purple', 'band--green'];
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 25px; /* separa columnas y filas */
+}
+
+.mae-empty-state {
+    padding: 3rem 1rem;
+    text-align: center;
+    color: #6c757d;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.mae-empty-state .pi {
+    font-size: 2rem;
 }
 
 /* Responsivo: en pantallas pequeñas, que las cartas no desborden */

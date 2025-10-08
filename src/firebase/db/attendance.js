@@ -36,15 +36,29 @@ export async function getTodaysReport() {
     }
 }
 
+// Update the MAE attendance report w corresponding value 
 export async function updateReport(userInfo, report) {
     try {
-        console.log(userInfo, report, "Esto es ")
-        const reportRef = doc(firestoreDB, "attendance", getCurrentDateFormatted(), "report", userInfo.uid);
+        // Defensive checks + unwrap reactive proxy
+        const uid = userInfo?.uid ?? userInfo?.id ?? userInfo?.value?.uid;
+        const name = userInfo?.name ?? userInfo?.value?.name ?? '';
+        const totalTime = userInfo?.totalTime ?? userInfo?.value?.totalTime ?? 0;
+
+        console.log(uid, report, "Updating report")
+        const reportRef = doc(firestoreDB, "attendance", getCurrentDateFormatted(), "report", userInfo.uid); // Final de semestre, quitar report de aca y luego when accessing data para que sean menos datos
+
+        // Stores less data for attendance
+        const dataUpload = {
+            id: userInfo.uid, // Student id
+            email: userInfo.email, // Student email, helps search data within firebase
+            name: userInfo.name, 
+            totalTime: userInfo.totalTime, 
+            report: report, // (A, R, F, J)
+        }
+
+        console.log('Writing to Firestore path:', reportRef.path, 'payload:', dataUpload);
         
-        return await setDoc(reportRef, {
-            ...userInfo,
-            report
-        });
+        return await setDoc(reportRef, dataUpload, { merge : true }); // Use merge so that it can keep otehr fields if write more data
     } catch (error) {
         console.error("Error updating the report: ", error);
         return [];

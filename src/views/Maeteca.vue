@@ -86,6 +86,32 @@
                             <div :class="['mae-card__band', bandColors[index % bandColors.length]]"></div>
                             <Button icon="pi pi-ellipsis-h" class="p-button-text p-button-rounded mae-card__menu" />
                             <div class="mae-card__body">
+                                <div
+                                    v-if="getVideoThumbnail(video)"
+                                    class="mae-card__thumbnail"
+                                    role="button"
+                                    tabindex="0"
+                                    @click="openVideo(video.Video)"
+                                    @keyup.enter="handleThumbnailKey($event, video.Video)"
+                                    @keyup.space="handleThumbnailKey($event, video.Video)"
+                                >
+                                    <img
+                                        :src="getVideoThumbnail(video)"
+                                        :alt="`Miniatura del video ${video.Titulo || ''}`"
+                                        loading="lazy"
+                                    />
+                                    <span class="mae-card__thumbnail-overlay">
+                                        <i class="pi pi-play"></i>
+                                    </span>
+                                </div>
+                                <div v-else-if="video.Video" class="mae-card__actions">
+                                    <Button
+                                        label="Ver video"
+                                        icon="pi pi-play"
+                                        class="p-button-sm"
+                                        @click="openVideo(video.Video)"
+                                    />
+                                </div>
                                 <h3 class="mae-card__title">{{ video.Titulo || 'Video sin título' }}</h3>
                                 <p class="mae-card__description">
                                     {{ video.Informacion || 'Este video no tiene descripción disponible.' }}
@@ -97,15 +123,6 @@
                                         :value="`#${tag}`"
                                         class="custom-tag"
                                     ></Tag>
-                                </div>
-                                <div class="mae-card__actions">
-                                    <Button
-                                        v-if="video.Video"
-                                        label="Ver video"
-                                        icon="pi pi-play"
-                                        class="p-button-sm"
-                                        @click="openVideo(video.Video)"
-                                    />
                                 </div>
                             </div>
                         </div>
@@ -123,7 +140,14 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
-import { createSampleVideos, getAllVideos } from '../firebase/db/maeteca';
+import {
+    createSampleVideos,
+    loadMaetecaVideos,
+    canUserManageVideos,
+    getVideoThumbnail,
+    openVideo,
+    handleThumbnailKey
+} from '../firebase/db/maeteca';
 import { getCurrentUser } from '../firebase/db/users';
 
 // Datos de ejemplo para los dropdowns
@@ -162,16 +186,14 @@ const bandColors = ['band--red', 'band--purple', 'band--green'];
 const toast = useToast();
 const loadingSamples = ref(false);
 const testingRead = ref(false);
-const allowedVideoRoles = ['admin', 'tec'];
 const currentUserRole = ref(null);
-const canManageVideos = computed(() => allowedVideoRoles.includes(currentUserRole.value));
+const canManageVideos = computed(() => canUserManageVideos(currentUserRole.value));
 const videos = ref([]);
 
 const loadVideos = async ({ showToast = false } = {}) => {
     try {
         testingRead.value = true;
-        const data = await getAllVideos();
-        videos.value = Array.isArray(data) ? data : [];
+    videos.value = await loadMaetecaVideos();
         if (showToast) {
             const count = videos.value.length;
             toast.add({
@@ -226,10 +248,6 @@ const onTestRead = async () => {
     await loadVideos({ showToast: true });
 };
 
-const openVideo = (url) => {
-    if (!url || typeof window === 'undefined') return;
-    window.open(url, '_blank', 'noopener');
-};
 </script>
 
 <style scoped>
@@ -284,8 +302,8 @@ const openVideo = (url) => {
 /* Estilo de cartas de selección/información */
 .mae-card {
     width: 100%;
-    max-width: 443px;
-    aspect-ratio: 443 / 291; /* mantiene proporción */
+    max-width: 460px;
+    min-height: 420px;
     flex-shrink: 0;
     border-radius: 20px;
     border: 2px solid #E0E0E0;
@@ -323,7 +341,56 @@ const openVideo = (url) => {
 
 .mae-card__body {
     padding: 12px 20px 20px 20px;
-    height: calc(100% - 20px); 
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.mae-card__thumbnail {
+    position: relative;
+    width: 100%;
+    padding-top: 56.25%;
+    border-radius: 16px;
+    overflow: hidden;
+    cursor: pointer;
+    margin-bottom: 1rem;
+}
+
+.mae-card__thumbnail img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.mae-card__thumbnail-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.25);
+    color: #fff;
+    font-size: 2rem;
+    transition: background 0.3s ease;
+}
+
+.mae-card__thumbnail:hover img,
+.mae-card__thumbnail:focus img {
+    transform: scale(1.05);
+}
+
+.mae-card__thumbnail:hover .mae-card__thumbnail-overlay,
+.mae-card__thumbnail:focus .mae-card__thumbnail-overlay {
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.mae-card__thumbnail:focus {
+    outline: 2px solid #4466A7;
+    outline-offset: 3px;
 }
 
 .mae-card__title {

@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore';
 import { getCurrentUser } from './users';
 
-const VIDEO_MANAGER_ROLES = ['admin', 'tec'];
+export const VIDEO_MANAGER_ROLES = ['admin', 'tec'];
 
 function assertVideoPermissions(user) {
     if (!VIDEO_MANAGER_ROLES.includes(user?.role)) {
@@ -67,6 +67,51 @@ export async function getAllVideos() {
     }
 }
 
+export function canUserManageVideos(role) {
+    return VIDEO_MANAGER_ROLES.includes(role ?? '');
+}
+
+export async function loadMaetecaVideos() {
+    const data = await getAllVideos();
+    return Array.isArray(data) ? data : [];
+}
+
+export function getVideoThumbnail(video) {
+    if (!video) return null;
+    if (video.Thumbnail) return video.Thumbnail;
+
+    const url = video.Video;
+    if (!url) return null;
+
+    const patterns = [
+        /youtube\.com\/watch\?v=([^&]+)/,
+        /youtube\.com\/embed\/([^?]+)/,
+        /youtu\.be\/([^?]+)/
+    ];
+
+    for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match?.[1]) {
+            return `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`;
+        }
+    }
+
+    return null;
+}
+
+export function openVideo(url) {
+    if (!url || typeof window === 'undefined') return;
+    window.open(url, '_blank', 'noopener');
+}
+
+export function handleThumbnailKey(event, url) {
+    if (!url) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openVideo(url);
+    }
+}
+
 // ✅ BUSCAR por array "Relacionado"
 export async function getVideosByRelated(relacionadoItem) {
     try {
@@ -107,16 +152,44 @@ export async function createSampleVideos() {
             Informacion: "Video explicativo sobre bibliotecas digitales",
             Relacionado: ["biblioteca", "digital", "recursos"],
             Titulo: "¿Qué es una biblioteca digital?",
-            Video: "https://www.youtube.com/embed/EhhYnfaePb4"
+            Video: "https://www.youtube.com/watch?v=mGbv1A_PKDY"
+        });
+        // Video con ID automático
+        await addVideoToMaeteca({
+            Informacion: "Video explicativo sobre bibliotecas digitales",
+            Relacionado: ["biblioteca", "digital", "recursos"],
+            Titulo: "¿Qué es una biblioteca digital?",
+            Video: "https://www.youtube.com/watch?v=mGbv1A_PKDY"
+        });
+        // Video con ID automático
+        await addVideoToMaeteca({
+            Informacion: "Video explicativo sobre bibliotecas digitales",
+            Relacionado: ["biblioteca", "digital", "recursos"],
+            Titulo: "¿Qué es una biblioteca digital?",
+            Video: "https://www.youtube.com/watch?v=mGbv1A_PKDY"
+        });
+        // Video con ID automático
+        await addVideoToMaeteca({
+            Informacion: "Video explicativo sobre bibliotecas digitales",
+            Relacionado: ["biblioteca", "digital", "recursos"],
+            Titulo: "¿Qué es una biblioteca digital?",
+            Video: "https://www.youtube.com/watch?v=mGbv1A_PKDY"
+        });
+        // Video con ID automático
+        await addVideoToMaeteca({
+            Informacion: "Video explicativo sobre bibliotecas digitales",
+            Relacionado: ["biblioteca", "digital", "recursos"],
+            Titulo: "¿Qué es una biblioteca digital?",
+            Video: "https://www.youtube.com/watch?v=mGbv1A_PKDY"
+        });
+        // Video con ID automático
+        await addVideoToMaeteca({
+            Informacion: "Video explicativo sobre bibliotecas digitales",
+            Relacionado: ["biblioteca", "digital", "recursos"],
+            Titulo: "¿Qué es una biblioteca digital?",
+            Video: "https://www.youtube.com/watch?v=mGbv1A_PKDY"
         });
 
-        // Video con ID fijo
-        await addVideoWithFixedId("intro-maeteca", {
-            Informacion: "Introducción a la plataforma Maeteca",
-            Relacionado: ["maeteca", "tutorial", "introduccion"],
-            Titulo: "Cómo usar la Maeteca",
-            Video: "https://www.youtube.com/embed/sample123"
-        });
 
         console.log("Videos de ejemplo creados ✅");
     } catch (error) {

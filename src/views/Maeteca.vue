@@ -11,6 +11,7 @@
                             icon="pi pi-plus"
                             class="p-button-rounded mr-2 custom-add-button cruz p-button-lg"
                             style="font-size: 2rem;"
+                            @click="handleOpenAddVideo"
                         />
                         <!-- Botón temporal para probar carga de videos de ejemplo -->
                         <Button
@@ -34,6 +35,120 @@
                         </span>
                     </div>
                 </div>
+
+                <Dialog
+                    v-model:visible="showAddVideoDialog"
+                    modal
+                    class="add-video-dialog"
+                    dismissableMask
+                    :closable="!savingVideo"
+                    @hide="resetVideoForm"
+                >
+                    <template #header>
+                        <div class="dialog-header">
+                            <h2>Agregar video</h2>
+                        </div>
+                    </template>
+                    <div class="dialog-content">
+                        <div class="field-group">
+                            <label for="video-link">Link</label>
+                            <div class="input-with-icon">
+                                <i class="pi pi-info-circle"></i>
+                                <InputText
+                                    id="video-link"
+                                    v-model="videoForm.link"
+                                    placeholder="youtube.com/maeteca/como-usar"
+                                    class="w-full"
+                                />
+                            </div>
+                        </div>
+                        <div class="field-group">
+                            <label for="video-title">Nombre del video</label>
+                            <InputText
+                                id="video-title"
+                                v-model="videoForm.title"
+                                placeholder="youtube.com/maeteca/como-usar"
+                                class="w-full"
+                            />
+                        </div>
+                        <div class="field-row">
+                            <div class="field-group">
+                                <label for="video-subject">Materia</label>
+                                <Dropdown
+                                    id="video-subject"
+                                    v-model="videoForm.subject"
+                                    :options="videoSubjects"
+                                    optionLabel="name"
+                                    placeholder="General"
+                                    class="w-full"
+                                />
+                            </div>
+                            <div class="field-group">
+                                <label for="video-career">Carrera</label>
+                                <Dropdown
+                                    id="video-career"
+                                    v-model="videoForm.career"
+                                    :options="videoCareers"
+                                    optionLabel="name"
+                                    placeholder="Todas"
+                                    class="w-full"
+                                />
+                            </div>
+                        </div>
+                        <div class="field-group">
+                            <label>Etiquetas</label>
+                            <div class="tag-collection">
+                                <span
+                                    v-for="tag in videoForm.tags"
+                                    :key="tag"
+                                    class="tag-pill"
+                                >
+                                    <span>#{{ tag }}</span>
+                                    <button type="button" @click="removeTag(tag)" aria-label="Eliminar etiqueta">
+                                        <i class="pi pi-times"></i>
+                                    </button>
+                                </span>
+                            </div>
+                            <div class="tag-input-wrapper">
+                                <InputText
+                                    v-model="tagInput"
+                                    placeholder="#HolaMaeteca"
+                                    class="w-full"
+                                    @keydown="onTagInputKeydown"
+                                    @blur="addTagFromInput"
+                                />
+                                <i class="pi pi-angle-down"></i>
+                            </div>
+                            <div class="tag-suggestions">
+                                <button
+                                    v-for="suggestion in tagSuggestions"
+                                    :key="suggestion"
+                                    type="button"
+                                    @click="applyTagSuggestion(normalizeTag(suggestion))"
+                                >
+                                    #{{ normalizeTag(suggestion) }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <template #footer>
+                        <div class="dialog-footer">
+                            <Button
+                                label="Cancelar"
+                                class="p-button-text"
+                                @click="showAddVideoDialog = false"
+                                :disabled="savingVideo"
+                            />
+                            <Button
+                                label="Agregar"
+                                class="add-video-submit"
+                                :loading="savingVideo"
+                                @click="onSubmitVideo"
+                                :disabled="isSubmitDisabled"
+                            />
+                        </div>
+                    </template>
+                </Dialog>
 
                 <!-- Contenido Principal -->
                 <div class="flex flex-column xl:flex-row align-items-stretch gap-4 mb-6">
@@ -138,10 +253,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, reactive } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import {
     createSampleVideos,
+    addVideoToMaeteca,
     loadMaetecaVideos,
     canUserManageVideos,
     getVideoThumbnail,
@@ -189,6 +305,115 @@ const testingRead = ref(false);
 const currentUserRole = ref(null);
 const canManageVideos = computed(() => canUserManageVideos(currentUserRole.value));
 const videos = ref([]);
+
+const showAddVideoDialog = ref(false);
+const savingVideo = ref(false);
+const tagInput = ref('');
+const tagSuggestions = ['maeteca', 'general', 'HolaMaeteca', 'tutorial'];
+
+const videoForm = reactive({
+    link: '',
+    title: '',
+    subject: { name: 'General', code: 'general' },
+    career: { name: 'Todas', code: 'all' },
+    tags: ['maeteca', 'general']
+});
+
+const videoSubjects = ref([
+    { name: 'General', code: 'general' },
+    { name: 'Matemáticas', code: 'math' },
+    { name: 'Programación', code: 'prog' }
+]);
+
+const videoCareers = ref([
+    { name: 'Todas', code: 'all' },
+    { name: 'ITC', code: 'itc' },
+    { name: 'IMT', code: 'imt' },
+    { name: 'IDS', code: 'ids' }
+]);
+
+const isSubmitDisabled = computed(() => !videoForm.link.trim() || !videoForm.title.trim() || savingVideo.value);
+
+const resetVideoForm = () => {
+    videoForm.link = '';
+    videoForm.title = '';
+    videoForm.subject = { name: 'General', code: 'general' };
+    videoForm.career = { name: 'Todas', code: 'all' };
+    videoForm.tags = ['maeteca', 'general'];
+    tagInput.value = '';
+};
+
+const handleOpenAddVideo = () => {
+    resetVideoForm();
+    showAddVideoDialog.value = true;
+};
+
+const normalizeTag = (tag) => {
+    if (!tag) return null;
+    const cleaned = tag.trim().replace(/^#+/, '').toLowerCase();
+    return cleaned.length ? cleaned : null;
+};
+
+const addTagFromInput = () => {
+    const newTag = normalizeTag(tagInput.value);
+    if (!newTag) {
+        tagInput.value = '';
+        return;
+    }
+    if (!videoForm.tags.includes(newTag)) {
+        videoForm.tags.push(newTag);
+    }
+    tagInput.value = '';
+};
+
+const removeTag = (tag) => {
+    videoForm.tags = videoForm.tags.filter((item) => item !== tag);
+};
+
+const onTagInputKeydown = (event) => {
+    if (event.key === 'Enter' || event.key === ',') {
+        event.preventDefault();
+        addTagFromInput();
+    } else if (event.key === 'Backspace' && !tagInput.value && videoForm.tags.length) {
+        videoForm.tags = videoForm.tags.slice(0, -1);
+    }
+};
+
+const applyTagSuggestion = (suggestion) => {
+    const normalized = normalizeTag(suggestion);
+    if (!normalized) return;
+    if (!videoForm.tags.includes(normalized)) {
+        videoForm.tags.push(normalized);
+    }
+};
+
+const onSubmitVideo = async () => {
+    if (isSubmitDisabled.value) {
+        toast.add({ severity: 'warn', summary: 'Formulario incompleto', detail: 'Completa la información obligatoria.', life: 3000 });
+        return;
+    }
+
+    try {
+        savingVideo.value = true;
+        await addVideoToMaeteca({
+            Video: videoForm.link.trim(),
+            Titulo: videoForm.title.trim(),
+            Materia: videoForm.subject?.code ?? null,
+            Carrera: videoForm.career?.code ?? null,
+            Relacionado: [...videoForm.tags],
+            Informacion: ''
+        });
+        toast.add({ severity: 'success', summary: 'Video agregado', detail: 'El video se agregó correctamente.', life: 3000 });
+        showAddVideoDialog.value = false;
+        resetVideoForm();
+        await loadVideos();
+    } catch (error) {
+        const msg = error?.message || 'No se pudo agregar el video';
+        toast.add({ severity: 'error', summary: 'Error', detail: msg, life: 4000 });
+    } finally {
+        savingVideo.value = false;
+    }
+};
 
 const loadVideos = async ({ showToast = false } = {}) => {
     try {
@@ -465,6 +690,209 @@ const onTestRead = async () => {
     border-radius: 15px !important;
     border: 2px solid #BDBDBD !important;
     background: #FFF !important;
+}
+
+:deep(.add-video-dialog) {
+    width: 420px;
+    max-width: 95vw;
+}
+
+:deep(.add-video-dialog .p-dialog-header) {
+    background: #eef2ff;
+    border-top-left-radius: 26px;
+    border-top-right-radius: 26px;
+    padding: 1.75rem 2rem 1rem;
+}
+
+:deep(.add-video-dialog .p-dialog-content) {
+    background: #eef2ff;
+    padding: 0 2rem 1.5rem;
+}
+
+:deep(.add-video-dialog .p-dialog-footer) {
+    background: #eef2ff;
+    border-bottom-left-radius: 26px;
+    border-bottom-right-radius: 26px;
+    padding: 0 2rem 2rem;
+}
+
+.dialog-header h2 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #2d2d30;
+    margin: 0;
+}
+
+.dialog-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+.field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.field-group label {
+    font-weight: 600;
+    color: #3b3b3e;
+    font-size: 1rem;
+}
+
+.field-row {
+    display: flex;
+    gap: 1rem;
+}
+
+.field-row .field-group {
+    flex: 1;
+}
+
+.input-with-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-with-icon .pi {
+    position: absolute;
+    left: 1rem;
+    color: #637292;
+    font-size: 1.15rem;
+}
+
+.input-with-icon .p-inputtext {
+    padding-left: 2.75rem;
+    height: 3.25rem;
+    border-radius: 18px;
+    border: 2px solid #d0d7eb;
+    background: #fff;
+}
+
+.field-group .p-inputtext {
+    height: 3.25rem;
+    border-radius: 18px;
+    border: 2px solid #d0d7eb;
+    background: #fff;
+}
+
+.field-group :deep(.p-dropdown) {
+    height: 3.25rem;
+    border-radius: 18px;
+    border: 2px solid #d0d7eb;
+    background: #fff;
+}
+
+.tag-collection {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.tag-pill {
+    background: linear-gradient(90deg, #4466A7 0%, #51A3AC 100%);
+    color: #fff;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.9rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.tag-pill button {
+    background: transparent;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+}
+
+.tag-input-wrapper {
+    position: relative;
+}
+
+.tag-input-wrapper .p-inputtext {
+    height: 3rem;
+    border-radius: 18px;
+    border: 2px solid #d0d7eb;
+    background: #fff;
+    padding-right: 2.5rem;
+}
+
+.tag-input-wrapper .pi {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #637292;
+}
+
+.tag-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.tag-suggestions button {
+    border: none;
+    background: #dce4ff;
+    color: #4466A7;
+    border-radius: 999px;
+    padding: 0.35rem 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.tag-suggestions button:hover {
+    background: #c1cffc;
+}
+
+.dialog-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.dialog-footer .p-button-text {
+    color: #5f6064;
+    font-weight: 600;
+}
+
+.add-video-submit {
+    background: linear-gradient(90deg, #4466A7 0%, #51A3AC 100%) !important;
+    border: none !important;
+    color: #fff !important;
+    font-weight: 700 !important;
+    padding: 0.75rem 2.5rem !important;
+    border-radius: 18px !important;
+    box-shadow: 0 8px 20px rgba(68, 102, 167, 0.35) !important;
+}
+
+.add-video-submit:disabled {
+    filter: grayscale(0.4);
+    cursor: not-allowed;
+    box-shadow: none !important;
+}
+
+@media (max-width: 640px) {
+    .field-row {
+        flex-direction: column;
+    }
+
+    :deep(.add-video-dialog) {
+        width: 100%;
+    }
 }
 
 /* Variantes de color para las bandas */

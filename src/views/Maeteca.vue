@@ -36,6 +36,7 @@
                     </div>
                 </div>
 
+                <!-- pop up para agregar video -->
                 <Dialog
                     v-model:visible="showAddVideoDialog"
                     modal
@@ -97,38 +98,28 @@
                         </div>
                         <div class="field-group">
                             <label>Etiquetas</label>
-                            <div class="tag-collection">
+                            <div class="tag-collection" v-if="videoForm.tags.length">
                                 <span
                                     v-for="tag in videoForm.tags"
                                     :key="tag"
                                     class="tag-pill"
                                 >
-                                    <span>#{{ tag }}</span>
+                                    <span>{{ tagLabelMap[tag] || `#${tag}` }}</span>
                                     <button type="button" @click="removeTag(tag)" aria-label="Eliminar etiqueta">
                                         <i class="pi pi-times"></i>
                                     </button>
                                 </span>
                             </div>
-                            <div class="tag-input-wrapper">
-                                <InputText
-                                    v-model="tagInput"
-                                    placeholder="#HolaMaeteca"
-                                    class="w-full"
-                                    @keydown="onTagInputKeydown"
-                                    @blur="addTagFromInput"
-                                />
-                                <i class="pi pi-angle-down"></i>
-                            </div>
-                            <div class="tag-suggestions">
-                                <button
-                                    v-for="suggestion in tagSuggestions"
-                                    :key="suggestion"
-                                    type="button"
-                                    @click="applyTagSuggestion(normalizeTag(suggestion))"
-                                >
-                                    #{{ normalizeTag(suggestion) }}
-                                </button>
-                            </div>
+                            <MultiSelect
+                                v-model="videoForm.tags"
+                                :options="availableTagOptions"
+                                optionLabel="label"
+                                optionValue="value"
+                                filter
+                                filterPlaceholder="Buscar etiqueta"
+                                placeholder="Selecciona etiquetas"
+                                :class="['w-full tag-multiselect', { 'tag-multiselect--has-selection': videoForm.tags.length }]"
+                            />
                         </div>
                     </div>
                     <template #footer>
@@ -254,6 +245,7 @@
 
 <script setup>
 import { ref, computed, onMounted, reactive } from 'vue';
+import MultiSelect from 'primevue/multiselect';
 import { useToast } from 'primevue/usetoast';
 import {
     createSampleVideos,
@@ -308,15 +300,30 @@ const videos = ref([]);
 
 const showAddVideoDialog = ref(false);
 const savingVideo = ref(false);
-const tagInput = ref('');
-const tagSuggestions = ['maeteca', 'general', 'HolaMaeteca', 'tutorial'];
+const availableTagOptions = ref([
+    { label: '#maeteca', value: 'maeteca' },
+    { label: '#general', value: 'general' },
+    { label: '#tutorial', value: 'tutorial' },
+    { label: '#matematicas', value: 'matematicas' },
+    { label: '#Quimica', value: 'Quimica' },
+    { label: '#Ciencias sociales', value: 'Ciencias sociales' },
+    { label: '#Creatividad', value: 'Creatividad' },
+    { label: '#Fisica', value: 'Fisica' }
+]);
+
+const tagLabelMap = computed(() =>
+    availableTagOptions.value.reduce((acc, option) => {
+        acc[option.value] = option.label;
+        return acc;
+    }, {})
+);
 
 const videoForm = reactive({
     link: '',
     title: '',
     subject: { name: 'General', code: 'general' },
     career: { name: 'Todas', code: 'all' },
-    tags: ['maeteca', 'general']
+    tags: []
 });
 
 const videoSubjects = ref([
@@ -339,8 +346,7 @@ const resetVideoForm = () => {
     videoForm.title = '';
     videoForm.subject = { name: 'General', code: 'general' };
     videoForm.career = { name: 'Todas', code: 'all' };
-    videoForm.tags = ['maeteca', 'general'];
-    tagInput.value = '';
+    videoForm.tags = [];
 };
 
 const handleOpenAddVideo = () => {
@@ -348,43 +354,8 @@ const handleOpenAddVideo = () => {
     showAddVideoDialog.value = true;
 };
 
-const normalizeTag = (tag) => {
-    if (!tag) return null;
-    const cleaned = tag.trim().replace(/^#+/, '').toLowerCase();
-    return cleaned.length ? cleaned : null;
-};
-
-const addTagFromInput = () => {
-    const newTag = normalizeTag(tagInput.value);
-    if (!newTag) {
-        tagInput.value = '';
-        return;
-    }
-    if (!videoForm.tags.includes(newTag)) {
-        videoForm.tags.push(newTag);
-    }
-    tagInput.value = '';
-};
-
 const removeTag = (tag) => {
     videoForm.tags = videoForm.tags.filter((item) => item !== tag);
-};
-
-const onTagInputKeydown = (event) => {
-    if (event.key === 'Enter' || event.key === ',') {
-        event.preventDefault();
-        addTagFromInput();
-    } else if (event.key === 'Backspace' && !tagInput.value && videoForm.tags.length) {
-        videoForm.tags = videoForm.tags.slice(0, -1);
-    }
-};
-
-const applyTagSuggestion = (suggestion) => {
-    const normalized = normalizeTag(suggestion);
-    if (!normalized) return;
-    if (!videoForm.tags.includes(normalized)) {
-        videoForm.tags.push(normalized);
-    }
 };
 
 const onSubmitVideo = async () => {
@@ -790,6 +761,7 @@ const onTestRead = async () => {
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem;
+    margin-bottom: 0.75rem;
 }
 
 .tag-pill {
@@ -815,46 +787,29 @@ const onTestRead = async () => {
     align-items: center;
 }
 
-.tag-input-wrapper {
-    position: relative;
-}
-
-.tag-input-wrapper .p-inputtext {
-    height: 3rem;
+.tag-multiselect :deep(.p-multiselect) {
     border-radius: 18px;
     border: 2px solid #d0d7eb;
+    min-height: 3rem;
     background: #fff;
-    padding-right: 2.5rem;
 }
 
-.tag-input-wrapper .pi {
-    position: absolute;
-    right: 1rem;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #637292;
-}
-
-.tag-suggestions {
+.tag-multiselect :deep(.p-multiselect-label) {
+    padding: 0.75rem 1rem;
+    min-height: 3rem;
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
+    align-items: center;
+    color: #637292;
+    caret-color: #637292;
 }
 
-.tag-suggestions button {
-    border: none;
-    background: #dce4ff;
-    color: #4466A7;
-    border-radius: 999px;
-    padding: 0.35rem 0.75rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s ease;
+.tag-multiselect :deep(.p-multiselect-token) {
+    display: none;
 }
 
-.tag-suggestions button:hover {
-    background: #c1cffc;
+.tag-multiselect--has-selection :deep(.p-multiselect-label) {
+    color: transparent;
+    caret-color: #637292;
 }
 
 .dialog-footer {

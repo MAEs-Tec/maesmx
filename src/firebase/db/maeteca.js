@@ -72,6 +72,64 @@ export function canUserManageVideos(role) {
     return VIDEO_MANAGER_ROLES.includes(role ?? '');
 }
 
+// Constantes reutilizables por la UI
+export const AVAILABLE_TAG_OPTIONS = [
+    { label: '#maeteca', value: 'maeteca' },
+    { label: '#general', value: 'general' },
+    { label: '#tutorial', value: 'tutorial' },
+    { label: '#matematicas', value: 'matematicas' },
+    { label: '#Quimica', value: 'Quimica' },
+    { label: '#Ciencias sociales', value: 'Ciencias sociales' },
+    { label: '#Creatividad', value: 'Creatividad' },
+    { label: '#Fisica', value: 'Fisica' }
+];
+
+export const TAGS = [
+    { name: 'Programación', code: 'PROG' },
+    { name: 'Matemáticas', code: 'MATH' },
+    { name: 'Física', code: 'PHY' }
+];
+
+export const VIDEO_SUBJECTS = [
+    { name: 'General', code: 'general' },
+    { name: 'Matemáticas', code: 'math' },
+    { name: 'Programación', code: 'prog' }
+];
+
+export const VIDEO_CAREERS = [
+    { name: 'Todas', code: 'all' },
+    { name: 'ITC', code: 'itc' },
+    { name: 'IMT', code: 'imt' },
+    { name: 'IDS', code: 'ids' }
+];
+
+export const SEMESTERS = [
+    { name: 'Primer Semestre', code: '1' },
+    { name: 'Segundo Semestre', code: '2' },
+    { name: 'Tercer Semestre', code: '3' }
+];
+
+export const TYPES = [
+    { name: 'Video', code: 'VID' },
+    { name: 'Artículo', code: 'ART' },
+    { name: 'Libro', code: 'BOOK' }
+];
+
+// Extrae el id de YouTube desde varias formas de URL
+export function extractYoutubeId(url) {
+    if (!url || typeof url !== 'string') return null;
+    const patterns = [
+        /youtube\.com\/watch\?v=([^&]+)/,
+        /youtube\.com\/embed\/([^?]+)/,
+        /youtu\.be\/([^?]+)/
+    ];
+    for (const p of patterns) {
+        const m = url.match(p);
+        if (m?.[1]) return m[1];
+    }
+    return null;
+}
+
 export async function loadMaetecaVideos() {
     const data = await getAllVideos();
     return Array.isArray(data) ? data : [];
@@ -99,45 +157,18 @@ export function getVideoEmbedUrl(video) {
     if (!video) return null;
     const url = typeof video === 'string' ? video : video.Video;
     if (!url) return null;
-
-    const patterns = [
-        /youtube\.com\/watch\?v=([^&]+)/,
-        /youtube\.com\/embed\/([^?]+)/,
-        /youtu\.be\/([^?]+)/
-    ];
-
-    for (const pattern of patterns) {
-        const match = url.match(pattern);
-        if (match?.[1]) {
-            return `https://www.youtube.com/embed/${match[1]}`;
-        }
-    }
-
-    // Si no es un enlace de YouTube reconocible, devolver la URL tal cual (puede ser ya un embed)
+    const id = extractYoutubeId(url);
+    if (id) return `https://www.youtube.com/embed/${id}`;
     return url;
 }
 
 export function getVideoThumbnail(video) {
     if (!video) return null;
     if (video.Thumbnail) return video.Thumbnail;
-
     const url = video.Video;
     if (!url) return null;
-
-    const patterns = [
-        /youtube\.com\/watch\?v=([^&]+)/,
-        /youtube\.com\/embed\/([^?]+)/,
-        /youtu\.be\/([^?]+)/
-    ];
-
-    for (const pattern of patterns) {
-        const match = url.match(pattern);
-        if (match?.[1]) {
-            return `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`;
-        }
-    }
-
-    return null;
+    const id = extractYoutubeId(url);
+    return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : null;
 }
 
 export function openVideo(url) {
@@ -180,6 +211,9 @@ export async function getVideosByRelated(relacionadoItem) {
         throw error;
     }
 }
+
+// Actualiza un documento de video
+// (removed optional admin/update/delete/filter/subscribe helpers per request)
 
 
 export async function createSampleVideos() {

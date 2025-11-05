@@ -279,39 +279,30 @@ import {
     getVideoThumbnail,
     getVideoById,
     getVideoEmbedUrl,
+    AVAILABLE_TAG_OPTIONS,
+    VIDEO_SUBJECTS,
+    VIDEO_CAREERS,
+    SEMESTERS,
+    TYPES,
+    // TAGS is the dropdown of simple {name,code}
+    TAGS,
     openVideo,
     handleThumbnailKey
 } from '../firebase/db/maeteca';
 import { getCurrentUser } from '../firebase/db/users';
 
-// Datos de ejemplo para los dropdowns
+// Datos de ejemplo para los dropdowns (importados desde la capa de datos)
 const selectedTag = ref();
-const tags = ref([
-    { name: 'Programación', code: 'PROG' },
-    { name: 'Matemáticas', code: 'MATH' },
-    { name: 'Física', code: 'PHY' }
-]);
+const tags = TAGS;
 
 const selectedCareer = ref();
-const careers = ref([
-    { name: 'ITC', code: 'ITC' },
-    { name: 'IMT', code: 'IMT' },
-    { name: 'IDS', code: 'IDS' }
-]);
+const careers = VIDEO_CAREERS;
 
 const selectedSemester = ref();
-const semesters = ref([
-    { name: 'Primer Semestre', code: '1' },
-    { name: 'Segundo Semestre', code: '2' },
-    { name: 'Tercer Semestre', code: '3' }
-]);
+const semesters = SEMESTERS;
 
 const selectedType = ref();
-const types = ref([
-    { name: 'Video', code: 'VID' },
-    { name: 'Artículo', code: 'ART' },
-    { name: 'Libro', code: 'BOOK' }
-]);
+const types = TYPES;
 
 // Colores alternos para bandas de cartas
 const bandColors = ['band--red', 'band--purple', 'band--green'];
@@ -330,19 +321,10 @@ const mainVideoEmbedUrl = computed(() => getVideoEmbedUrl(mainVideo.value) || nu
 
 const showAddVideoDialog = ref(false);
 const savingVideo = ref(false);
-const availableTagOptions = ref([
-    { label: '#maeteca', value: 'maeteca' },
-    { label: '#general', value: 'general' },
-    { label: '#tutorial', value: 'tutorial' },
-    { label: '#matematicas', value: 'matematicas' },
-    { label: '#Quimica', value: 'Quimica' },
-    { label: '#Ciencias sociales', value: 'Ciencias sociales' },
-    { label: '#Creatividad', value: 'Creatividad' },
-    { label: '#Fisica', value: 'Fisica' }
-]);
+const availableTagOptions = AVAILABLE_TAG_OPTIONS;
 
 const tagLabelMap = computed(() =>
-    availableTagOptions.value.reduce((acc, option) => {
+    (availableTagOptions || []).reduce((acc, option) => {
         acc[option.value] = option.label;
         return acc;
     }, {})
@@ -355,19 +337,8 @@ const videoForm = reactive({
     career: { name: 'Todas', code: 'all' },
     tags: []
 });
-
-const videoSubjects = ref([
-    { name: 'General', code: 'general' },
-    { name: 'Matemáticas', code: 'math' },
-    { name: 'Programación', code: 'prog' }
-]);
-
-const videoCareers = ref([
-    { name: 'Todas', code: 'all' },
-    { name: 'ITC', code: 'itc' },
-    { name: 'IMT', code: 'imt' },
-    { name: 'IDS', code: 'ids' }
-]);
+const videoSubjects = VIDEO_SUBJECTS;
+const videoCareers = VIDEO_CAREERS;
 
 const isSubmitDisabled = computed(() => !videoForm.link.trim() || !videoForm.title.trim() || savingVideo.value);
 

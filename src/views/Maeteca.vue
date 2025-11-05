@@ -171,12 +171,22 @@
                             </div>
                             <div class="mae-card__body flex-1 flex flex-column">
                                 <div class="flex-1">
-                                    <h3 class="m-0 mb-3 mae-card__title">¿Cómo usar la maeteca?</h3>
-                                    <p class="mb-3 mae-card__description">Aprende como manejarte por medio en la nueva biblioteca digital MAE. Conoce como encontrar temas de tu interés.</p>
+                                    <h3 class="m-0 mb-3 mae-card__title">{{ mainVideo?.Titulo || '' }}</h3>
+                                    <p class="mb-3 mae-card__description">{{ mainVideo?.Informacion || '' }}</p>
                                 </div>
                                 <div class="flex gap-2">
-                                    <Tag value="#maeteca" class="custom-tag"></Tag>
-                                    <Tag value="#general" severity="info" class="custom-tag"></Tag>
+                                    <template v-if="mainVideo && Array.isArray(mainVideo.Relacionado) && mainVideo.Relacionado.length">
+                                        <Tag
+                                            v-for="tag in mainVideo.Relacionado"
+                                            :key="tag"
+                                            :value="`#${tag}`"
+                                            class="custom-tag"
+                                        />
+                                    </template>
+                                    <template v-else>
+                                        <Tag value="#maeteca" class="custom-tag"></Tag>
+                                        <Tag value="#general" severity="info" class="custom-tag"></Tag>
+                                    </template>
                                 </div>
                             </div>
                         </div>

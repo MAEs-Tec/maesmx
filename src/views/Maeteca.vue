@@ -220,9 +220,10 @@
                                     class="mae-card__thumbnail"
                                     role="button"
                                     tabindex="0"
-                                    @click="openVideo(video.Video)"
-                                    @keyup.enter="handleThumbnailKey($event, video.Video)"
-                                    @keyup.space="handleThumbnailKey($event, video.Video)"
+                                    @click="selectMainVideo(video)"
+                                    @keyup.enter="selectMainVideo(video)"
+                                    @keyup.space="selectMainVideo(video)"
+                                    :aria-label="`Reproducir ${video.Titulo || 'video'}`"
                                 >
                                     <img
                                         :src="getVideoThumbnail(video)"
@@ -238,7 +239,7 @@
                                         label="Ver video"
                                         icon="pi pi-play"
                                         class="p-button-sm"
-                                        @click="openVideo(video.Video)"
+                                        @click="selectMainVideo(video)"
                                     />
                                 </div>
                                 <h3 class="mae-card__title">{{ video.Titulo || 'Video sin título' }}</h3>
@@ -385,6 +386,22 @@ const handleOpenAddVideo = () => {
 
 const removeTag = (tag) => {
     videoForm.tags = videoForm.tags.filter((item) => item !== tag);
+};
+
+// Selecciona un video para mostrarlo en el reproductor principal
+const selectMainVideo = (video) => {
+    if (!video) return;
+    mainVideo.value = video;
+    // Llevar el viewport al reproductor principal
+    try {
+        const el = document.querySelector('.video-wrapper');
+        if (el && typeof el.scrollIntoView === 'function') {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    } catch (e) {
+        // no bloquear si falla el scroll
+        console.warn('scroll to video failed', e);
+    }
 };
 
 const onSubmitVideo = async () => {

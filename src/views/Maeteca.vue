@@ -39,7 +39,7 @@
                 <!-- pop up para agregar video -->
                 <Dialog
                     v-model:visible="showAddVideoDialog"
-                    modal
+                    modal 
                     class="add-video-dialog"
                     dismissableMask
                     :closable="!savingVideo"
@@ -146,7 +146,20 @@
                     <!-- Card Grande de Video -->
                     <div class="flex-1">
                         <div class="video-wrapper">
-                            <iframe width="560" height="315" src="https://www.youtube.com/embed/dphZsfFEqRA?si=1fv4fzGF9Di9QPT2" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+                            <iframe
+                                v-if="mainVideoEmbedUrl"
+                                :src="mainVideoEmbedUrl"
+                                width="560"
+                                height="315"
+                                title="YouTube video player"
+                                frameborder="0"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                referrerpolicy="strict-origin-when-cross-origin"
+                                allowfullscreen
+                            ></iframe>
+                            <div v-else class="video-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;">
+                                <p>No hay video introductorio.</p>
+                            </div>
                         </div>
                     </div>
 
@@ -253,6 +266,8 @@ import {
     loadMaetecaVideos,
     canUserManageVideos,
     getVideoThumbnail,
+    getVideoById,
+    getVideoEmbedUrl,
     openVideo,
     handleThumbnailKey
 } from '../firebase/db/maeteca';
@@ -297,6 +312,10 @@ const testingRead = ref(false);
 const currentUserRole = ref(null);
 const canManageVideos = computed(() => canUserManageVideos(currentUserRole.value));
 const videos = ref([]);
+
+// Video principal (intro) cargado desde documento 'intro-maeteca'
+const mainVideo = ref(null);
+const mainVideoEmbedUrl = computed(() => getVideoEmbedUrl(mainVideo.value) || null);
 
 const showAddVideoDialog = ref(false);
 const savingVideo = ref(false);
@@ -419,6 +438,17 @@ onMounted(async () => {
         console.error('Error fetching current user for Maeteca:', error);
         currentUserRole.value = null;
     }
+    // Cargar video intro desde Firestore
+    const loadIntroVideo = async () => {
+        try {
+            const intro = await getVideoById('intro-maeteca');
+            if (intro) mainVideo.value = intro;
+        } catch (e) {
+            console.error('Error cargando video intro:', e);
+        }
+    };
+
+    await loadIntroVideo();
     await loadVideos();
 });
 

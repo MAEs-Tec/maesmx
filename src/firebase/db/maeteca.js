@@ -1,6 +1,7 @@
 import { firestoreDB } from "../../main";
 import {
     getDocs,
+    getDoc,
     addDoc,
     setDoc,
     doc,
@@ -74,6 +75,46 @@ export function canUserManageVideos(role) {
 export async function loadMaetecaVideos() {
     const data = await getAllVideos();
     return Array.isArray(data) ? data : [];
+}
+
+// Obtener un video por su id de documento
+export async function getVideoById(id) {
+    if (!id) return null;
+    try {
+        const docRef = doc(firestoreDB, 'videos', id);
+        const snapshot = await getDoc(docRef);
+        if (!snapshot.exists()) {
+            console.log(`Documento con id ${id} no encontrado`);
+            return null;
+        }
+        return { id: snapshot.id, ...snapshot.data() };
+    } catch (error) {
+        console.error(`Error obteniendo video ${id}:`, error);
+        throw error;
+    }
+}
+
+// Genera la URL de embed (iframe) para un video de YouTube
+export function getVideoEmbedUrl(video) {
+    if (!video) return null;
+    const url = typeof video === 'string' ? video : video.Video;
+    if (!url) return null;
+
+    const patterns = [
+        /youtube\.com\/watch\?v=([^&]+)/,
+        /youtube\.com\/embed\/([^?]+)/,
+        /youtu\.be\/([^?]+)/
+    ];
+
+    for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match?.[1]) {
+            return `https://www.youtube.com/embed/${match[1]}`;
+        }
+    }
+
+    // Si no es un enlace de YouTube reconocible, devolver la URL tal cual (puede ser ya un embed)
+    return url;
 }
 
 export function getVideoThumbnail(video) {
@@ -198,26 +239,3 @@ export async function createSampleVideos() {
     }
 }
 
-// ✅ CREAR/REEMPLAZAR documento con ID fijo
-export async function addVideoWithFixedId(id, videoData) {
-    try {
-        const user = await getCurrentUser();
-        if (!user) throw new Error('No authenticated user for write');
-    assertVideoPermissions(user);
-        const videoRef = doc(firestoreDB, "videos", id);
-        await setDoc(
-            videoRef,
-            {
-                ...videoData,
-                createdBy: { uid: user.uid, role: user.role },
-                createdAt: serverTimestamp()
-            },
-            { merge: true }
-        );
-        console.log(`Documento con ID fijo '${id}' agregado/actualizado ✅`);
-        return videoRef;
-    } catch (error) {
-        console.error("Error agregando documento con ID fijo:", error);
-        throw error;
-    }
-}

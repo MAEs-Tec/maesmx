@@ -40,7 +40,7 @@
                 <Dialog
                     v-model:visible="showAddVideoDialog"
                     modal 
-                    class="add-video-dialog"
+                    class="add-video-dialog md:w-4"
                     dismissableMask
                     :closable="!savingVideo"
                     @hide="resetVideoForm"
@@ -54,21 +54,23 @@
                         <div class="field-group">
                             <label for="video-link">Link</label>
                             <div class="input-with-icon">
-                                <i class="pi pi-info-circle"></i>
+                                <!-- <i class="pi pi-info-circle"></i> -->
                                 <InputText
                                     id="video-link"
                                     v-model="videoForm.link"
                                     placeholder="youtube.com/maeteca/como-usar"
                                     class="w-full"
                                 />
+                                <Button type="button" class="p-button-text" @click="lookPreview"><i class="pi pi-info-circle"></i></Button>
                             </div>
                         </div>
+                        <div id="preview"></div>
                         <div class="field-group">
                             <label for="video-title">Nombre del video</label>
                             <InputText
                                 id="video-title"
                                 v-model="videoForm.title"
-                                placeholder="youtube.com/maeteca/como-usar"
+                                placeholder="¿Cómo usar?"
                                 class="w-full"
                             />
                         </div>
@@ -123,16 +125,16 @@
                         </div>
                     </div>
                     <template #footer>
-                        <div class="dialog-footer">
+                        <div class="flex justify-content-end gap-2">
                             <Button
                                 label="Cancelar"
-                                class="p-button-text"
+                                severity="secondary"
                                 @click="showAddVideoDialog = false"
                                 :disabled="savingVideo"
                             />
                             <Button
+                                type="button"
                                 label="Agregar"
-                                class="add-video-submit"
                                 :loading="savingVideo"
                                 @click="onSubmitVideo"
                                 :disabled="isSubmitDisabled"
@@ -471,6 +473,30 @@ const onCreateSamples = async () => {
 const onTestRead = async () => {
     await loadVideos({ showToast: true });
 };
+
+function youtubeLink(url){
+    const youtRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/;
+    return youtRegex.test(url);
+}
+
+//Para el preview del video al agregar el link
+function lookPreview(){
+    const url = document.getElementById('video-link').value;
+    if (youtubeLink(url)){
+        //Show preview del video
+        //Mas regex, nunca pense que serviría de algo
+        const videoIdMatch = url.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/);
+        if(videoIdMatch){
+            const videoid = videoIdMatch[1];
+            document.getElementById('preview').innerHTML = `<iframe width="560" height="315" src="https://www.youtube.com/embed/${videoid}" 
+            frameborder="0" allowfullscreen></iframe>`;
+        }else{
+            document.getElementById('preview').innerText = "No se pudo extraer el ID del video.";
+        }
+    }else{
+        document.getElementById('preview').innerText = "¡Solo se permiten links de YouTube!";
+    }
+}
 
 </script>
 
@@ -848,6 +874,7 @@ const onTestRead = async () => {
 }
 
 .dialog-footer .p-button-text {
+    align-items: center;
     color: #5f6064;
     font-weight: 600;
 }

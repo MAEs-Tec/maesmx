@@ -6,7 +6,7 @@
                 <div class="flex justify-content-between flex-column sm:flex-row align-items-start sm:align-items-center mb-5 header-container">
                     <h1 class="text-black text-6xl font-bold mb-2 text-center sm:text-left">Maeteca</h1>
                     <div class="flex align-items-center mt-3 sm:mt-0">
-                        <Button icon="pi pi-plus" class="p-button-rounded mr-2 custom-add-button cruz p-button-lg" style="font-size: 2rem;" />
+                        <Button @click="showDialogRegister = true" icon="pi pi-plus" class="p-button-rounded mr-2 custom-add-button cruz p-button-lg" style="font-size: 2rem;" />
                         <span class="p-input-icon-left">
                             <i class="pi pi-search" />
                             <InputText placeholder="Buscar" class="custom-search-input" />
@@ -58,11 +58,17 @@
                     <!-- Cards de Selección -->
                     <div class="mae-cards-grid">
                         <div v-for="n in 3" :key="n" class="mae-card">
-                            <div :class="['mae-card__band', bandColors[(n - 1) % bandColors.length]]"></div>
-                            <Button icon="pi pi-ellipsis-h" class="p-button-text p-button-rounded mae-card__menu" />
+                            <!-- Cards hacer botones!!!  -->
+                            <div :class="['mae-card__band mae-car-mini_band', bandColors[(n - 1) % bandColors.length]]"></div>
+                            <!-- DEFINIR SI SE PODRAN EDITAR VIDEOS EN PREVIEW -->
+                            <!-- <Button icon="pi pi-ellipsis-h" class="p-button-text p-button-rounded mae-card__menu" /> -->
                             <div class="mae-card__body">
                                 <!-- Contenido de ejemplo -->
-                                <div class="surface-200 border-round w-full h-full"></div>
+                                <h3 class="m-0 mb-3 mae-card__title mae-mini-card__title">Grafos</h3>
+                                <p class="mae-card__description mae-card-mini__description">Aplicación de las leyes de Newton en casos cotidianos de arquitectura.</p>
+                                <img src="https://img.youtube.com/vi/mCG9FNmrgJs/hqdefault.jpg" class="preview_video" />
+                                
+                                <!-- <div class="surface-200 border-round w-full h-full"></div> -->
                             </div>
                         </div>
                     </div>
@@ -70,10 +76,36 @@
             
         </div>
     </div>
+    <Dialog v-model:visible="showDialogRegister" modal header="Agregar video" class="md:w-4">
+        
+        <p class="font-bold text-lg">HOLA</p>
+        <!-- <InputText class="w-full" placeholder="A01234567" v-model="maeId"/>
+        <Message  v-if="maeInfo">MAE: {{ maeInfo.name }} - {{ maeInfo.email }}</Message>
+
+        <p class="font-bold text-lg mt-4">Agregar horas</p>
+        <p>Selecciona un MAE para agregar horas a su registro si se le olvidó cerrar su sesión</p>
+        <InputNumber class="w-full mb-2" v-model="hours" inputId="integeronly" suffix=" hrs" />
+        <div class="flex justify-content-end">
+            <Button @click="addTime" type="button" label="Agregar horas" :disabled="maeInfo == null || !hours"></Button>
+        </div>
+
+        <p class="font-bold">Registrar sesión</p>
+        <p>Agrega un registro adicional a la asistencia si hay un MAE reponiendo horas</p>
+        <Calendar class="w-full mb-2" v-model="date" />
+        <div class="flex justify-content-end mb-2">
+            <Button @click="addReport" type="button" label="Registrar sesión" :disabled="maeInfo == null || !date"></Button>
+        </div> -->
+
+        <div class="flex justify-content-end">
+            <Button type="button" label="Cerrar" severity="secondary" @click="showDialogRegister = false"></Button>
+        </div>
+    </Dialog>
 </template>
 
 <script setup>
 import { ref } from 'vue';
+
+const showDialogRegister = ref(false);
 
 // Datos de ejemplo para los dropdowns
 const selectedTag = ref();
@@ -177,6 +209,10 @@ const bandColors = ['band--red', 'band--purple', 'band--green'];
     width: 100%;
 }
 
+.mae-car-mini_band{
+    height: 24px;
+}
+
 .mae-card__menu {
     position: absolute;
     top: 10px;
@@ -213,6 +249,11 @@ const bandColors = ['band--red', 'band--purple', 'band--green'];
     letter-spacing: -1.5px !important;
 }
 
+.mae-mini-card__title{
+    font-size: 25px !important;
+    text-align: left !important;
+}
+
 .mae-card__description {
     color: #3B3B3E !important;
     font-family: Inter !important;
@@ -221,6 +262,10 @@ const bandColors = ['band--red', 'band--purple', 'band--green'];
     font-weight: 500 !important;
     line-height: 1.25 !important;
     letter-spacing: -1px !important;
+}
+
+.mae-card-mini__description{
+    font-size: 15px !important;
 }
 
 .custom-tag {
@@ -340,4 +385,15 @@ span.p-input-icon-left .pi-search {
     flex: 1;
     width: 100% !important;
 }
+
+.preview_video {
+    display: block;
+    max-width: 90%;
+    max-height: 160px;
+    margin: 12px auto 0 auto;
+    border-radius: 10px;
+    object-fit: cover;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
 </style>

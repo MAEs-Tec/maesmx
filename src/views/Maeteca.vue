@@ -77,13 +77,16 @@
                         <div class="field-row">
                             <div class="field-group">
                                 <label for="video-subject">Materia</label>
-                                <Dropdown
+                                <AutoComplete
                                     id="video-subject"
-                                    v-model="videoForm.subject"
-                                    :options="videoSubjects"
-                                    optionLabel="name"
-                                    placeholder="General"
                                     class="w-full"
+                                    v-model="videoForm.subject"
+                                    :suggestions="filteredSubjects"
+                                    @complete="filterSubjects"
+                                    field="name"
+                                    dropdown
+                                    :forceSelection="false"
+                                    placeholder="Buscar materia..."
                                 />
                             </div>
                             <div class="field-group">
@@ -273,6 +276,8 @@
 import { ref, computed, onMounted, reactive } from 'vue';
 import MultiSelect from 'primevue/multiselect';
 import { useToast } from 'primevue/usetoast';
+import { normalize } from '@/utils/HorarioUtils';
+import { getSubjects } from '../firebase/db/subjects';
 import {
     createSampleVideos,
     addVideoToMaeteca,
@@ -282,7 +287,6 @@ import {
     getVideoById,
     getVideoEmbedUrl,
     AVAILABLE_TAG_OPTIONS,
-    VIDEO_SUBJECTS,
     VIDEO_CAREERS,
     SEMESTERS,
     TYPES,
@@ -316,6 +320,9 @@ const testingRead = ref(false);
 const currentUserRole = ref(null);
 const canManageVideos = computed(() => canUserManageVideos(currentUserRole.value));
 const videos = ref([]);
+// Materias para el AutoComplete del popup
+const subjects = ref([]);
+const filteredSubjects = ref([]);
 
 // Video principal (intro) cargado desde documento 'intro-maeteca'
 const mainVideo = ref(null);
@@ -339,7 +346,6 @@ const videoForm = reactive({
     career: { name: 'Todas', code: 'all' },
     tags: []
 });
-const videoSubjects = VIDEO_SUBJECTS;
 const videoCareers = VIDEO_CAREERS;
 
 const isSubmitDisabled = computed(() => !videoForm.link.trim() || !videoForm.title.trim() || savingVideo.value);
@@ -359,6 +365,13 @@ const handleOpenAddVideo = () => {
 
 const removeTag = (tag) => {
     videoForm.tags = videoForm.tags.filter((item) => item !== tag);
+};
+
+// Sugerencias de materias para el AutoComplete
+const filterSubjects = (event) => {
+    const raw = event?.query ?? (typeof videoForm.subject === 'string' ? videoForm.subject : videoForm.subject?.name ?? '');
+    const query = normalize(raw || '');
+    filteredSubjects.value = subjects.value.filter((subject) => normalize(subject.name).includes(query));
 };
 
 // Selecciona un video para mostrarlo en el reproductor principal
@@ -437,6 +450,13 @@ onMounted(async () => {
     } catch (error) {
         console.error('Error fetching current user for Maeteca:', error);
         currentUserRole.value = null;
+    }
+    // Cargar materias para el AutoComplete del popup
+    try {
+        subjects.value = await getSubjects();
+    } catch (e) {
+        console.error('Error cargando materias para AutoComplete:', e);
+        subjects.value = [];
     }
     // Cargar video intro desde Firestore
     const loadIntroVideo = async () => {
@@ -809,6 +829,37 @@ function lookPreview(){
     border-radius: 18px;
     border: 2px solid #d0d7eb;
     background: #fff;
+}
+
+/* Estilo del AutoComplete para que coincida con los otros campos y la flecha quede dentro sin fondo azul */
+.field-group :deep(.p-autocomplete) {
+    width: 100%;
+    position: relative;
+}
+.field-group :deep(.p-autocomplete .p-inputtext) {
+    height: 3.25rem;
+    background: #fff;
+    color: #3b3b3e;
+    border: 2px solid #d0d7eb;
+    border-radius: 18px;
+    padding-right: 2.75rem; /* espacio para la flecha dentro del campo */
+}
+.field-group :deep(.p-autocomplete .p-autocomplete-dropdown) {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent !important; /* sin fondo azul */
+    border: none !important;
+    box-shadow: none !important;
+    color: #637292;
+    width: 2.25rem;
+    height: 2.25rem;
+}
+.field-group :deep(.p-autocomplete .p-autocomplete-dropdown:hover),
+.field-group :deep(.p-autocomplete .p-autocomplete-dropdown:focus) {
+    background: transparent !important;
+    box-shadow: none !important;
 }
 
 .tag-collection {

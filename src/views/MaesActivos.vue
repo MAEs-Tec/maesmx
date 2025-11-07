@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref, computed } from 'vue';
 import { getCurrentUser, getUsersWithActiveSession, getMaes, getClosestDayAndStartTime } from '../firebase/db/users';
+import { getMajors } from '@/firebase/db/majors'; // Para filter por carrera
 import { getSubjects } from '../firebase/db/subjects';
 import { normalize } from '@/utils/HorarioUtils';
 import {
@@ -16,27 +17,45 @@ const nombreInput = ref(''); // Look up por nombre del MAE
 const subjectInput = ref(''); // Look up for subject
 const majorInput = ref(''); // Look up por carrera
 const filteredSubjects = ref([]);
+const majors = ref([]); // Siglas carrera 
+const filteredMajors = ref([]); // Store filtered major
+
+// Helper to normalize y quitar símbolos raros
+const normForMatch = (s) => String(s || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
 onMounted(async () => {
     activeMAEs.value = await getUsersWithActiveSession();
     userInfo.value = await getCurrentUser();
     subjects.value = await getSubjects();
+    majors.value = await getMajors(); // Get majors
+    filteredMajors.value = majors.value.map(m => `${m.id} - ${m.name}`); // Formato id - nombre carrera
     maes.value = await getMaes();
 });
 
 const filteredMAEs = computed(() => {
     const selectedSubject = subjectInput.value;
     const selectedName = normalize(nombreInput.value);
-    const selectedMajor = majorInput.value; 
+    const selectedMajorRaw = String(majorInput.value || '').trim();
 
     const activeMAEsList = maes.value.filter(mae => isMAEActive(mae));
-    if (selectedSubject == '' && selectedName == '' && selectedMajor == '') {
+    if (selectedSubject == '' && selectedName == '' && selectedMajorRaw == '') {
         return activeMAEsList
     }
+
+    // Check user gave siglas o un "ID - Nombre"
+    let majorIdCandidate = '';
+    const idMatch = selectedMajorRaw.match(/^([A-Za-z]{1,4})\s*-/); // ID - Nombre, siglas permite de 1 a 4 so change si agregan carreras con más siglas
+    if (idMatch) {
+        majorIdCandidate = idMatch[1];
+    } else if (/^[A-Za-z0-9]{1,4}$/.test(selectedMajorRaw))  {
+        majorIdCandidate = selectedMajorRaw;
+    }
+
+    const qNorm = normForMatch(selectedMajorRaw);
      
     return maes.value.filter(mae => {
         // Look for matching subjects
-        const subject = mae.subjects.some(subject => subject.id === selectedSubject?.id);
+        const subject = mae.subjects.some(s => s.id === selectedSubject?.id);
 
         // Look for name 
         let name = false;
@@ -46,36 +65,24 @@ const filteredMAEs = computed(() => {
 
         // Look through major abbreviated 
         let majorMatch = false; // No major found yet
-        if (selectedMajor) {
-            const majorQuery = normalize(String(selectedMajor || '')); // User input normalized to be lowercase and handle los acentos y así 
-            // Compares major id and names
-            const maeMajorId = (mae.major?.id || '').toLowerCase(); // Sees if find a major w matching id   
-            //const maeMajorName = (mae.major?.name || '').toLowerCase(); 
+        const maeMajorId = String(mae.major?.id || '').toLowerCase();
+        const maeMajorNameNorm = normForMatch(mae.major?.name || '');
 
-            // Match found w either the ID or name de la carrera
-            //majorMatch = maeMajorId.includes(majorQuery.toLowerCase()) || maeMajorName.includes(majorQuery);
-            majorMatch = maeMajorId.includes(majorQuery.toLowerCase())
+        if (majorIdCandidate) {
+            // match by id (exact or prefix)
+            majorMatch = maeMajorId === majorIdCandidate.toLowerCase() || maeMajorId.includes(majorIdCandidate.toLowerCase());
+        } else if (selectedMajorRaw) {
+            // match by name: try whole-word then substring
+            const wordRegex = new RegExp(`\\b${qNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+            majorMatch = wordRegex.test(maeMajorNameNorm) || maeMajorNameNorm.includes(qNorm);
         }
 
         // Filter combos ensure all match
         const okSubject = !selectedSubject || subject; 
         const okName = !selectedName || name; 
-        const okMajor = !selectedMajor || majorMatch;
+        const okMajor = !selectedMajorRaw || majorMatch; 
 
         return okSubject && okName && okMajor; // Returns those where all three conds are met
-
-        // Look for subject
-        /*
-        if (selectedName && selectedSubject) {
-            return subject && name; 
-        } else if (selectedName) {
-            return name;
-        } else if (selectedSubject) {
-            return subject; 
-        } else {
-            return false; 
-        }
-        */
     });
     
 });
@@ -123,6 +130,7 @@ const clearFilters = () => {
     subjectInput.value = '';
     nombreInput.value = '';
     majorInput.value = '';
+    filteredMajors.value = majors.value.map(m => `${m.id} - ${m.name}`); // Resetting las carreras para poder refilter
 };
 
 // Search for subjects
@@ -131,6 +139,35 @@ const filterSubjects = () => {
     filteredSubjects.value = subjects.value.filter(subject =>
         normalize(subject.name).includes(query)
     );
+};
+
+// Show all majors for dropdown
+const showAllMajors = () => {
+    console.log('[MAJOR] showAllMajors called');
+    filteredMajors.value = (majors.value || []).map(m => `${m.id} - ${m.name}`);
+};
+
+// Search-based filtering to keep behavior when typing user
+const filterMajors = (event) => {
+    // event may be AutoComplete event with query, fall back to input value
+    const q = normalize(event?.query ?? String(majorInput.value || ''));
+    console.log('[MAJOR] filterMajors called, query=', q);
+    if (!q) {
+        // empty query => show all majors
+        showAllMajors();
+        return;
+    }
+    // Otherwise filter as user types
+    filteredMajors.value = (majors.value || [])
+        .filter(m => normalize(m.name).includes(q) || (m.id || '').toLowerCase().includes(q))
+        .map(m => `${m.id} - ${m.name}`);
+};
+
+// optional: ensure suggestions repopulate after a selection
+const onMajorSelect = () => {
+    console.log('[MAJOR] onMajorSelect, resetting suggestions');
+    // keep the current value but reload suggestions so dropdown works next time
+    showAllMajors();
 };
 
 </script>
@@ -160,8 +197,19 @@ const filterSubjects = () => {
             </span>
 
             <!-- Buscar por id de carrera o por nombre de major --> 
-            <span class="w-full md:w-3 mt-3 mr-3">
-                <InputText v-model="majorInput" placeholder="Carrera..." class="w-full" />
+            <span class="w-full md:w-4 mt-3 mr-3"> 
+                <AutoComplete 
+                    class="w-full"
+                    v-model="majorInput" 
+                    :suggestions="filteredMajors" 
+                    @complete="filterMajors" 
+                    @dropdown="showAllMajors"
+                    @focus="showAllMajors"
+                    @select="onMajorSelect"
+                    placeholder="Carrera (siglas o nombre)..." 
+                    dropdown 
+                    :forceSelection="false"
+                />
             </span>
             
             <!-- Buscar por materia -->

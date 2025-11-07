@@ -12,8 +12,9 @@ const userInfo = ref(null);
 const activeMAEs = ref([]);
 const subjects = ref([]);
 const maes = ref([]);
-const nombreInput = ref('');
-const subjectInput = ref('');
+const nombreInput = ref(''); // Look up por nombre del MAE
+const subjectInput = ref(''); // Look up for subject
+const majorInput = ref(''); // Look up por carrera
 const filteredSubjects = ref([]);
 
 onMounted(async () => {
@@ -26,20 +27,44 @@ onMounted(async () => {
 const filteredMAEs = computed(() => {
     const selectedSubject = subjectInput.value;
     const selectedName = normalize(nombreInput.value);
+    const selectedMajor = majorInput.value; 
 
     const activeMAEsList = maes.value.filter(mae => isMAEActive(mae));
-    if(selectedSubject == '' && selectedName == '') {
+    if (selectedSubject == '' && selectedName == '' && selectedMajor == '') {
         return activeMAEsList
     }
      
     return maes.value.filter(mae => {
+        // Look for matching subjects
         const subject = mae.subjects.some(subject => subject.id === selectedSubject?.id);
 
+        // Look for name 
         let name = false;
         if (selectedName !== '' && mae.name) {
             name = normalize(mae.name).includes(selectedName);
         }
 
+        // Look through major abbreviated 
+        let majorMatch = false; // No major found yet
+        if (selectedMajor) {
+            const majorQuery = normalize(String(selectedMajor || '')); // User input normalized to be lowercase and handle los acentos y así 
+            // Compares major id and names
+            const maeMajorId = (mae.major?.id || '').toLowerCase(); // Sees if find a major w matching id   
+            const maeMajorName = (mae.major?.name || '').toLowerCase(); 
+
+            // Match found w either the ID or name de la carrera
+            majorMatch = maeMajorId.includes(majorQuery.toLowerCase()) || maeMajorName.includes(majorQuery);
+        }
+
+        // Filter combos ensure all match
+        const okSubject = !selectedSubject || subject; 
+        const okName = !selectedName || name; 
+        const okMajor = !selectedMajor || majorMatch;
+
+        return okSubject && okName && okMajor; // Returns those where all three conds are met
+
+        // Look for subject
+        /*
         if (selectedName && selectedSubject) {
             return subject && name; 
         } else if (selectedName) {
@@ -49,6 +74,7 @@ const filteredMAEs = computed(() => {
         } else {
             return false; 
         }
+        */
     });
     
 });
@@ -95,8 +121,10 @@ function getDisplayedDay(weekSchedule) {
 const clearFilters = () => {
     subjectInput.value = '';
     nombreInput.value = '';
+    majorInput.value = '';
 };
 
+// Search for subjects
 const filterSubjects = () => {
     const query = normalize(subjectInput.value);
     filteredSubjects.value = subjects.value.filter(subject =>
@@ -118,7 +146,7 @@ const filterSubjects = () => {
         </span>
         
         <h1 class="text-black text-6xl font-bold text-center m-0 sm:text-left" v-else> 
-             MAEs activos
+            MAEs activos
         </h1>
     </div>
     
@@ -126,22 +154,28 @@ const filterSubjects = () => {
     <h2 class="text-black text-3xl font-semibold text-center sm:text-left">Filtros</h2>
     <div class="flex md:flex-row flex-column mb-4">
             <span class="w-full md:w-5 mt-3 mr-3">
-                <InputText v-model="nombreInput" placeholder="Nombre..." class="w-full" />
+                <!-- Buscar por nombre del mae -->
+                <InputText v-model="nombreInput" placeholder="Nombre de MAE..." class="w-full" />
+            </span>
+
+            <!-- Buscar por id de carrera o por nombre de major --> 
+            <span class="w-full md:w-3 mt-3 mr-3">
+                <InputText v-model="majorInput" placeholder="Carrera..." class="w-full" />
             </span>
             
-            <span class="w-full md:w-5 mt-3"> 
-            <AutoComplete 
-                class="w-full"
-                v-model="subjectInput" 
-                :suggestions="filteredSubjects" 
-                @complete="filterSubjects" 
-                field="name" 
-                dropdown 
-                :forceSelection="false"
-                placeholder="Buscar materia..." 
+            <!-- Buscar por materia -->
+            <span class="w-full md:w-5 mt-3 mr-3"> 
+                <AutoComplete 
+                    class="w-full"
+                    v-model="subjectInput" 
+                    :suggestions="filteredSubjects" 
+                    @complete="filterSubjects" 
+                    field="name" 
+                    dropdown 
+                    :forceSelection="false"
+                    placeholder="Buscar por materia..." 
                 />
             </span>
-        
         </div>
 
     <!-- Mensaje de búsqueda -->

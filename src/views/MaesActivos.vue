@@ -50,10 +50,11 @@ const filteredMAEs = computed(() => {
             const majorQuery = normalize(String(selectedMajor || '')); // User input normalized to be lowercase and handle los acentos y así 
             // Compares major id and names
             const maeMajorId = (mae.major?.id || '').toLowerCase(); // Sees if find a major w matching id   
-            const maeMajorName = (mae.major?.name || '').toLowerCase(); 
+            //const maeMajorName = (mae.major?.name || '').toLowerCase(); 
 
             // Match found w either the ID or name de la carrera
-            majorMatch = maeMajorId.includes(majorQuery.toLowerCase()) || maeMajorName.includes(majorQuery);
+            //majorMatch = maeMajorId.includes(majorQuery.toLowerCase()) || maeMajorName.includes(majorQuery);
+            majorMatch = maeMajorId.includes(majorQuery.toLowerCase())
         }
 
         // Filter combos ensure all match

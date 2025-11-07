@@ -29,10 +29,7 @@
                             @click="onTestRead"
                             :disabled="testingRead"
                         />
-                        <span class="p-input-icon-left">
-                            <i class="pi pi-search" />
-                            <InputText placeholder="Buscar" class="custom-search-input" />
-                        </span>
+                        <!-- buscador movido abajo junto a los filtros -->
                     </div>
                 </div>
 
@@ -179,7 +176,7 @@
                                     <h3 class="m-0 mb-3 mae-card__title">{{ mainVideo?.Titulo || '' }}</h3>
                                     <p class="mb-3 mae-card__description">{{ mainVideo?.Informacion || '' }}</p>
                                 </div>
-                                <div class="flex gap-2">
+                                <div class="mae-card__tags">
                                     <template v-if="mainVideo && Array.isArray(mainVideo.Relacionado) && mainVideo.Relacionado.length">
                                         <Tag
                                             v-for="tag in mainVideo.Relacionado"
@@ -203,17 +200,25 @@
                     <div class="flex justify-content-between flex-column sm:flex-row align-items-start sm:align-items-center mb-4">
                         <h2 class="text-2xl font-normal m-0 selection-title">Nuestra selección para ti</h2>
                         <div class="flex align-items-center gap-2 mt-3 sm:mt-0">
-                            <Dropdown v-model="selectedTag" :options="tags" optionLabel="name" placeholder="Etiqueta" class="w-full md:w-10rem custom-dropdown" />
-                            <Dropdown v-model="selectedCareer" :options="careers" optionLabel="name" placeholder="Carrera" class="w-full md:w-10rem custom-dropdown" />
-                            <Dropdown v-model="selectedSemester" :options="semesters" optionLabel="name" placeholder="Semestre" class="w-full md:w-10rem custom-dropdown" />
-                            <Dropdown v-model="selectedType" :options="types" optionLabel="name" placeholder="Tipo" class="w-full md:w-10rem custom-dropdown" />
+                            <span class="p-input-icon-left" style="width:100%;">
+                                <i class="pi pi-search" />
+                                <InputText v-model="searchQuery" placeholder="Buscar" class="custom-search-input" />
+                            </span>
+                            <!-- filtros ocultos temporalmente
+                            <div class="flex align-items-center gap-2 mt-3 sm:mt-0">
+                                <Dropdown v-model="selectedTag" :options="tags" optionLabel="name" placeholder="Etiqueta" class="w-full md:w-10rem custom-dropdown" />
+                                <Dropdown v-model="selectedCareer" :options="careers" optionLabel="name" placeholder="Carrera" class="w-full md:w-10rem custom-dropdown" />
+                                <Dropdown v-model="selectedSemester" :options="semesters" optionLabel="name" placeholder="Semestre" class="w-full md:w-10rem custom-dropdown" />
+                                <Dropdown v-model="selectedType" :options="types" optionLabel="name" placeholder="Tipo" class="w-full md:w-10rem custom-dropdown" />
+                            </div>
+                            -->
                         </div>
                     </div>
 
                     <!-- Cards de Selección -->
-                    <div v-if="videos.length" class="mae-cards-grid">
+                    <div v-if="displayedVideos.length" class="mae-cards-grid">
                         <div
-                            v-for="(video, index) in videos"
+                            v-for="(video, index) in displayedVideos"
                             :key="video.id || index"
                             class="mae-card"
                         >
@@ -293,7 +298,8 @@ import {
     // TAGS is the dropdown of simple {name,code}
     TAGS,
     openVideo,
-    handleThumbnailKey
+    handleThumbnailKey,
+    filterVideosByText
 } from '../firebase/db/maeteca';
 import { getCurrentUser } from '../firebase/db/users';
 
@@ -323,6 +329,11 @@ const videos = ref([]);
 // Materias para el AutoComplete del popup
 const subjects = ref([]);
 const filteredSubjects = ref([]);
+// Buscador global movible
+const searchQuery = ref('');
+
+// Filtrado tipo MaesActivos: busca en título y descripción, normalizado
+const displayedVideos = computed(() => filterVideosByText(videos.value, searchQuery.value));
 
 // Video principal (intro) cargado desde documento 'intro-maeteca'
 const mainVideo = ref(null);

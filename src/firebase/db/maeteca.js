@@ -1,3 +1,16 @@
+// Filtra videos por texto en título o descripción, normalizado (MaesActivos style)
+import { normalize } from '@/utils/HorarioUtils';
+export function filterVideosByText(videos, text) {
+    if (!Array.isArray(videos)) return [];
+    const normalizeText = typeof text === 'string' ? text : '';
+    const query = normalize(normalizeText || '');
+    if (!query) return videos;
+    return videos.filter(video => {
+        const title = normalize(video.Titulo || '');
+        const info = normalize(video.Informacion || '');
+        return title.includes(query) || info.includes(query);
+    });
+}
 import { firestoreDB } from "../../main";
 import {
     getDocs,

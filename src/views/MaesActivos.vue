@@ -183,13 +183,13 @@ const onMajorSelect = () => {
             </h1>
         </span>
         
-        <h1 class="text-black text-6xl font-bold text-center m-0 sm:text-left" v-else> 
+        <h1 class="text-black text-6xl font-bold m-0 sm:text-left" v-else> 
             MAEs activos
         </h1>
     </div>
     
     <!-- Buscar entre los maes activos -->
-    <h2 class="text-black text-3xl font-semibold text-center sm:text-left">Filtros</h2>
+    <h2 class="text-black text-3xl font-semibold sm:text-left">Filtros</h2>
     <div class="flex md:flex-row flex-column mb-4">
             <span class="w-full md:w-5 mt-3 mr-3">
                 <!-- Buscar por nombre del mae -->

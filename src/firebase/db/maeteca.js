@@ -230,59 +230,177 @@ export async function getVideosByRelated(relacionadoItem) {
 
 
 export async function createSampleVideos() {
-    const user = await getCurrentUser();
-    if (!user) throw new Error('No authenticated user for write');
-    assertVideoPermissions(user);
-    console.log("Usuario autenticado:", user); // Verifica la información del usuario
-    try {
-        // Video con ID automático
-        await addVideoToMaeteca({
-            Informacion: "Video explicativo sobre bibliotecas digitales",
-            Relacionado: ["biblioteca", "digital", "recursos"],
-            Titulo: "¿Qué es una biblioteca digital?",
-            Video: "https://www.youtube.com/watch?v=mGbv1A_PKDY"
-        });
-        // Video con ID automático
-        await addVideoToMaeteca({
-            Informacion: "Video explicativo sobre bibliotecas digitales",
-            Relacionado: ["biblioteca", "digital", "recursos"],
-            Titulo: "¿Qué es una biblioteca digital?",
-            Video: "https://www.youtube.com/watch?v=mGbv1A_PKDY"
-        });
-        // Video con ID automático
-        await addVideoToMaeteca({
-            Informacion: "Video explicativo sobre bibliotecas digitales",
-            Relacionado: ["biblioteca", "digital", "recursos"],
-            Titulo: "¿Qué es una biblioteca digital?",
-            Video: "https://www.youtube.com/watch?v=mGbv1A_PKDY"
-        });
-        // Video con ID automático
-        await addVideoToMaeteca({
-            Informacion: "Video explicativo sobre bibliotecas digitales",
-            Relacionado: ["biblioteca", "digital", "recursos"],
-            Titulo: "¿Qué es una biblioteca digital?",
-            Video: "https://www.youtube.com/watch?v=mGbv1A_PKDY"
-        });
-        // Video con ID automático
-        await addVideoToMaeteca({
-            Informacion: "Video explicativo sobre bibliotecas digitales",
-            Relacionado: ["biblioteca", "digital", "recursos"],
-            Titulo: "¿Qué es una biblioteca digital?",
-            Video: "https://www.youtube.com/watch?v=mGbv1A_PKDY"
-        });
-        // Video con ID automático
-        await addVideoToMaeteca({
-            Informacion: "Video explicativo sobre bibliotecas digitales",
-            Relacionado: ["biblioteca", "digital", "recursos"],
-            Titulo: "¿Qué es una biblioteca digital?",
-            Video: "https://www.youtube.com/watch?v=mGbv1A_PKDY"
-        });
+        const user = await getCurrentUser();
+        if (!user) throw new Error('No authenticated user for write');
+        assertVideoPermissions(user);
+        console.log("Usuario autenticado:", user); // Verifica la información del usuario
 
-
-        console.log("Videos de ejemplo creados ✅");
-    } catch (error) {
-        console.error("Error creando videos de ejemplo:", error);
-        throw error;
+        const samples = [
+    {
+        "Informacion": "Video explicativo sobre el Método de Euler en modelación matemática.",
+        "Relacionado": ["método de euler", "modelación matemática", "aproximación numérica"],
+        "Titulo": "Método de Euler",
+        "Video": "https://youtu.be/B9YR-GXGncw"
+    },
+    {
+        "Informacion": "Video sobre funciones polinomiales y cómo calcular su derivada.",
+        "Relacionado": ["funciones polinomiales", "derivadas", "modelación matemática"],
+        "Titulo": "Funciones polinomiales y su derivada",
+        "Video": "https://youtu.be/2ntPaw4vkc8"
+    },
+    {
+        "Informacion": "Explicación de la función exponencial y el cálculo de su derivada.",
+        "Relacionado": ["función exponencial", "derivadas", "modelación matemática"],
+        "Titulo": "Función exponencial y su derivada",
+        "Video": "https://youtu.be/6V_LmXGCbSg"
+    },
+    {
+        "Informacion": "Derivación de constantes y suma de funciones en modelación matemática.",
+        "Relacionado": ["derivadas", "constantes", "suma de funciones"],
+        "Titulo": "Derivada de constante y suma de funciones",
+        "Video": "https://youtu.be/9ghBNnZ6t7g"
+    },
+    {
+        "Informacion": "Cómo derivar el producto de dos funciones.",
+        "Relacionado": ["derivadas", "producto de funciones", "regla del producto"],
+        "Titulo": "Derivada de producto de funciones",
+        "Video": "https://youtu.be/8XS55_kOlmk"
+    },
+    {
+        "Informacion": "Derivación de cociente de funciones con ejemplos paso a paso.",
+        "Relacionado": ["derivadas", "cociente de funciones", "regla del cociente"],
+        "Titulo": "Derivada de cociente de funciones",
+        "Video": "https://youtu.be/cw9zLw6k3dA"
+    },
+    {
+        "Informacion": "Uso de la regla de la cadena y derivación implícita.",
+        "Relacionado": ["regla de la cadena", "derivación implícita", "derivadas"],
+        "Titulo": "Regla de la cadena y derivación implícita",
+        "Video": "https://youtu.be/aGRJEaYh9Ws"
+    },
+    {
+        "Informacion": "Cambio de variable en integración y derivación.",
+        "Relacionado": ["cambio de variable", "integrales", "derivadas"],
+        "Titulo": "Cambio de variable",
+        "Video": "https://youtu.be/pMLrvpBF_4o"
+    },
+    {
+        "Informacion": "Integración por partes aplicada a problemas de ingeniería.",
+        "Relacionado": ["integrales", "integración por partes", "modelación matemática"],
+        "Titulo": "Integración por partes",
+        "Video": "https://youtu.be/VzxmmKKY3GM"
+    },
+    {
+        "Informacion": "Concepto y cálculo del plano tangente en superficies.",
+        "Relacionado": ["plano tangente", "derivadas parciales", "superficies"],
+        "Titulo": "Plano tangente",
+        "Video": "https://youtu.be/ZzwEwfFTP7Q"
+    },
+    {
+        "Informacion": "Cómo calcular derivadas direccionales y su interpretación geométrica.",
+        "Relacionado": ["derivada direccional", "gradiente", "superficies"],
+        "Titulo": "Derivada direccional",
+        "Video": "https://youtu.be/RbySC1xgM9o"
+    },
+    {
+        "Informacion": "Uso de la transformada de Laplace en ecuaciones diferenciales.",
+        "Relacionado": ["transformada de laplace", "ecuaciones diferenciales", "modelación dinámica"],
+        "Titulo": "Transformada de Laplace",
+        "Video": "https://youtu.be/-7vsj9f24-c"
+    },
+    {
+        "Informacion": "Conceptos básicos y operaciones con matrices.",
+        "Relacionado": ["matrices", "álgebra lineal", "operaciones matriciales"],
+        "Titulo": "Matrices: conceptos básicos y operaciones",
+        "Video": "https://youtu.be/krpLf9XP4vs"
+    },
+    {
+        "Informacion": "Cómo calcular la matriz de cofactores.",
+        "Relacionado": ["matrices", "cofactores", "determinantes"],
+        "Titulo": "Matriz de cofactores",
+        "Video": "https://youtu.be/9uZ96OEcTuc"
+    },
+    {
+        "Informacion": "Definición y obtención de la matriz adjunta.",
+        "Relacionado": ["matrices", "matriz adjunta", "álgebra lineal"],
+        "Titulo": "Matriz adjunta",
+        "Video": "https://youtu.be/PhJwWFWQQiY"
+    },
+    {
+        "Informacion": "Cálculo de la matriz inversa paso a paso.",
+        "Relacionado": ["matrices", "inversa de matriz", "determinantes"],
+        "Titulo": "Matriz inversa",
+        "Video": "https://youtu.be/nyFLyIeeHmA"
+    },
+    {
+        "Informacion": "Cálculo del determinante en sistemas de ecuaciones nxn.",
+        "Relacionado": ["determinantes", "sistemas lineales", "álgebra lineal"],
+        "Titulo": "Cálculo del determinante en sistemas nxn",
+        "Video": "https://youtu.be/XgWuTkx0CjA"
+    },
+    {
+        "Informacion": "Resolución de sistemas lineales por el método de Gauss-Jordan.",
+        "Relacionado": ["gauss-jordan", "sistemas lineales", "álgebra lineal"],
+        "Titulo": "Método de Gauss-Jordan",
+        "Video": "https://youtu.be/MslG1TrSQO4"
+    },
+    {
+        "Informacion": "Cálculo con operadores aplicado a ingeniería.",
+        "Relacionado": ["operadores", "pensamiento computacional", "matemáticas aplicadas"],
+        "Titulo": "Cálculo con operadores",
+        "Video": "https://youtu.be/AiJIcK3yIZw"
+    },
+    {
+        "Informacion": "Uso del método Solver para resolver problemas de programación lineal.",
+        "Relacionado": ["programación lineal", "solver", "análisis de decisiones"],
+        "Titulo": "Método Solver en programación lineal",
+        "Video": "https://youtu.be/c-DPPmNef0Y"
+    },
+    {
+        "Informacion": "Representación gráfica de modelos de programación lineal.",
+        "Relacionado": ["programación lineal", "gráficas", "análisis de decisiones"],
+        "Titulo": "Gráficas en programación lineal",
+        "Video": "https://youtu.be/RQ2pSyjH-64"
+    },
+    {
+        "Informacion": "Uso del comando Array en AutoCAD.",
+        "Relacionado": ["autocad", "comando array", "dibujo asistido"],
+        "Titulo": "Comando Array",
+        "Video": "https://youtu.be/t3W_DDSnTDU"
+    },
+    {
+        "Informacion": "Cómo usar el comando Offset para crear copias paralelas de objetos.",
+        "Relacionado": ["autocad", "offset", "diseño técnico"],
+        "Titulo": "Comando Offset",
+        "Video": "https://youtu.be/FXU5ZzXTwRQ"
+    },
+    {
+        "Informacion": "Cálculo del área de una figura en AutoCAD.",
+        "Relacionado": ["autocad", "área", "medición"],
+        "Titulo": "Cálculo del área de una figura",
+        "Video": "https://youtu.be/IpBFI7Zhymg"
+    },
+    {
+        "Informacion": "Uso de los comandos Trim y Fillet para edición de figuras.",
+        "Relacionado": ["autocad", "trim", "fillet", "dibujo 2D"],
+        "Titulo": "Comandos Trim y Fillet",
+        "Video": "https://youtu.be/fA-z6OjDvMQ"
     }
+];
+
+        const insertedIds = [];
+        try {
+                for (const item of samples) {
+                        // addVideoToMaeteca will attach createdBy and createdAt
+                        const ref = await addVideoToMaeteca(item);
+                        if (ref && ref.id) insertedIds.push(ref.id);
+                        console.log(`Agregado: ${item.Titulo} -> ${ref?.id}`);
+                }
+                console.log(`Videos de ejemplo creados ✅ Total: ${insertedIds.length}`);
+                return insertedIds;
+        } catch (error) {
+                console.error("Error creando videos de ejemplo:", error);
+                throw error;
+        }
 }
 

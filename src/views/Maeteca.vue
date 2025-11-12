@@ -14,21 +14,21 @@
                             @click="handleOpenAddVideo"
                         />
                         <!-- Botón temporal para probar carga de videos de ejemplo -->
-                        <Button
+                        <!-- <Button
                             v-if="canManageVideos"
                             label="Cargar ejemplos"
                             icon="pi pi-database"
                             class="ml-2"
                             @click="onCreateSamples"
                             :disabled="loadingSamples"
-                        />
-                        <Button
+                        /> -->
+                        <!-- <Button
                             label="Probar lectura"
                             icon="pi pi-eye"
                             class="ml-2"
                             @click="onTestRead"
                             :disabled="testingRead"
-                        />
+                        /> -->
                         <!-- buscador movido abajo junto a los filtros -->
                     </div>
                 </div>

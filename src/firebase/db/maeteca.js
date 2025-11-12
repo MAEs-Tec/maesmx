@@ -25,7 +25,7 @@ import {
 } from 'firebase/firestore';
 import { getCurrentUser } from './users';
 
-export const VIDEO_MANAGER_ROLES = ['admin', 'tec'];
+export const VIDEO_MANAGER_ROLES = ['admin', 'tec', 'coordi'];
 
 function assertVideoPermissions(user) {
     if (!VIDEO_MANAGER_ROLES.includes(user?.role)) {

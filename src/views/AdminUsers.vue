@@ -28,6 +28,34 @@ onMounted(() => {
     })
 });
 
+import { getAuth } from "firebase/auth";
+
+async function checkUserRole() {
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
+
+  if (!currentUser) {
+    console.error("No hay usuario autenticado.");
+    return;
+  }
+
+  try {
+    const idTokenResult = await currentUser.getIdTokenResult();
+    console.log("Custom claims en el token:", idTokenResult.claims);
+
+    // Verifica el campo role
+    if (idTokenResult.claims.role) {
+      console.log("El usuario tiene el rol:", idTokenResult.claims.role);
+    } else {
+      console.warn("El usuario no tiene un rol asignado en el token.");
+    }
+  } catch (error) {
+    console.error("Error obteniendo el token:", error);
+  }
+}
+
+// Llama a la función en el momento adecuado
+checkUserRole();
 </script>
 
 

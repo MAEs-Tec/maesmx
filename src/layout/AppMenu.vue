@@ -13,7 +13,6 @@ const model = ref([
             { label: 'Maes activos', icon: 'pi pi-fw pi-globe', to: '/maesactivos' },
             { label: 'Horarios', icon: 'pi pi-fw pi-clock', to: '/horarios' },
             { label: 'Asesorías grupales', icon: 'pi pi-fw pi-calendar', to: '/asesoriasGrupales' },
-            { label: 'Sala de honor', icon: 'pi pi-fw pi-heart-fill', to: '/halloffame' },
             { label: 'Maeteca', icon: 'pi pi-fw pi-desktop', to: '/maeteca' }
 
 
@@ -37,7 +36,8 @@ onMounted(async () => {
             adminItems.push(
                 { label: 'Asesorías', icon: 'pi pi-fw pi-list', to: '/admin/asesorias' },
                 { label: 'Funciones', icon: 'pi pi-fw pi-key', to: '/admin/funciones' },
-                { label: 'Dashboard', icon: 'pi pi-fw pi-chart-bar', to: '/admin/dashboard' }
+                { label: 'Dashboard', icon: 'pi pi-fw pi-chart-bar', to: '/admin/dashboard' }, 
+                { label: 'Historial asistencia', icon: 'pi pi-fw pi-history', to: '/admin/historialAsistencia'}
             );
         }
 

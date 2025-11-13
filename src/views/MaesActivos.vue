@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref, computed } from 'vue';
 import { getCurrentUser, getUsersWithActiveSession, getMaes, getClosestDayAndStartTime } from '../firebase/db/users';
+import { getMajors } from '@/firebase/db/majors'; // Para filter por carrera
 import { getSubjects } from '../firebase/db/subjects';
 import { normalize } from '@/utils/HorarioUtils';
 import {
@@ -12,43 +13,76 @@ const userInfo = ref(null);
 const activeMAEs = ref([]);
 const subjects = ref([]);
 const maes = ref([]);
-const nombreInput = ref('');
-const subjectInput = ref('');
+const nombreInput = ref(''); // Look up por nombre del MAE
+const subjectInput = ref(''); // Look up for subject
+const majorInput = ref(''); // Look up por carrera
 const filteredSubjects = ref([]);
+const majors = ref([]); // Siglas carrera 
+const filteredMajors = ref([]); // Store filtered major
+
+// Helper to normalize y quitar símbolos raros
+const normForMatch = (s) => String(s || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
 onMounted(async () => {
     activeMAEs.value = await getUsersWithActiveSession();
     userInfo.value = await getCurrentUser();
     subjects.value = await getSubjects();
+    majors.value = await getMajors(); // Get majors
+    filteredMajors.value = majors.value.map(m => `${m.id} - ${m.name}`); // Formato id - nombre carrera
     maes.value = await getMaes();
 });
 
 const filteredMAEs = computed(() => {
     const selectedSubject = subjectInput.value;
     const selectedName = normalize(nombreInput.value);
+    const selectedMajorRaw = String(majorInput.value || '').trim();
 
     const activeMAEsList = maes.value.filter(mae => isMAEActive(mae));
-    if(selectedSubject == '' && selectedName == '') {
+    if (selectedSubject == '' && selectedName == '' && selectedMajorRaw == '') {
         return activeMAEsList
     }
+
+    // Check user gave siglas o un "ID - Nombre"
+    let majorIdCandidate = '';
+    const idMatch = selectedMajorRaw.match(/^([A-Za-z]{1,4})\s*-/); // ID - Nombre, siglas permite de 1 a 4 so change si agregan carreras con más siglas
+    if (idMatch) {
+        majorIdCandidate = idMatch[1];
+    } else if (/^[A-Za-z0-9]{1,4}$/.test(selectedMajorRaw))  {
+        majorIdCandidate = selectedMajorRaw;
+    }
+
+    const qNorm = normForMatch(selectedMajorRaw);
      
     return maes.value.filter(mae => {
-        const subject = mae.subjects.some(subject => subject.id === selectedSubject?.id);
+        // Look for matching subjects
+        const subject = mae.subjects.some(s => s.id === selectedSubject?.id);
 
+        // Look for name 
         let name = false;
         if (selectedName !== '' && mae.name) {
             name = normalize(mae.name).includes(selectedName);
         }
 
-        if (selectedName && selectedSubject) {
-            return subject && name; 
-        } else if (selectedName) {
-            return name;
-        } else if (selectedSubject) {
-            return subject; 
-        } else {
-            return false; 
+        // Look through major abbreviated 
+        let majorMatch = false; // No major found yet
+        const maeMajorId = String(mae.major?.id || '').toLowerCase();
+        const maeMajorNameNorm = normForMatch(mae.major?.name || '');
+
+        if (majorIdCandidate) {
+            // match by id (exact or prefix)
+            majorMatch = maeMajorId === majorIdCandidate.toLowerCase() || maeMajorId.includes(majorIdCandidate.toLowerCase());
+        } else if (selectedMajorRaw) {
+            // match by name: try whole-word then substring
+            const wordRegex = new RegExp(`\\b${qNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+            majorMatch = wordRegex.test(maeMajorNameNorm) || maeMajorNameNorm.includes(qNorm);
         }
+
+        // Filter combos ensure all match
+        const okSubject = !selectedSubject || subject; 
+        const okName = !selectedName || name; 
+        const okMajor = !selectedMajorRaw || majorMatch; 
+
+        return okSubject && okName && okMajor; // Returns those where all three conds are met
     });
     
 });
@@ -95,13 +129,45 @@ function getDisplayedDay(weekSchedule) {
 const clearFilters = () => {
     subjectInput.value = '';
     nombreInput.value = '';
+    majorInput.value = '';
+    filteredMajors.value = majors.value.map(m => `${m.id} - ${m.name}`); // Resetting las carreras para poder refilter
 };
 
+// Search for subjects
 const filterSubjects = () => {
     const query = normalize(subjectInput.value);
     filteredSubjects.value = subjects.value.filter(subject =>
         normalize(subject.name).includes(query)
     );
+};
+
+// Show all majors for dropdown
+const showAllMajors = () => {
+    console.log('[MAJOR] showAllMajors called');
+    filteredMajors.value = (majors.value || []).map(m => `${m.id} - ${m.name}`);
+};
+
+// Search-based filtering to keep behavior when typing user
+const filterMajors = (event) => {
+    // event may be AutoComplete event with query, fall back to input value
+    const q = normalize(event?.query ?? String(majorInput.value || ''));
+    console.log('[MAJOR] filterMajors called, query=', q);
+    if (!q) {
+        // empty query => show all majors
+        showAllMajors();
+        return;
+    }
+    // Otherwise filter as user types
+    filteredMajors.value = (majors.value || [])
+        .filter(m => normalize(m.name).includes(q) || (m.id || '').toLowerCase().includes(q))
+        .map(m => `${m.id} - ${m.name}`);
+};
+
+// optional: ensure suggestions repopulate after a selection
+const onMajorSelect = () => {
+    console.log('[MAJOR] onMajorSelect, resetting suggestions');
+    // keep the current value but reload suggestions so dropdown works next time
+    showAllMajors();
 };
 
 </script>
@@ -117,29 +183,48 @@ const filterSubjects = () => {
             </h1>
         </span>
         
-        <h1 class="text-black text-4xl font-bold text-left md:text-center md:text-left mt-3" v-else> 
-             MAEs activos
+        <h1 class="text-black text-6xl font-bold m-0 sm:text-left" v-else> 
+            MAEs activos
         </h1>
     </div>
-
+    
+    <!-- Buscar entre los maes activos -->
+    <h2 class="text-black text-3xl font-semibold sm:text-left">Filtros</h2>
     <div class="flex md:flex-row flex-column mb-4">
             <span class="w-full md:w-5 mt-3 mr-3">
-                <InputText v-model="nombreInput" placeholder="Nombre..." class="w-full" />
+                <!-- Buscar por nombre del mae -->
+                <InputText v-model="nombreInput" placeholder="Nombre de MAE..." class="w-full" />
             </span>
-            
-            <span class="w-full md:w-5 mt-3"> 
-            <AutoComplete 
-                class="w-full"
-                v-model="subjectInput" 
-                :suggestions="filteredSubjects" 
-                @complete="filterSubjects" 
-                field="name" 
-                dropdown 
-                :forceSelection="false"
-                placeholder="Buscar materia..." 
+
+            <!-- Buscar por id de carrera o por nombre de major --> 
+            <span class="w-full md:w-4 mt-3 mr-3"> 
+                <AutoComplete 
+                    class="w-full"
+                    v-model="majorInput" 
+                    :suggestions="filteredMajors" 
+                    @complete="filterMajors" 
+                    @dropdown="showAllMajors"
+                    @focus="showAllMajors"
+                    @select="onMajorSelect"
+                    placeholder="Carrera (siglas o nombre)..." 
+                    dropdown 
+                    :forceSelection="false"
                 />
             </span>
-        
+            
+            <!-- Buscar por materia -->
+            <span class="w-full md:w-5 mt-3 mr-3"> 
+                <AutoComplete 
+                    class="w-full"
+                    v-model="subjectInput" 
+                    :suggestions="filteredSubjects" 
+                    @complete="filterSubjects" 
+                    field="name" 
+                    dropdown 
+                    :forceSelection="false"
+                    placeholder="Buscar por materia..." 
+                />
+            </span>
         </div>
 
     <!-- Mensaje de búsqueda -->

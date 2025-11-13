@@ -169,7 +169,7 @@ const router = createRouter({
                     name: 'asistencia',
                     component: () => import('@/views/AdminHistorialAsistencias.vue'),
                     meta: {
-                        roles: ['admin','tec']
+                        roles: ['admin']
                     }
                 },
                 /* 

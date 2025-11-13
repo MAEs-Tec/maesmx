@@ -34,7 +34,7 @@ function assertVideoPermissions(user) {
     }
 }
 
-// ✅ CREAR documentos
+//  CREAR documentos
 export async function addVideoToMaeteca(videoData) {
     try {
         const user = await getCurrentUser();
@@ -58,14 +58,14 @@ export async function addVideoToMaeteca(videoData) {
 }
 
 
-// ✅ LEER todos los videos
+//  LEER todos los videos
 export async function getAllVideos() {
     try {
         const videosRef = collection(firestoreDB, "videos");
         const snapshot = await getDocs(videosRef);
 
         if (snapshot.empty) {
-            console.log("No se encontraron videos ❌");
+            console.log("No se encontraron videos ");
             return [];
         }
 
@@ -197,7 +197,7 @@ export function handleThumbnailKey(event, url) {
     }
 }
 
-// ✅ BUSCAR por array "Relacionado"
+//  BUSCAR por array "Relacionado"
 export async function getVideosByRelated(relacionadoItem) {
     try {
         const videosRef = collection(firestoreDB, "videos");
@@ -209,7 +209,7 @@ export async function getVideosByRelated(relacionadoItem) {
         const snapshot = await getDocs(q);
 
         if (snapshot.empty) {
-            console.log("No se encontraron documentos ❌");
+            console.log("No se encontraron documentos ");
             return [];
         }
 
@@ -396,7 +396,7 @@ export async function createSampleVideos() {
                         if (ref && ref.id) insertedIds.push(ref.id);
                         console.log(`Agregado: ${item.Titulo} -> ${ref?.id}`);
                 }
-                console.log(`Videos de ejemplo creados ✅ Total: ${insertedIds.length}`);
+                console.log(`Videos de ejemplo creados  Total: ${insertedIds.length}`);
                 return insertedIds;
         } catch (error) {
                 console.error("Error creando videos de ejemplo:", error);

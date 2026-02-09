@@ -27,7 +27,7 @@ const selectedDate = ref(formatYesterday); // Loads previous day
 const rangeLoading = ref(true); // Separates loading state for range data
 
 // Temp default for semester
-const startDate = ref('2025-08-18'); 
+const startDate = ref('2026-02-09'); 
 const endDate = ref(formatDate(today)); // Current date of semester, use aux funct
 
 // Arrays for reports
@@ -145,10 +145,10 @@ const loadRangeReport = async (start, end) => {
 const filterByDate = async () => {
   try {
     // For debug
-    console.log('📅 Raw dates from calendar:', { 
+    /*console.log('Raw calendar:', { 
       startDate: startDate.value, 
       endDate: endDate.value 
-    });
+    });*/
 
     loading.value = true;
     rangeLoading.value = true;

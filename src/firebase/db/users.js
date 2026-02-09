@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { getUserProfilePicture } from "../img/users";
 import * as XLSX from 'xlsx';
+import { writeBatch } from "firebase/firestore";
 
 const db = getFirestore();
 
@@ -954,4 +955,33 @@ export async function clearUsersData() {
         console.error("Error al actualizar usuarios: ", error);
         throw error;
     }
+}
+
+
+export async function resetAllUsersTotalTimeAndPoints({ dryRun = false, batchSize = 450 } = {}) {
+  const usersSnap = await getDocs(collection(firestoreDB, "users"));
+  if (usersSnap.empty) return { scanned: 0, updated: 0 };
+
+  const docs = usersSnap.docs;
+  let updated = 0;
+
+  if (dryRun) {
+    return { scanned: docs.length, updated: 0 };
+  }
+
+  for (let i = 0; i < docs.length; i += batchSize) {
+    const chunk = docs.slice(i, i + batchSize);
+    const batch = writeBatch(firestoreDB);
+
+    chunk.forEach((d) => {
+      batch.update(d.ref, { totalTime: 0, points: 0 });
+    });
+
+    await batch.commit();
+    updated += chunk.length;
+    console.log(`✅ Restablecimiento en progreso: ${updated}/${docs.length}`);
+  }
+
+  console.log(`🎉 Listo. Se restablecieron totalTime y points para ${updated} usuarios.`);
+  return { scanned: docs.length, updated };
 }

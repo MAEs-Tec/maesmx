@@ -168,6 +168,52 @@ export async function getMaes() {
     }
 }
 
+export async function getMaesNames() {
+    const usersRef = collection(firestoreDB, "users");
+    const q = query(usersRef, where('role', 'in', ['mae', 'coordi', 'admin', 'subjectCoordi', 'publi', 'tec']));
+
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot) {
+        let data = querySnapshot.docs.map(doc => doc.data());
+
+        // Filtrar usuarios que tienen un nombre
+        data = data.filter(item => item.name);
+
+        // Obtener el día actual
+        const today = new Date().getDay(); // Día actual (0-6)
+
+        // Ordenar por el día más cercano, la hora de inicio más temprana y alfabéticamente por nombre
+        data.sort((a, b) => {
+            // Obtener el día más cercano y la hora de inicio más temprana
+            const { day: dayA, startTime: startTimeA } = getClosestDayAndStartTime(a.weekSchedule);
+            const { day: dayB, startTime: startTimeB } = getClosestDayAndStartTime(b.weekSchedule);
+
+            const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+            // Crear un array cíclico desde el día actual
+            const daysOrdered = [...daysOfWeek.slice(today), ...daysOfWeek.slice(0, today)];
+
+            // Comparar días más cercanos, teniendo en cuenta el ciclo
+            const dayIndexA = daysOrdered.indexOf(dayA);
+            const dayIndexB = daysOrdered.indexOf(dayB);
+            const dayComparison = (dayIndexA === -1 ? 1 : (dayIndexB === -1 ? -1 : dayIndexA - dayIndexB));
+            if (dayComparison !== 0) return dayComparison;
+
+            // Comparar horas de inicio si los días son iguales
+            const startTimeComparison = (startTimeA === null ? 1 : (startTimeB === null ? -1 : startTimeA.localeCompare(startTimeB)));
+            if (startTimeComparison !== 0) return startTimeComparison;
+
+            // Comparar alfabéticamente si ambos días y horas son iguales
+            return a.name.localeCompare(b.name);
+        });
+
+        return data;
+    } else {
+        return null;
+    }
+}
+
 
 export async function getUsersWithActiveSession(getProfilePicture = false) {
     try {

@@ -65,9 +65,9 @@ export async function getAnnouncementsEdit() {
 export async function getAnnouncements() {
     try {
         const announcementsCollection = collection(firestoreDB, 'announcements');
-        const querySnapshot = await getDocs(query(announcementsCollection));
+        const q = query(announcementsCollection, where('visible', '==', true));
+        const querySnapshot = await getDocs(q);
         const now = new Date();
-        console.log(querySnapshot.docs)
         const announcements = querySnapshot.docs
             .map(doc => ({
                 id: doc.id,
@@ -87,8 +87,6 @@ export async function getAnnouncements() {
                 // Filtrar por visible o tipo Especial
                 const isVisible = announcement.visible === true;
                 const isSpecial = announcement.id === undefined;
-                console.log(announcement.type)
-                console.log(announcement.visible)
                 return isVisible || isSpecial;
             })
             .sort((a, b) => {
@@ -96,7 +94,6 @@ export async function getAnnouncements() {
                 const dateB = b.createdAt.seconds ? new Date(b.createdAt.seconds * 1000) : new Date(b.createdAt);
                 return dateA - dateB;
             });
-        console.log( announcements)
         return announcements;
     } catch (error) {
         console.error('Error fetching announcements:', error);
@@ -118,7 +115,6 @@ export async function getAnnouncementsGrupales() {
         const querySnapshot = await getDocs(q);
 
         const now = new Date();
-        console.log(now);
 
         const announcements = querySnapshot.docs
             .map(doc => ({
@@ -131,7 +127,6 @@ export async function getAnnouncementsGrupales() {
             })
             .sort((a, b) => a.createdAt.seconds - b.createdAt.seconds); // Ordenar por fecha de creación
 
-        console.log(announcements);
         return announcements;
     } catch (error) {
         console.error('Error fetching announcements:', error);

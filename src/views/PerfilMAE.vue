@@ -279,15 +279,8 @@ const saveScheduleChanges = async () => {
   }
   if (maeInfo.value.status === "becario" && 
     ((maeInfo.value.role === "mae" || maeInfo.value.role === "coordi") &&
-    (maeInfo.value.career.toUpperCase() === "MC" || maeInfo.value.career.toUpperCase() === "LBC" || maeInfo.value.career.toUpperCase() === "LPS") && 
     hours < 3)) {
     toast.add({ severity: 'error', summary: 'Error de horas', detail: 'No puedes tener menos de 3 horas asignadas en total', life: 3000 });
-    return;
-  } else if (maeInfo.value.status === "becario" && 
-           ((maeInfo.value.role === "mae" || maeInfo.value.role === "coordi") && 
-           !(maeInfo.value.career.toUpperCase() === "MC" || maeInfo.value.career.toUpperCase() === "LBC" || maeInfo.value.career.toUpperCase() === "LPS")) && 
-           hours < 5) {
-    toast.add({ severity: 'error', summary: 'Error de horas', detail: 'No puedes tener menos de 5 horas asignadas en total', life: 3000 });
     return;
   } else if (maeInfo.value.status === "becario" && 
            maeInfo.value.role === "publi" && 

@@ -66,25 +66,6 @@ export async function updateReport(userInfo, report) {
 }
 
 // To get date info
-/*
-export async function addRegister(userInfo, date) {
-    try {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0'); // getMonth() returns 0-11
-        const day = String(date.getDate()).padStart(2, '0');
-
-        const reportRef = doc(firestoreDB, "attendance", `${year}-${month}-${day}`, "report", userInfo.uid);
-
-        await setDoc(reportRef, {
-            ...userInfo,
-            report: 'RR'
-        });
-
-    } catch (error) {
-        console.error("Error updating the report: ", error);
-    }
-}
-*/
 export async function addRegister(userInfo, date) {
     try {
         const year = date.getFullYear();
@@ -92,7 +73,7 @@ export async function addRegister(userInfo, date) {
         const day = String(date.getDate()).padStart(2, '0');
         const dateString = `${year}-${month}-${day}`;
 
-        // ✅ Ensure root date doc is created with a dummy field
+        // Root date doc is created w dummy field
         const dateDocRef = doc(firestoreDB, "attendance", dateString);
         await setDoc(dateDocRef, { initialized: true }, { merge: true });
 
@@ -117,7 +98,7 @@ export async function getStudentReport(uid) {
   const snap = await getDoc(reportRef);
 
   if (snap.exists()) {
-    return snap.data().report; // e.g. 'A', 'J', 'R', 'F'
+    return snap.data().report; // 'A', 'J', 'R', 'F'
   } else {
     return null;
   }
@@ -173,9 +154,6 @@ function getDateStringsBetween(startDate, endDate) {
 
         
     }
-
-    //console.log('✅ Final dateList:', dateList);
-    //console.log('🔢 Total dates generated:', dateList.length);
     return dateList;
 }
 
@@ -186,7 +164,6 @@ export async function getReportByDateRange(startDate, endDate) {
 
     // Checks each document date w the reports
     for (const date of dateStrings) {
-        //console.log(`🔍 Checking date: ${date}`);
         const reportRef = collection(firestoreDB, "attendance", date, "report");
         try {
             const reportSnap = await getDocs(reportRef);
@@ -207,7 +184,7 @@ export async function getReportByDateRange(startDate, endDate) {
                     });
                 });
             } else {
-                console.log(`❌ No reports found for ${date}`);
+                console.log(`No reports ${date}`);
             }
         } catch (error) {
             console.warn(`Skipping ${date}:`, error.message);

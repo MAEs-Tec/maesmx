@@ -27,17 +27,17 @@ exports.cleanupExpiredAnnouncements = functions.https.onRequest(
         });
       }
       
-      // Actualizar en batch (máximo 500 documentos por batch)
-      // Si esperas más de 500, habría que paginar, pero para <500 esto es eficiente.
-      const batch = db.batch();
+      // Actualizar en las operaciones escritas
+      // Si se llega a ocupar mas de 500 (que no creo la vdd) tendriamos que paginar
+      const operation = db.batch();
       let count = 0;
       
       snapshot.docs.forEach(doc => {
-        batch.update(doc.ref, { visible: false });
+        operation.update(doc.ref, { visible: false });
         count++;
       });
       
-      await batch.commit();
+      await operation.commit();
       
       console.log(`Successfully cleaned up ${count} expired announcements`);
       

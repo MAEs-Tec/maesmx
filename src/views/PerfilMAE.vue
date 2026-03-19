@@ -628,7 +628,7 @@ const guardarEvaluacion = async () => {
           </span>
           <span class="flex flex-row  mb-2">
             <img src="/assets/clock.svg" class="ml-2" alt="mentoring icon" style="width: 1.6rem; height: 1.6rem;" />
-            <p class="text-lg font-medium  ml-2">  {{ Math.round((maeInfo.totalTime / 60) * 100) / 100 }} Horas de servicio </p>
+            <p class="text-lg font-medium  ml-2">  {{ Math.floor(maeInfo.totalTime / 60) }}h {{ maeInfo.totalTime % 60 }}min de servicio </p>
           </span>      
         </div>
       </div>

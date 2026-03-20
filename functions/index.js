@@ -4,8 +4,9 @@ const admin = require('firebase-admin');
 admin.initializeApp();
 const db = admin.firestore();
 
-exports.cleanupExpiredAnnouncements = functions.https.onRequest(
-  async (req, res) => {
+
+// Se ejecuta automáticamente el día 1 de cada mes a las 00:00
+exports.cleanupExpiredAnnouncements = functions.pubsub.schedule('0 0 1 * *').timeZone('America/Mexico_City').onRun(async (context) => {
     try {
       const now = new Date();
       const announcementsRef = db.collection('announcements');
@@ -19,42 +20,25 @@ exports.cleanupExpiredAnnouncements = functions.https.onRequest(
       const snapshot = await query.get();
       
       if (snapshot.empty) {
-        return res.status(200).json({
-          success: true,
-          message: 'No announcements to update',
-          updated: 0,
-          timestamp: new Date().toISOString()
-        });
+        console.log('No announcements to delete');
+        return null;
       }
-      
-      // Actualizar en las operaciones escritas
-      // Si se llega a ocupar mas de 500 (que no creo la vdd) tendriamos que paginar
-      const operation = db.batch();
+      //El batch es una escritura por lotes. Asi no son una por una 
+      const batch = db.batch();
       let count = 0;
       
       snapshot.docs.forEach(doc => {
-        operation.delete(doc.ref);
+        batch.delete(doc.ref);
         count++;
       });
       
-      await operation.commit();
+      await batch.commit();
       
       console.log(`Successfully deleted ${count} expired announcements`);
-      
-      return res.status(200).json({
-        success: true,
-        message: `Successfully deleted ${count} expired announcements`,
-        deleted: count,
-        timestamp: new Date().toISOString()
-      });
+      return null;
       
     } catch (error) {
       console.error('Error cleaning up announcements:', error);
-      return res.status(500).json({
-        success: false,
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
+      return null;
     }
-  }
-);
+});

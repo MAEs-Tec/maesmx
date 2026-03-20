@@ -33,18 +33,18 @@ exports.cleanupExpiredAnnouncements = functions.https.onRequest(
       let count = 0;
       
       snapshot.docs.forEach(doc => {
-        operation.update(doc.ref, { visible: false });
+        operation.delete(doc.ref);
         count++;
       });
       
       await operation.commit();
       
-      console.log(`Successfully cleaned up ${count} expired announcements`);
+      console.log(`Successfully deleted ${count} expired announcements`);
       
       return res.status(200).json({
         success: true,
-        message: `Successfully updated ${count} announcements to visible: false`,
-        updated: count,
+        message: `Successfully deleted ${count} expired announcements`,
+        deleted: count,
         timestamp: new Date().toISOString()
       });
       

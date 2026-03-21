@@ -15,5 +15,8 @@
   },
   "functions": {
     "source": "functions"
+  },
+  "firestore": {
+    "indexes": "firestore.indexes.json"
   }
 }

@@ -23,7 +23,11 @@ export async function addAsesoria(maeInfo, userInfo, subject, comment, rating) {
             uid: maeInfo.uid, 
             name: maeInfo.name, 
             career: maeInfo.career,
-            profilePictureUrl: maeInfo.profilePictureUrl
+            profilePictureUrl: maeInfo.profilePictureUrl,
+            // Datos del excel
+            peerInfo: maeInfo.area || '', 
+            campus: cmaeInfo.campus || '', 
+
         },
         userInfo,
         rating,

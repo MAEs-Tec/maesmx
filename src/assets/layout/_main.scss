@@ -25,3 +25,658 @@ a {
 .layout-wrapper {
     min-height: 100vh;
 }
+
+/* =====================================================
+   Dark mode overrides — in-page components
+   (these live INSIDE .layout-wrapper)
+   ===================================================== */
+.layout-theme-dark {
+    /* ── Tailwind utility overrides ── */
+    .text-black {
+        color: var(--text-color) !important;
+    }
+
+    .text-black-alpha-90 {
+        color: var(--text-color) !important;
+    }
+
+    .text-black-alpha-70 {
+        color: var(--text-color-secondary) !important;
+    }
+
+    .bg-white {
+        background-color: var(--surface-card) !important;
+    }
+
+    .bg-gray-100 {
+        background-color: var(--surface-200) !important;
+    }
+
+    .text-gray-500 {
+        color: var(--surface-500) !important;
+    }
+
+    .surface-card {
+        background-color: var(--surface-card) !important;
+    }
+
+    .surface-ground {
+        background-color: var(--surface-ground) !important;
+    }
+
+    .border-gray-200 {
+        border-color: var(--surface-border) !important;
+    }
+
+    /* ── DataTable ── */
+    .p-datatable .p-datatable-header {
+        background: var(--surface-card) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-datatable .p-datatable-thead > tr > th {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-datatable .p-datatable-tbody > tr {
+        background: var(--surface-card) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-datatable .p-datatable-tbody > tr:nth-child(even) {
+        background: var(--surface-100) !important;
+    }
+
+    .p-datatable .p-datatable-tbody > tr:hover {
+        background: var(--surface-200) !important;
+    }
+
+    .p-datatable .p-datatable-footer {
+        background: var(--surface-card) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-datatable .p-sortable-column:hover {
+        background: var(--surface-200) !important;
+    }
+
+    .p-datatable .p-sortable-column .p-sortable-column-icon {
+        color: var(--text-color-secondary) !important;
+    }
+
+    .p-datatable .p-column-filter-menu-button {
+        color: var(--text-color-secondary) !important;
+    }
+
+    /* ── Paginator ── */
+    .p-paginator {
+        background: var(--surface-card) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-paginator .p-paginator-pages .p-paginator-page {
+        color: var(--text-color) !important;
+    }
+
+    .p-paginator .p-paginator-pages .p-paginator-page:hover {
+        background: var(--surface-200) !important;
+    }
+
+    /* ── InputText ── */
+    .p-inputtext {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-inputtext::placeholder {
+        color: var(--text-color-secondary) !important;
+    }
+
+    /* ── Dropdown (in-page, not the overlay panel) ── */
+    .p-dropdown {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-dropdown .p-dropdown-label {
+        color: var(--text-color) !important;
+    }
+
+    .p-dropdown .p-dropdown-trigger {
+        color: var(--text-color-secondary) !important;
+    }
+
+    /* ── MultiSelect (in-page) ── */
+    .p-multiselect {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-multiselect .p-multiselect-label {
+        color: var(--text-color) !important;
+    }
+
+    .p-multiselect .p-multiselect-trigger {
+        color: var(--text-color-secondary) !important;
+    }
+
+    /* ── Calendar (in-page input) ── */
+    .p-calendar .p-inputtext {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    /* ── Card ── */
+    .p-card {
+        background: var(--surface-card) !important;
+        color: var(--text-color) !important;
+        box-shadow: 0 2px 1px -1px rgba(0,0,0,.2), 0 1px 1px 0 rgba(0,0,0,.14), 0 1px 3px 0 rgba(0,0,0,.12) !important;
+    }
+
+    .p-card .p-card-body {
+        color: var(--text-color) !important;
+    }
+
+    .p-card .p-card-title {
+        color: var(--text-color) !important;
+    }
+
+    .p-card .p-card-subtitle {
+        color: var(--text-color-secondary) !important;
+    }
+
+    /* ── Panel ── */
+    .p-panel .p-panel-header {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-panel .p-panel-content {
+        background: var(--surface-card) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-panel .p-panel-header .p-panel-header-icon {
+        color: var(--text-color-secondary) !important;
+    }
+
+    /* ── TabView ── */
+    .p-tabview .p-tabview-nav {
+        background: var(--surface-card) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-tabview .p-tabview-nav li .p-tabview-nav-link {
+        background: var(--surface-card) !important;
+        color: var(--text-color-secondary) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-tabview .p-tabview-nav li.p-highlight .p-tabview-nav-link {
+        color: var(--primary-color) !important;
+        border-color: var(--primary-color) !important;
+    }
+
+    .p-tabview .p-tabview-panels {
+        background: var(--surface-card) !important;
+        color: var(--text-color) !important;
+    }
+
+    /* ── Textarea ── */
+    .p-inputtextarea {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    /* ── Chip ── */
+    .p-chip {
+        background: var(--surface-200) !important;
+        color: var(--text-color) !important;
+    }
+
+    /* ── Buttons ── */
+    .p-button.p-button-text {
+        color: var(--primary-color) !important;
+    }
+
+    .p-button.p-button-outlined {
+        color: var(--primary-color) !important;
+        border-color: var(--primary-color) !important;
+    }
+
+    /* ── Sidebar ── */
+    .p-sidebar {
+        background: var(--surface-card) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    /* ── Fieldset ── */
+    .p-fieldset {
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-fieldset .p-fieldset-legend {
+        background: var(--surface-card) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-fieldset .p-fieldset-content {
+        color: var(--text-color) !important;
+    }
+
+    /* ── Accordion ── */
+    .p-accordion .p-accordion-header .p-accordion-header-link {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-accordion .p-accordion-content {
+        background: var(--surface-card) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    /* ── Skeleton ── */
+    .p-skeleton {
+        background: var(--surface-200) !important;
+    }
+
+    /* ── ScrollPanel ── */
+    .p-scrollpanel .p-scrollpanel-bar {
+        background: var(--surface-300) !important;
+    }
+
+    /* ── Rating ── */
+    .p-rating .p-rating-icon {
+        color: var(--text-color-secondary) !important;
+    }
+
+    /* ── Message ── */
+    .p-message {
+        border-color: var(--surface-border) !important;
+    }
+
+    /* ── ToggleButton / InputSwitch ── */
+    .p-togglebutton {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-inputswitch .p-inputswitch-slider {
+        background: var(--surface-300) !important;
+    }
+
+    /* ── Attendance colored cells & dropdowns — visible colors in dark mode ── */
+    .col-blue {
+        background: rgba(137, 180, 250, 0.25) !important;
+        color: #89b4fa !important;
+    }
+
+    .attendance-green,
+    .p-dropdown.attendance-green {
+        background: rgba(166, 227, 161, 0.45) !important;
+        color: #a6e3a1 !important;
+    }
+
+    .attendance-green .p-dropdown-label,
+    .attendance-green .p-dropdown-trigger {
+        color: #a6e3a1 !important;
+        background: transparent !important;
+    }
+
+    .attendance-red,
+    .p-dropdown.attendance-red {
+        background: rgba(243, 139, 168, 0.45) !important;
+        color: #f38ba8 !important;
+    }
+
+    .attendance-red .p-dropdown-label,
+    .attendance-red .p-dropdown-trigger {
+        color: #f38ba8 !important;
+        background: transparent !important;
+    }
+
+    .attendance-yellow,
+    .p-dropdown.attendance-yellow {
+        background: rgba(249, 226, 175, 0.45) !important;
+        color: #f9e2af !important;
+    }
+
+    .attendance-yellow .p-dropdown-label,
+    .attendance-yellow .p-dropdown-trigger {
+        color: #f9e2af !important;
+        background: transparent !important;
+    }
+
+    .attendance-blue,
+    .p-dropdown.attendance-blue {
+        background: rgba(137, 180, 250, 0.45) !important;
+        color: #89b4fa !important;
+    }
+
+    .attendance-blue .p-dropdown-label,
+    .attendance-blue .p-dropdown-trigger {
+        color: #89b4fa !important;
+        background: transparent !important;
+    }
+
+    .dropdown-green {
+        background: rgba(166, 227, 161, 0.25) !important;
+        border-color: rgba(166, 227, 161, 0.4) !important;
+    }
+
+    .dropdown-red {
+        background: rgba(243, 139, 168, 0.25) !important;
+        border-color: rgba(243, 139, 168, 0.4) !important;
+    }
+}
+
+/* =====================================================
+   Dark mode overrides — PORTALED / OVERLAY components
+   (Dialog, Dropdown panel, DatePicker, Toast, etc.)
+   These render on <body> via teleport, outside .layout-wrapper
+   ===================================================== */
+html.app-dark,
+body.app-dark {
+    /* ── Dialog ── */
+    .p-dialog .p-dialog-header {
+        background: var(--surface-card) !important;
+        color: var(--text-color) !important;
+        border-bottom: 1px solid var(--surface-border) !important;
+    }
+
+    .p-dialog .p-dialog-content {
+        background: var(--surface-card) !important;
+        color: var(--text-color) !important;
+    }
+
+    .p-dialog .p-dialog-footer {
+        background: var(--surface-card) !important;
+        border-top: 1px solid var(--surface-border) !important;
+    }
+
+    .p-dialog .p-dialog-header .p-dialog-header-icon {
+        color: var(--text-color-secondary) !important;
+    }
+
+    /* Inputs inside dialogs */
+    .p-dialog .p-inputtext {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-dialog .p-inputtext::placeholder {
+        color: var(--text-color-secondary) !important;
+    }
+
+    .p-dialog .p-dropdown {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-dialog .p-dropdown .p-dropdown-label {
+        color: var(--text-color) !important;
+    }
+
+    .p-dialog .p-dropdown .p-dropdown-label.p-placeholder {
+        color: var(--text-color-secondary) !important;
+    }
+
+    .p-dialog .p-dropdown .p-dropdown-trigger {
+        color: var(--text-color-secondary) !important;
+    }
+
+    /* Force dropdown selected text to be visible everywhere */
+    .p-dropdown .p-dropdown-label {
+        color: var(--text-color) !important;
+    }
+
+    .p-dialog .p-calendar .p-inputtext {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-dialog .p-togglebutton {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-dialog .p-inputtextarea {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-dialog .p-multiselect {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    /* ── Dropdown panel (overlay) ── */
+    .p-dropdown-panel {
+        background: var(--surface-card) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-dropdown-panel .p-dropdown-header {
+        background: var(--surface-100) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-dropdown-panel .p-dropdown-header .p-inputtext {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-dropdown-panel .p-dropdown-items .p-dropdown-item {
+        color: var(--text-color) !important;
+    }
+
+    .p-dropdown-panel .p-dropdown-items .p-dropdown-item:hover {
+        background: var(--surface-200) !important;
+    }
+
+    .p-dropdown-panel .p-dropdown-items .p-dropdown-item.p-highlight {
+        background: var(--surface-200) !important;
+        color: var(--text-color) !important;
+    }
+
+    .p-dropdown-panel .p-dropdown-items .p-dropdown-item-group {
+        background: var(--surface-100) !important;
+        color: var(--text-color-secondary) !important;
+    }
+
+    /* ── MultiSelect panel (overlay) ── */
+    .p-multiselect-panel {
+        background: var(--surface-card) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-multiselect-panel .p-multiselect-header {
+        background: var(--surface-100) !important;
+        border-color: var(--surface-border) !important;
+        color: var(--text-color) !important;
+    }
+
+    .p-multiselect-panel .p-multiselect-items .p-multiselect-item {
+        color: var(--text-color) !important;
+    }
+
+    .p-multiselect-panel .p-multiselect-items .p-multiselect-item:hover {
+        background: var(--surface-200) !important;
+    }
+
+    /* ── DatePicker (overlay) ── */
+    .p-datepicker {
+        background: var(--surface-card) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-datepicker .p-datepicker-header {
+        background: var(--surface-card) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-datepicker table td > span {
+        color: var(--text-color) !important;
+    }
+
+    .p-datepicker table td > span:hover {
+        background: var(--surface-200) !important;
+    }
+
+    .p-datepicker table th > span {
+        color: var(--text-color-secondary) !important;
+    }
+
+    .p-datepicker .p-datepicker-prev,
+    .p-datepicker .p-datepicker-next {
+        color: var(--text-color-secondary) !important;
+    }
+
+    .p-datepicker .p-timepicker {
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    /* ── Toast (overlay) ── */
+    .p-toast .p-toast-message {
+        background: var(--surface-card) !important;
+        border-color: var(--surface-border) !important;
+        box-shadow: 0 2px 12px 0 rgba(0,0,0,.3) !important;
+    }
+
+    .p-toast .p-toast-message .p-toast-message-content .p-toast-summary {
+        color: var(--text-color) !important;
+    }
+
+    .p-toast .p-toast-message .p-toast-message-content .p-toast-detail {
+        color: var(--text-color-secondary) !important;
+    }
+
+    /* ── Tooltip (overlay) ── */
+    .p-tooltip .p-tooltip-text {
+        background: var(--surface-200) !important;
+        color: var(--text-color) !important;
+    }
+
+    /* ── OverlayPanel (overlay) ── */
+    .p-overlaypanel {
+        background: var(--surface-card) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    /* ── ConfirmPopup (overlay) ── */
+    .p-confirm-popup {
+        background: var(--surface-card) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    /* ── Column filter overlay ── */
+    .p-column-filter-overlay {
+        background: var(--surface-card) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    /* ── AutoComplete panel (overlay) ── */
+    .p-autocomplete-panel {
+        background: var(--surface-card) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-autocomplete-panel .p-autocomplete-items .p-autocomplete-item {
+        color: var(--text-color) !important;
+    }
+
+    .p-autocomplete-panel .p-autocomplete-items .p-autocomplete-item:hover {
+        background: var(--surface-200) !important;
+    }
+
+    /* ── ToggleButton inside dialogs ── */
+    .p-dialog .p-togglebutton {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-dialog .p-togglebutton.p-highlight {
+        background: var(--primary-color) !important;
+        color: var(--primary-color-text) !important;
+    }
+
+    /* ── Labels inside dialogs ── */
+    .p-dialog label {
+        color: var(--text-color) !important;
+    }
+
+    .p-dialog p {
+        color: var(--text-color) !important;
+    }
+
+    /* ── Aviso/warning boxes inside dialogs ── */
+    .p-dialog .aviso__asesoria p {
+        color: #d4a017 !important;
+    }
+
+    .p-dialog .aviso__asesoria svg path {
+        fill: #d4a017 !important;
+    }
+
+    /* ── Dropdown selected value text (inside overlays) ── */
+    .p-dropdown .p-dropdown-label.p-placeholder {
+        color: var(--text-color-secondary) !important;
+    }
+
+    /* ── MultiSelect close button / header items ── */
+    .p-multiselect-panel .p-multiselect-close {
+        color: var(--text-color) !important;
+    }
+
+    .p-multiselect-panel .p-checkbox .p-checkbox-box {
+        background: var(--surface-100) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-multiselect-panel .p-multiselect-items .p-multiselect-item .p-checkbox .p-checkbox-box {
+        background: var(--surface-100) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    /* ── Dropdown filter input inside panel ── */
+    .p-dropdown-panel .p-dropdown-filter-container .p-inputtext {
+        background: var(--surface-100) !important;
+        color: var(--text-color) !important;
+        border-color: var(--surface-border) !important;
+    }
+
+    .p-dropdown-panel .p-dropdown-filter-container .p-dropdown-filter-icon {
+        color: var(--text-color-secondary) !important;
+    }
+}

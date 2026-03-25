@@ -3,7 +3,7 @@ import { getSubjectColor, pointsRules } from '@/utils/CoordiUtils';
 import { ref, onMounted, watch } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import { getTodaysMae, getUser, incrementTotalTime, getCurrentUser } from '@/firebase/db/users';
-import { addRegister, getTodaysReport, updateReport } from '../firebase/db/attendance';
+import { addRegister, getTodaysReport, updateReport, updateReportByDate, getReportByDate } from '../firebase/db/attendance';
 import { getUsersWithActiveSession, updatePoints } from '@/firebase/db/users';
 import { nextTick } from 'vue';
 
@@ -136,6 +136,7 @@ watch(report, async (newValue, oldValue) => {
 }, { deep: true });
 
 const showDialogRegister = ref(false);
+const showDialogReponer = ref(false);
 const maeId = ref('');
 const hours = ref(0);
 const date = ref(new Date());
@@ -143,11 +144,61 @@ const maeInfo = ref(null);
 const activeMAEs = ref([]);
 const initialReport = ref(null);
 
+const reponerMaeId = ref('');
+const reponerMaeInfo = ref(null);
+const reponerDate = ref(null);
+const reponerAttendance = ref(null);
+const reponerCurrentReport = ref(null);
+const reponerOptions = ref([
+    { name: 'Asistencia', code: 'A' },
+    { name: 'Falta', code: 'F' },
+    { name: 'Retraso', code: 'R' },
+    { name: 'Justificado', code: 'J' },
+]);
+
 watch(maeId, async (newValue) => {
     if (newValue.length === 9) {
         maeInfo.value = await getUser(maeId.value.toLowerCase().trim());
     }
 });
+
+watch(reponerMaeId, async (newValue) => {
+    if (newValue.length === 9) {
+        reponerMaeInfo.value = await getUser(reponerMaeId.value.toLowerCase().trim());
+    } else {
+        reponerMaeInfo.value = null;
+    }
+    reponerCurrentReport.value = null;
+});
+
+watch([reponerDate, reponerMaeInfo], async ([date, mae]) => {
+    if (date && mae) {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        const dateString = `${y}-${m}-${d}`;
+        const dayReport = await getReportByDate(dateString);
+        const record = dayReport[mae.uid];
+        reponerCurrentReport.value = record ? record.report : null;
+    } else {
+        reponerCurrentReport.value = null;
+    }
+});
+
+const reponerAsistencia = async () => {
+    try {
+        await updateReportByDate(reponerMaeInfo.value, reponerDate.value, reponerAttendance.value);
+        toast.add({ severity: 'success', summary: 'Asistencia repuesta', detail: `Se marcó ${reponerAttendance.value === 'A' ? 'Asistencia' : reponerAttendance.value === 'R' ? 'Retraso' : 'Justificado'} para ${reponerMaeInfo.value.name}`, life: 3000 });
+        reponerMaeId.value = '';
+        reponerMaeInfo.value = null;
+        reponerDate.value = null;
+        reponerAttendance.value = null;
+        reponerCurrentReport.value = null;
+    } catch (error) {
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al reponer la asistencia', life: 5000 });
+    }
+    showDialogReponer.value = false;
+};
 
 const addTime = async () => {
     try {
@@ -252,7 +303,10 @@ const handleAutoMarkAbsence = async (startTime, endTime, uid) => {
 <template>
     <div class="sm:flex sm:justify-content-between mb-2 sm:mb-5">
         <h1 class="text-black text-6xl font-bold text-center m-0 sm:text-left">Asistencia</h1>
-        <Button @click="showDialogRegister = true" label="Agregar horas" icon="pi pi-pencil" size="large" class="max-h-full w-full sm:w-fit" />
+        <div class="flex gap-2">
+            <Button @click="showDialogReponer = true" label="Reponer asistencia" icon="pi pi-calendar-plus" size="large" class="max-h-full w-full sm:w-fit" />
+            <Button @click="showDialogRegister = true" label="Agregar horas" icon="pi pi-pencil" size="large" class="max-h-full w-full sm:w-fit" />
+        </div>
     </div>
     <div class="card mb-0">
 
@@ -328,6 +382,7 @@ const handleAutoMarkAbsence = async (startTime, endTime, uid) => {
             </Column>
         </DataTable>
     </div>
+    <!-- Agregar horas al MAE -->
     <Dialog v-model:visible="showDialogRegister" modal header="Crear registro" class="md:w-4">
         
         <p class="font-bold text-lg">Matricula del MAE</p>
@@ -350,6 +405,35 @@ const handleAutoMarkAbsence = async (startTime, endTime, uid) => {
 
         <div class="flex justify-content-end">
             <Button type="button" label="Cerrar" severity="secondary" @click="showDialogRegister = false"></Button>
+        </div>
+    </Dialog>
+
+    <!-- Reponer asistencia -->
+    <Dialog v-model:visible="showDialogReponer" modal header="Reponer asistencia" class="md:w-4">
+        <p class="font-bold text-lg">Matrícula del MAE</p>
+        <InputText class="w-full" placeholder="A01234567" v-model="reponerMaeId"/>
+        <Message v-if="reponerMaeInfo">MAE: {{ reponerMaeInfo.name }} - {{ reponerMaeInfo.email }}</Message>
+
+        <p class="font-bold text-lg mt-4">Fecha a reponer</p>
+        <Calendar class="w-full mb-2" v-model="reponerDate" dateFormat="dd/mm/yy" :maxDate="new Date()" placeholder="Selecciona una fecha" />
+        <small v-if="reponerCurrentReport && reponerMaeInfo" class="text-500">
+            Registro actual: <span class="font-semibold" :class="{
+                'text-green-600': reponerCurrentReport === 'A',
+                'text-red-600': reponerCurrentReport === 'F',
+                'text-yellow-600': reponerCurrentReport === 'R',
+                'text-blue-600': reponerCurrentReport === 'J'
+            }">{{ reponerCurrentReport === 'A' ? 'Asistencia' : reponerCurrentReport === 'F' ? 'Falta' : reponerCurrentReport === 'R' ? 'Retraso' : reponerCurrentReport === 'J' ? 'Justificado' : reponerCurrentReport }}</span>
+        </small>
+        <small v-else-if="reponerDate && reponerMaeInfo && reponerCurrentReport === null" class="text-500">
+            Sin registro para esta fecha
+        </small>
+
+        <p class="font-bold text-lg mt-2">Tipo de asistencia</p>
+        <Dropdown class="w-full mb-4" v-model="reponerAttendance" :options="reponerOptions" optionLabel="name" optionValue="code" placeholder="Selecciona tipo" />
+
+        <div class="flex justify-content-end gap-2">
+            <Button type="button" label="Cerrar" severity="secondary" @click="showDialogReponer = false" />
+            <Button @click="reponerAsistencia" type="button" label="Reponer asistencia" :disabled="!reponerMaeInfo || !reponerDate || !reponerAttendance" />
         </div>
     </Dialog>
 </template>

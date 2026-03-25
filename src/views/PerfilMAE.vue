@@ -16,6 +16,7 @@ import { useToast } from 'primevue/usetoast';
 import { uploadFile } from '../firebase/img/users';
 import {
     getSubjectColor,
+    isInSchedule,
 } from '@/utils/HorarioUtils';
 import {
   topOptions,
@@ -53,6 +54,18 @@ const statusSeverity = ref({
   R: 'warning',
   J: 'info',
   F: 'danger'
+});
+
+const currentStatus = computed(() => {
+  const att = dataAttendance.value;
+  const inSchedule = maeInfo.value ? isInSchedule(maeInfo.value.weekSchedule) : false;
+
+  if (att === 'A' && inSchedule) return { label: 'En Horario', severity: 'success' };
+  if (att === 'R') return { label: 'Retraso', severity: 'warning' };
+  if (att === 'J') return { label: 'Justificado', severity: 'info' };
+  if (att === 'F') return { label: 'Falta', severity: 'danger' };
+  if (!att && inSchedule) return { label: 'Sin Asistencia', severity: 'warning' };
+  return { label: 'Fuera de Horario', severity: 'secondary' };
 });
 
 onMounted(async () => {
@@ -279,15 +292,8 @@ const saveScheduleChanges = async () => {
   }
   if (maeInfo.value.status === "becario" && 
     ((maeInfo.value.role === "mae" || maeInfo.value.role === "coordi") &&
-    (maeInfo.value.career.toUpperCase() === "MC" || maeInfo.value.career.toUpperCase() === "LBC" || maeInfo.value.career.toUpperCase() === "LPS") && 
     hours < 3)) {
     toast.add({ severity: 'error', summary: 'Error de horas', detail: 'No puedes tener menos de 3 horas asignadas en total', life: 3000 });
-    return;
-  } else if (maeInfo.value.status === "becario" && 
-           ((maeInfo.value.role === "mae" || maeInfo.value.role === "coordi") && 
-           !(maeInfo.value.career.toUpperCase() === "MC" || maeInfo.value.career.toUpperCase() === "LBC" || maeInfo.value.career.toUpperCase() === "LPS")) && 
-           hours < 5) {
-    toast.add({ severity: 'error', summary: 'Error de horas', detail: 'No puedes tener menos de 5 horas asignadas en total', life: 3000 });
     return;
   } else if (maeInfo.value.status === "becario" && 
            maeInfo.value.role === "publi" && 
@@ -313,6 +319,19 @@ const saveScheduleChanges = async () => {
 
 const showDialogAsesoria = ref(false);
 const showDialogTienda = ref(false);
+
+const groupedSubjects = computed(() => {
+  if (!maeInfo.value || !maeInfo.value.subjects || maeInfo.value.subjects.length === 0) {
+    return [{ label: 'Todas las materias', items: subjects.value }];
+  }
+  const maeSubjectIds = new Set(maeInfo.value.subjects.map(s => s.id));
+  const maeSubjects = subjects.value.filter(s => maeSubjectIds.has(s.id));
+  const otherSubjects = subjects.value.filter(s => !maeSubjectIds.has(s.id));
+  const groups = [];
+  if (maeSubjects.length > 0) groups.push({ label: 'Materias del MAE', items: maeSubjects });
+  if (otherSubjects.length > 0) groups.push({ label: 'Otras materias', items: otherSubjects });
+  return groups;
+});
 const showDialogEvaluacion = ref(false);
 const showDialogEditar = ref(false);
 const ratingAsesoria = ref(null);
@@ -547,8 +566,8 @@ const guardarEvaluacion = async () => {
           <p class="text-lg font-medium text-left">  {{ maeInfo.career }} | Campus {{ maeInfo.campus }}</p>  
           <div class="flex" v-if="userInfo.uid == maeInfo.uid">
             <Tag class="px-4 text-xl"
-              :value="dataAttendance ? statusLabel[dataAttendance] : 'Fuera de Horario'"
-              :severity="dataAttendance ? statusSeverity[dataAttendance] : 'secondary'"
+              :value="currentStatus.label"
+              :severity="currentStatus.severity"
             />
           </div>
         </div>
@@ -762,7 +781,7 @@ const guardarEvaluacion = async () => {
 
   <Dialog v-model:visible="showDialogAsesoria" modal header="Registrar asesoría" class="md:w-4">
     <p class="font-bold">Materia</p>
-    <Dropdown v-model="materiaAsesoria" :options="subjects" filter optionLabel="name" placeholder="Materia" checkmark :highlightOnSelect="false" class="w-12 mb-2" />
+    <Dropdown v-model="materiaAsesoria" :options="groupedSubjects" optionGroupLabel="label" optionGroupChildren="items" filter optionLabel="name" placeholder="Materia" checkmark :highlightOnSelect="false" class="w-12 mb-2" />
     <div class="flex justify-content-end gap-2">
       <Button type="button" label="Cerrar" severity="secondary" @click="showDialogAsesoria = false"></Button>
       <Button type="button" label="Confirmar registro" :disabled="!(materiaAsesoria !== null)" @click="saveAsesoria"></Button>
@@ -1024,16 +1043,16 @@ const guardarEvaluacion = async () => {
   border-radius: 0.75rem;
 }
 .custom-table .p-datatable-tbody > tr:nth-child(even) {
-    background-color: #f2f2f2; 
-    border: 1px solid #f4f4f5a9;
+    background-color: var(--surface-100, #f2f2f2);
+    border: 1px solid var(--surface-border, #f4f4f5a9);
 
 }
 .custom-table .p-datatable-tbody > tr:nth-child(odd) {
-    background-color: #ffffff; 
-    border: 1px solid #f4f4f5a9;
+    background-color: var(--surface-card);
+    border: 1px solid var(--surface-border, #f4f4f5a9);
 }
 .custom-table .p-datatable-tbody > tr > td {
-    border-bottom: 2px solid #cccccc; 
+    border-bottom: 2px solid var(--surface-border, #cccccc); 
     padding: 1rem 1.5rem; 
 }
 
@@ -1052,7 +1071,7 @@ const guardarEvaluacion = async () => {
   filter: hue-rotate(200deg) saturate(100%) brightness(0.5); 
 }
 .texto-negro {
-  color: black !important;
+  color: var(--text-color) !important;
 }
 
 </style>

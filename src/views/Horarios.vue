@@ -124,8 +124,8 @@ function getDisplayedSubject(subjects) {
 </script>
 
 <template>
-    <h1 class="text-black text-6xl font-bold mb-5 text-center sm:text-left">Horarios</h1>
-    <h2 class="text-black text-3xl font-semibold mb-5 text-center sm:text-left">Filtros</h2>
+    <h1 class="text-black text-6xl font-bold mb-5 sm:text-left">Horarios</h1>
+    <h2 class="text-black text-3xl font-semibold mb-5 sm:text-left">Filtros</h2>
     <!-- Filtros -->
     <div class="flex md:flex-row flex-column mb-4">
             <InputText v-model="filters.name.value" placeholder="Nombre..." class="mb-2 md:mr-3 md:w-6 w-full" />
@@ -209,7 +209,7 @@ function getDisplayedSubject(subjects) {
     min-height: 100%;
     display: flex;
     flex-direction: column;
-    background-color: #fff;
+    background-color: var(--surface-card);
 }
 
 .custom-skeleton {

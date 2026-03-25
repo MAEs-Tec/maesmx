@@ -12,7 +12,8 @@ import {
     updateUserToMae,
     saveScheduleSubjectsExperience,
     updatePoints,
-    clearUsersData
+    clearUsersData,
+    resetAllUsersTotalTimeAndPoints
 } from '../firebase/db/users';
 import { deleteOldAsesorias} from '../firebase/db/asesorias.js'
 
@@ -109,6 +110,30 @@ const confirmDeleteAsesorias = () => {
         }
     });
 };
+
+const confirmResetTimeAndPoints = () => {
+  confirm.require({
+    message: '¿Estás seguro de restablecer las horas de servicio y puntos a 0 para TODOS los usuarios? Esto no se puede deshacer.',
+    header: 'Confirmación de Restablecimiento',
+    icon: 'pi pi-exclamation-triangle',
+    acceptLabel: 'Sí, restablecer',
+    rejectLabel: 'Cancelar',
+    acceptClass: 'p-button-danger',
+    accept: async () => {
+      try {
+        const res = await resetAllUsersTotalTimeAndPoints({ dryRun: false });
+        toast.add({ severity: 'success', summary: 'Éxito', detail: `Restablecimiento completado: ${res.updated} usuarios.`, life: 4000 });
+      } catch (error) {
+        console.error("Error al restablecer totalTime/points:", error);
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al restablecer totalTime/points.', life: 4000 });
+      }
+    },
+    reject: () => {
+      toast.add({ severity: 'info', summary: 'Cancelado', detail: 'No se han realizado cambios.', life: 3000 });
+    }
+  });
+};
+
 
 const openUploadDialog = () => {
     displayUploadDialog.value = true;
@@ -318,6 +343,16 @@ const handleUpdatePoints = async () => {
             />
         </div>
 
+        <div class="flex justify-content-center w-full mt-4">
+            <Button 
+                label="Eliminar horas y puntos de todos los usuarios" 
+                icon="pi pi-refresh" 
+                class="p-button-warning p-button-rounded p-button-lg w-full md:w-6"
+                @click="confirmResetTimeAndPoints" 
+            />
+        </div>
+
+
         <!--
         <div class="flex justify-content-center w-full mt-4">
             <Button 
@@ -447,12 +482,12 @@ const handleUpdatePoints = async () => {
 
 <style scoped>
 .surface-ground {
-    background-color: #f9fafb;
+    background-color: var(--surface-ground, #f9fafb);
     min-height: 100vh;
 }
 
 h1 {
-    color: #007bff;
+    color: var(--primary-color, #007bff);
 }
 
 .p-button-danger {

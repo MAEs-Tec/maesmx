@@ -1,12 +1,20 @@
 <script setup>
-import { computed, watch, ref } from 'vue';
+import { computed, watch, ref, onMounted } from 'vue';
 import AppTopbar from './AppTopbar.vue';
 import AppFooter from './AppFooter.vue';
 import AppSidebar from './AppSidebar.vue';
-// import AppConfig from './AppConfig.vue';
 import { useLayout } from '@/layout/composables/layout';
 
 const { layoutConfig, layoutState, isSidebarActive } = useLayout();
+
+onMounted(() => {
+    if (layoutConfig.darkTheme.value) {
+        const themeLink = document.getElementById('theme-css');
+        if (themeLink) {
+            themeLink.setAttribute('href', '/themes/tailwind-dark/theme.css');
+        }
+    }
+});
 
 const outsideClickListener = ref(null);
 
@@ -20,8 +28,8 @@ watch(isSidebarActive, (newVal) => {
 
 const containerClass = computed(() => {
     return {
-        'layout-theme-light': layoutConfig.darkTheme.value === 'light',
-        'layout-theme-dark': layoutConfig.darkTheme.value === 'dark',
+        'layout-theme-light': !layoutConfig.darkTheme.value,
+        'layout-theme-dark': layoutConfig.darkTheme.value,
         'layout-overlay': layoutConfig.menuMode.value === 'overlay',
         'layout-static': layoutConfig.menuMode.value === 'static',
         'layout-static-inactive': layoutState.staticMenuDesktopInactive.value && layoutConfig.menuMode.value === 'static',

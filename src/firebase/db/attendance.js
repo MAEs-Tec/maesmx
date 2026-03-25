@@ -36,41 +36,60 @@ export async function getTodaysReport() {
     }
 }
 
+// Update the MAE attendance report w corresponding value 
 export async function updateReport(userInfo, report) {
     try {
-        console.log(userInfo, report, "Esto es ")
-        const reportRef = doc(firestoreDB, "attendance", getCurrentDateFormatted(), "report", userInfo.uid);
+        // Defensive checks + unwrap reactive proxy
+        const uid = userInfo?.uid ?? userInfo?.id ?? userInfo?.value?.uid;
+        const name = userInfo?.name ?? userInfo?.value?.name ?? '';
+        const totalTime = userInfo?.totalTime ?? userInfo?.value?.totalTime ?? 0;
+
+        console.log(uid, report, "Updating report")
+        const reportRef = doc(firestoreDB, "attendance", getCurrentDateFormatted(), "report", userInfo.uid); // Final de semestre, quitar report de aca y luego when accessing data para que sean menos datos
+
+        // Stores less data for attendance
+        const dataUpload = {
+            id: userInfo.uid, // Student id
+            email: userInfo.email, // Student email, helps search data within firebase
+            name: userInfo.name, 
+            totalTime: userInfo.totalTime, 
+            report: report, // (A, R, F, J)
+        }
+
+        console.log('Writing to Firestore path:', reportRef.path, 'payload:', dataUpload);
         
-        return await setDoc(reportRef, {
-            ...userInfo,
-            report
-        });
+        return await setDoc(reportRef, dataUpload, { merge : true }); // Use merge so that it can keep otehr fields if write more data
     } catch (error) {
         console.error("Error updating the report: ", error);
         return [];
     }
 }
 
-// To get date info
-/*
-export async function addRegister(userInfo, date) {
+// Update attendance report for a specific date (used for makeup attendance)
+export async function updateReportByDate(userInfo, date, report) {
     try {
         const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0'); // getMonth() returns 0-11
+        const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
+        const dateString = `${year}-${month}-${day}`;
 
-        const reportRef = doc(firestoreDB, "attendance", `${year}-${month}-${day}`, "report", userInfo.uid);
+        const dateDocRef = doc(firestoreDB, "attendance", dateString);
+        await setDoc(dateDocRef, { initialized: true }, { merge: true });
 
+        const reportRef = doc(firestoreDB, "attendance", dateString, "report", userInfo.uid);
         await setDoc(reportRef, {
-            ...userInfo,
-            report: 'RR'
-        });
-
+            id: userInfo.uid,
+            email: userInfo.email,
+            name: userInfo.name,
+            totalTime: userInfo.totalTime,
+            report: report,
+        }, { merge: true });
     } catch (error) {
-        console.error("Error updating the report: ", error);
+        console.error("Error updating report by date: ", error);
     }
 }
-*/
+
+// To get date info
 export async function addRegister(userInfo, date) {
     try {
         const year = date.getFullYear();
@@ -78,7 +97,7 @@ export async function addRegister(userInfo, date) {
         const day = String(date.getDate()).padStart(2, '0');
         const dateString = `${year}-${month}-${day}`;
 
-        // ✅ Ensure root date doc is created with a dummy field
+        // Root date doc is created w dummy field
         const dateDocRef = doc(firestoreDB, "attendance", dateString);
         await setDoc(dateDocRef, { initialized: true }, { merge: true });
 
@@ -103,7 +122,7 @@ export async function getStudentReport(uid) {
   const snap = await getDoc(reportRef);
 
   if (snap.exists()) {
-    return snap.data().report; // e.g. 'A', 'J', 'R', 'F'
+    return snap.data().report; // 'A', 'J', 'R', 'F'
   } else {
     return null;
   }
@@ -159,9 +178,6 @@ function getDateStringsBetween(startDate, endDate) {
 
         
     }
-
-    //console.log('✅ Final dateList:', dateList);
-    //console.log('🔢 Total dates generated:', dateList.length);
     return dateList;
 }
 
@@ -172,7 +188,6 @@ export async function getReportByDateRange(startDate, endDate) {
 
     // Checks each document date w the reports
     for (const date of dateStrings) {
-        //console.log(`🔍 Checking date: ${date}`);
         const reportRef = collection(firestoreDB, "attendance", date, "report");
         try {
             const reportSnap = await getDocs(reportRef);
@@ -193,7 +208,7 @@ export async function getReportByDateRange(startDate, endDate) {
                     });
                 });
             } else {
-                console.log(`❌ No reports found for ${date}`);
+                console.log(`No reports ${date}`);
             }
         } catch (error) {
             console.warn(`Skipping ${date}:`, error.message);

@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { getUserProfilePicture } from "../img/users";
 import * as XLSX from 'xlsx';
+import { writeBatch } from "firebase/firestore";
 
 const db = getFirestore();
 
@@ -59,7 +60,8 @@ export async function getCurrentUser() {
     const auth = getAuth();
     if (auth.currentUser) {
         const uid = getEmailUsername(auth.currentUser.email);
-        return getUser(uid);
+        const user = await getUser(uid);
+        return user;
     }
     return null;
 }
@@ -143,6 +145,52 @@ export async function getMaes() {
             const { day: dayB, startTime: startTimeB } = getClosestDayAndStartTime(b.weekSchedule);
 
             const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday','sunday'];
+
+            // Crear un array cíclico desde el día actual
+            const daysOrdered = [...daysOfWeek.slice(today), ...daysOfWeek.slice(0, today)];
+
+            // Comparar días más cercanos, teniendo en cuenta el ciclo
+            const dayIndexA = daysOrdered.indexOf(dayA);
+            const dayIndexB = daysOrdered.indexOf(dayB);
+            const dayComparison = (dayIndexA === -1 ? 1 : (dayIndexB === -1 ? -1 : dayIndexA - dayIndexB));
+            if (dayComparison !== 0) return dayComparison;
+
+            // Comparar horas de inicio si los días son iguales
+            const startTimeComparison = (startTimeA === null ? 1 : (startTimeB === null ? -1 : startTimeA.localeCompare(startTimeB)));
+            if (startTimeComparison !== 0) return startTimeComparison;
+
+            // Comparar alfabéticamente si ambos días y horas son iguales
+            return a.name.localeCompare(b.name);
+        });
+
+        return data;
+    } else {
+        return null;
+    }
+}
+
+export async function getMaesNames() {
+    const usersRef = collection(firestoreDB, "users");
+    const q = query(usersRef, where('role', 'in', ['mae', 'coordi', 'admin', 'subjectCoordi', 'publi', 'tec']));
+
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot) {
+        let data = querySnapshot.docs.map(doc => doc.data());
+
+        // Filtrar usuarios que tienen un nombre
+        data = data.filter(item => item.name);
+
+        // Obtener el día actual
+        const today = new Date().getDay(); // Día actual (0-6)
+
+        // Ordenar por el día más cercano, la hora de inicio más temprana y alfabéticamente por nombre
+        data.sort((a, b) => {
+            // Obtener el día más cercano y la hora de inicio más temprana
+            const { day: dayA, startTime: startTimeA } = getClosestDayAndStartTime(a.weekSchedule);
+            const { day: dayB, startTime: startTimeB } = getClosestDayAndStartTime(b.weekSchedule);
+
+            const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
             // Crear un array cíclico desde el día actual
             const daysOrdered = [...daysOfWeek.slice(today), ...daysOfWeek.slice(0, today)];
@@ -954,4 +1002,33 @@ export async function clearUsersData() {
         console.error("Error al actualizar usuarios: ", error);
         throw error;
     }
+}
+
+
+export async function resetAllUsersTotalTimeAndPoints({ dryRun = false, batchSize = 450 } = {}) {
+  const usersSnap = await getDocs(collection(firestoreDB, "users"));
+  if (usersSnap.empty) return { scanned: 0, updated: 0 };
+
+  const docs = usersSnap.docs;
+  let updated = 0;
+
+  if (dryRun) {
+    return { scanned: docs.length, updated: 0 };
+  }
+
+  for (let i = 0; i < docs.length; i += batchSize) {
+    const chunk = docs.slice(i, i + batchSize);
+    const batch = writeBatch(firestoreDB);
+
+    chunk.forEach((d) => {
+      batch.update(d.ref, { totalTime: 0, points: 0 });
+    });
+
+    await batch.commit();
+    updated += chunk.length;
+    console.log(`✅ Restablecimiento en progreso: ${updated}/${docs.length}`);
+  }
+
+  console.log(`🎉 Listo. Se restablecieron totalTime y points para ${updated} usuarios.`);
+  return { scanned: docs.length, updated };
 }

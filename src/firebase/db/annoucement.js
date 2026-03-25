@@ -65,7 +65,8 @@ export async function getAnnouncementsEdit() {
 export async function getAnnouncements() {
     try {
         const announcementsCollection = collection(firestoreDB, 'announcements');
-        const querySnapshot = await getDocs(query(announcementsCollection));
+        const q = query(announcementsCollection, where('visible', '==', true));
+        const querySnapshot = await getDocs(q);
         const now = new Date();
         console.log(querySnapshot.docs)
         const announcements = querySnapshot.docs
@@ -96,7 +97,7 @@ export async function getAnnouncements() {
                 const dateB = b.createdAt.seconds ? new Date(b.createdAt.seconds * 1000) : new Date(b.createdAt);
                 return dateA - dateB;
             });
-        console.log( announcements)
+            console.log(announcements)
         return announcements;
     } catch (error) {
         console.error('Error fetching announcements:', error);
@@ -119,7 +120,6 @@ export async function getAnnouncementsGrupales() {
 
         const now = new Date();
         console.log(now);
-
         const announcements = querySnapshot.docs
             .map(doc => ({
                 id: doc.id,

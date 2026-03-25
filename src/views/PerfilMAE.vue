@@ -339,6 +339,7 @@ const comentarioAsesoria = ref('');
 const materiaAsesoria = ref(null);
 const isSavingAsesoria = ref(false);
 
+// Para guardar la asesoría
 const saveAsesoria = async () => {
   if (isSavingAsesoria.value) return; 
   isSavingAsesoria.value = true; 

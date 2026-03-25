@@ -15,19 +15,42 @@ import {
     updateUserAchievementBadge
 } from './users'; 
 
-
+// Registra la asesoría del mae
 export async function addAsesoria(maeInfo, userInfo, subject, comment, rating) {
-    
-     await addDoc(collection(firestoreDB, "asesorias"), {
-        peerInfo: maeInfo,
-        userInfo,
+    // Changing to use payload instead to debug it
+    const payload = {
+        peerInfo: {
+            uid: maeInfo.uid,
+            name: maeInfo.name,
+            career: maeInfo.career,
+            profilePictureUrl: maeInfo.photoURL || '', // Uses the photoURL pretty sure lol instead of profilePictureURL for some reason -_-
+            // Datos para el excel
+            area: maeInfo.area || '',
+            campus: maeInfo.campus || ''
+        },
+        userInfo: {
+            uid: userInfo.uid,
+            name: userInfo.name,
+            career: userInfo.career,
+            profilePictureUrl: userInfo.photoURL || userInfo.profilePictureUrl || '', // Shouldn't matter because it's the student pero ps si se echan redesign at some point
+            // Datos para excel
+            area: userInfo.area || '',
+            campus: userInfo.campus || '',
+            // Added pq me interesa, could help in the future si queremos detectar cuanta de la gente son alumnos o si son maes entre ellos
+            role: userInfo.role
+        },
         rating,
         comment,
         subject,
         date: Timestamp.now()
-    });
+    };
 
-    updateExperienceAsesorias(maeInfo.uid ,userInfo.uid, subject.id,Timestamp.now());
+    // Debug para ver q se anden guardando los datos correctos
+    //console.log("Saving asesoria:", payload);
+
+    await addDoc(collection(firestoreDB, "asesorias"), payload);
+
+    updateExperienceAsesorias(maeInfo.uid, userInfo.uid, subject.id, Timestamp.now());
     return;
 }
 

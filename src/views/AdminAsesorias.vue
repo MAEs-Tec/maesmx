@@ -21,6 +21,18 @@ const fetchAsesorias = async () => {
             asesorias.value = await getAsesorias();
             isFiltered.value = false; 
         }
+
+        /*
+        // Temp debug to see peerInfo and profilePictureUrl for each asesoria
+        asesorias.value.forEach((asesoria, index) => {
+            console.log(
+                `Asesoria #${index}:`,
+                asesoria.peerInfo,
+                'profilePictureUrl:',
+                asesoria.peerInfo?.profilePictureUrl
+            );
+        });*/
+
     } catch (error) {
         console.error("Error fetching asesorias: ", error);
         asesorias.value = [];
@@ -114,6 +126,7 @@ onMounted(() => {
                 </template>
             </Column>
 
+            <!-- Mae profile info -->
             <Column header="Mae" field="maeInfo">
                 <template #body="{ data }">
                     <div class="flex flex-row">
@@ -133,6 +146,7 @@ onMounted(() => {
                 </template>
             </Column>
 
+            <!-- Student info -->
             <Column header="Alumno" field="alumnoInfo">
                 <template #body="{ data }">
                     <span class="flex flex-column ml-4">

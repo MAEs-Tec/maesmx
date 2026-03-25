@@ -4,7 +4,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useLayout } from '@/layout/composables/layout';
 import { useRouter } from 'vue-router';
 
-const { layoutConfig, onMenuToggle } = useLayout();
+const { layoutConfig, onMenuToggle, toggleDarkMode, isDarkTheme } = useLayout();
 
 const outsideClickListener = ref(null);
 const topbarMenuActive = ref(false);
@@ -94,6 +94,10 @@ const isOutsideClicked = (event) => {
         </button>
        
         <div class="layout-topbar-menu" :class="topbarMenuClasses">
+            <button @click="toggleDarkMode()" class="p-link layout-topbar-button">
+                <i :class="isDarkTheme ? 'pi pi-sun' : 'pi pi-moon'"></i>
+                <span>{{ isDarkTheme ? 'Modo claro' : 'Modo oscuro' }}</span>
+            </button>
             <button @click="onLogOut()" class="p-link layout-topbar-button">
                 <i class="pi pi-sign-out"></i>
                 <span>Log out</span>

@@ -179,7 +179,7 @@ const formatName = (name) => {
   justify-content: center; 
   font-size: 1rem; 
   font-weight: bold; 
-  color: black;
+  color: var(--text-color);
   position: absolute;
   bottom: -10px;
   left: 20px; 
@@ -194,7 +194,7 @@ const formatName = (name) => {
   justify-content: center; 
   font-size: 1rem; 
   font-weight: bold; 
-  color: black;
+  color: var(--text-color);
   position: absolute;
   bottom: -10px;
   left: 26px; 

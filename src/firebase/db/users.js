@@ -60,7 +60,8 @@ export async function getCurrentUser() {
     const auth = getAuth();
     if (auth.currentUser) {
         const uid = getEmailUsername(auth.currentUser.email);
-        return getUser(uid);
+        const user = await getUser(uid);
+        return user;
     }
     return null;
 }

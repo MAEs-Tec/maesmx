@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue';
+import { onMounted, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { getCurrentUser, getUser, startActiveSession, stopActiveSession,
   updatePoints } from '../firebase/db/users';
@@ -27,6 +27,23 @@ const comentarioAsesoria = ref('');
 const materiaAsesoria = ref(null)
 const maeAsesoria = ref(null)
 const subjects = ref([]);
+
+const groupedSubjects = computed(() => {
+  if (!maeAsesoria.value || !maeAsesoria.value.subjects || maeAsesoria.value.subjects.length === 0) {
+    return [{ label: 'Todas las materias', items: subjects.value }];
+  }
+  const maeSubjectIds = new Set(maeAsesoria.value.subjects.map(s => s.id));
+  const maeSubjects = subjects.value.filter(s => maeSubjectIds.has(s.id));
+  const otherSubjects = subjects.value.filter(s => !maeSubjectIds.has(s.id));
+  const groups = [];
+  if (maeSubjects.length > 0) groups.push({ label: 'Materias del MAE', items: maeSubjects });
+  if (otherSubjects.length > 0) groups.push({ label: 'Otras materias', items: otherSubjects });
+  return groups;
+});
+
+watch(maeAsesoria, () => {
+  materiaAsesoria.value = null;
+});
 const anuncios = ref([]);
 const currentAnuncio = ref({});
 const currentIndex = ref(-1);
@@ -361,7 +378,7 @@ const guardarEvaluacion = async () => {
     <Dropdown v-model="maeAsesoria" :options="maeList" filter optionLabel="name" placeholder="Mae" checkmark :highlightOnSelect="false" class="w-12 mb-2" />
 
     <p class="font-bold">Materia</p>
-    <Dropdown v-model="materiaAsesoria" :options="subjects" filter optionLabel="name" placeholder="Materia" checkmark :highlightOnSelect="false" class="w-12 mb-2" />
+    <Dropdown v-model="materiaAsesoria" :options="groupedSubjects" optionGroupLabel="label" optionGroupChildren="items" filter optionLabel="name" placeholder="Materia" checkmark :highlightOnSelect="false" class="w-12 mb-2" />
 
     <div class="aviso__asesoria">
       <svg xmlns="http://www.w3.org/2000/svg" width="33" height="33" viewBox="0 0 33 33" fill="none">

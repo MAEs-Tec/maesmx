@@ -125,6 +125,7 @@ const autoAdvance = () => {
   }, 5000);
 };
 
+// Adds asesoría desde home 
 const saveAsesoria = async () => {
   if (isSavingAsesoria.value) return; 
   isSavingAsesoria.value = true; 
@@ -372,6 +373,7 @@ const guardarEvaluacion = async () => {
     </div>
   </Dialog>
   
+  <!-- Popup para registrar asesoría -->
   <Dialog v-model:visible="showDialogAsesoria" modal header="Registrar asesoría" class="md:w-4">
     
     <p class="font-bold">Mae</p>

@@ -15,11 +15,16 @@ import {
     updateUserAchievementBadge
 } from './users'; 
 
-
+// Registra la asesoría del mae
 export async function addAsesoria(maeInfo, userInfo, subject, comment, rating) {
-    
-     await addDoc(collection(firestoreDB, "asesorias"), {
-        peerInfo: maeInfo,
+    // Modificando para solo guardar los datos q se usan en vistas de asesorias en vez de todo el perfil
+    await addDoc(collection(firestoreDB, "asesorias"), {
+        peerInfo: {
+            uid: maeInfo.uid, 
+            name: maeInfo.name, 
+            career: maeInfo.career,
+            profilePictureUrl: maeInfo.profilePictureUrl
+        },
         userInfo,
         rating,
         comment,

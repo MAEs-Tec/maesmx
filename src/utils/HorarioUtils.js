@@ -104,3 +104,22 @@ export function subjectCountDisplay(subjects) {
     return `+${subjects.length - 1}`;
 }
 
+export function isInSchedule(weekSchedule) {
+    if (!weekSchedule) return false;
+
+    const now = new Date();
+    const daysMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const today = daysMap[now.getDay()];
+    const slots = weekSchedule[today];
+
+    if (!slots || slots.length === 0) return false;
+
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    return slots.some(slot => {
+        const [startH, startM] = slot.start.split(':').map(Number);
+        const [endH, endM] = slot.end.split(':').map(Number);
+        return currentMinutes >= (startH * 60 + startM) && currentMinutes <= (endH * 60 + endM);
+    });
+}
+

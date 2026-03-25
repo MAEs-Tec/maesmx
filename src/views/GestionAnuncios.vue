@@ -1020,8 +1020,8 @@ const handleEditAnn = async () => {
 
 .custom-button {
   border: none;
-  background-color: white;
-  color: black;
+  background-color: var(--surface-card);
+  color: var(--text-color);
   font-weight: bold;
 }
 
@@ -1054,11 +1054,11 @@ const handleEditAnn = async () => {
 }
 
 .custom-table .p-datatable-tbody > tr:nth-child(even) {
-    background-color: #ffffff;
+    background-color: var(--surface-card);
 }
 
 .custom-table .p-datatable-tbody > tr:nth-child(odd) {
-    background-color: #f2f2f2 ;
+    background-color: var(--surface-100, #f2f2f2);
 }
 
 .custom-table {

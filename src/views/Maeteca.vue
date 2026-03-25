@@ -587,8 +587,8 @@ function lookPreview(){
     min-height: 420px;
     flex-shrink: 0;
     border-radius: 20px;
-    border: 2px solid #E0E0E0;
-    background: #FFF;
+    border: 2px solid var(--surface-border, #E0E0E0);
+    background: var(--surface-card);
     position: relative;
     padding: 0; /* el contenido interno define su propio padding */
     overflow: hidden;
@@ -675,7 +675,7 @@ function lookPreview(){
 }
 
 .mae-card__title {
-    color: #3B3B3E !important;
+    color: var(--text-color, #3B3B3E) !important;
     text-align: center !important;
     font-family: Inter !important;
     font-size: 28px !important;
@@ -686,7 +686,7 @@ function lookPreview(){
 }
 
 .mae-card__description {
-    color: #3B3B3E !important;
+    color: var(--text-color-secondary, #3B3B3E) !important;
     font-family: Inter !important;
     font-size: 18px !important;
     font-style: normal !important;
@@ -738,14 +738,14 @@ function lookPreview(){
 
 .custom-dropdown {
     border-radius: 15px !important;
-    border: 2px solid #BDBDBD !important;
-    background: #FFF !important;
+    border: 2px solid var(--surface-border, #BDBDBD) !important;
+    background: var(--surface-card) !important;
 }
 
 .custom-dropdown .p-dropdown {
     border-radius: 15px !important;
-    border: 2px solid #BDBDBD !important;
-    background: #FFF !important;
+    border: 2px solid var(--surface-border, #BDBDBD) !important;
+    background: var(--surface-card) !important;
 }
 
 :deep(.add-video-dialog) {
@@ -754,19 +754,19 @@ function lookPreview(){
 }
 
 :deep(.add-video-dialog .p-dialog-header) {
-    background: #eef2ff;
+    background: var(--surface-card);
     border-top-left-radius: 26px;
     border-top-right-radius: 26px;
     padding: 1.75rem 2rem 1rem;
 }
 
 :deep(.add-video-dialog .p-dialog-content) {
-    background: #eef2ff;
+    background: var(--surface-card);
     padding: 0 2rem 1.5rem;
 }
 
 :deep(.add-video-dialog .p-dialog-footer) {
-    background: #eef2ff;
+    background: var(--surface-card);
     border-bottom-left-radius: 26px;
     border-bottom-right-radius: 26px;
     padding: 0 2rem 2rem;
@@ -794,7 +794,7 @@ function lookPreview(){
 
 .field-group label {
     font-weight: 600;
-    color: #3b3b3e;
+    color: var(--text-color, #3b3b3e);
     font-size: 1rem;
 }
 
@@ -824,22 +824,22 @@ function lookPreview(){
     padding-left: 2.75rem;
     height: 3.25rem;
     border-radius: 18px;
-    border: 2px solid #d0d7eb;
-    background: #fff;
+    border: 2px solid var(--surface-border, #d0d7eb);
+    background: var(--surface-card);
 }
 
 .field-group .p-inputtext {
     height: 3.25rem;
     border-radius: 18px;
-    border: 2px solid #d0d7eb;
-    background: #fff;
+    border: 2px solid var(--surface-border, #d0d7eb);
+    background: var(--surface-card);
 }
 
 .field-group :deep(.p-dropdown) {
     height: 3.25rem;
     border-radius: 18px;
-    border: 2px solid #d0d7eb;
-    background: #fff;
+    border: 2px solid var(--surface-border, #d0d7eb);
+    background: var(--surface-card);
 }
 
 /* Estilo del AutoComplete para que coincida con los otros campos y la flecha quede dentro sin fondo azul */
@@ -849,9 +849,9 @@ function lookPreview(){
 }
 .field-group :deep(.p-autocomplete .p-inputtext) {
     height: 3.25rem;
-    background: #fff;
-    color: #3b3b3e;
-    border: 2px solid #d0d7eb;
+    background: var(--surface-card);
+    color: var(--text-color, #3b3b3e);
+    border: 2px solid var(--surface-border, #d0d7eb);
     border-radius: 18px;
     padding-right: 2.75rem; /* espacio para la flecha dentro del campo */
 }
@@ -905,9 +905,9 @@ function lookPreview(){
 
 .tag-multiselect :deep(.p-multiselect) {
     border-radius: 18px;
-    border: 2px solid #d0d7eb;
+    border: 2px solid var(--surface-border, #d0d7eb);
     min-height: 3rem;
-    background: #fff;
+    background: var(--surface-card);
 }
 
 .tag-multiselect :deep(.p-multiselect-label) {
@@ -1015,10 +1015,10 @@ function lookPreview(){
     height: 51px !important;
     flex-shrink: 0;
     border-radius: 41px !important;
-    border: 3px solid #C1C1C1 !important;
-    background: #FFF !important;
-    padding-left: 50px !important; 
-    color: #C1C1C1;
+    border: 3px solid var(--surface-border, #C1C1C1) !important;
+    background: var(--surface-card) !important;
+    padding-left: 50px !important;
+    color: var(--text-color-secondary, #C1C1C1);
 }
 
 
@@ -1033,11 +1033,11 @@ function lookPreview(){
     height: 51px !important;
     flex-shrink: 0;
     border-radius: 50% !important;
-    border: 3px solid #C1C1C1 !important;
-    background: #FFF !important;
-    fill: #FFF !important;
+    border: 3px solid var(--surface-border, #C1C1C1) !important;
+    background: var(--surface-card) !important;
+    fill: var(--surface-card) !important;
     stroke-width: 3px !important;
-    stroke: #C1C1C1 !important;
+    stroke: var(--surface-border, #C1C1C1) !important;
 }
 
 span.p-input-icon-left {

@@ -65,6 +65,30 @@ export async function updateReport(userInfo, report) {
     }
 }
 
+// Update attendance report for a specific date (used for makeup attendance)
+export async function updateReportByDate(userInfo, date, report) {
+    try {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const dateString = `${year}-${month}-${day}`;
+
+        const dateDocRef = doc(firestoreDB, "attendance", dateString);
+        await setDoc(dateDocRef, { initialized: true }, { merge: true });
+
+        const reportRef = doc(firestoreDB, "attendance", dateString, "report", userInfo.uid);
+        await setDoc(reportRef, {
+            id: userInfo.uid,
+            email: userInfo.email,
+            name: userInfo.name,
+            totalTime: userInfo.totalTime,
+            report: report,
+        }, { merge: true });
+    } catch (error) {
+        console.error("Error updating report by date: ", error);
+    }
+}
+
 // To get date info
 export async function addRegister(userInfo, date) {
     try {

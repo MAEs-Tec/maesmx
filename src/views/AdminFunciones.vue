@@ -482,12 +482,12 @@ const handleUpdatePoints = async () => {
 
 <style scoped>
 .surface-ground {
-    background-color: #f9fafb;
+    background-color: var(--surface-ground, #f9fafb);
     min-height: 100vh;
 }
 
 h1 {
-    color: #007bff;
+    color: var(--primary-color, #007bff);
 }
 
 .p-button-danger {

@@ -22,6 +22,7 @@ const fetchAsesorias = async () => {
             isFiltered.value = false; 
         }
 
+        /*
         // Temp debug to see peerInfo and profilePictureUrl for each asesoria
         asesorias.value.forEach((asesoria, index) => {
             console.log(
@@ -30,7 +31,7 @@ const fetchAsesorias = async () => {
                 'profilePictureUrl:',
                 asesoria.peerInfo?.profilePictureUrl
             );
-        });
+        });*/
 
     } catch (error) {
         console.error("Error fetching asesorias: ", error);

@@ -35,7 +35,9 @@ export async function addAsesoria(maeInfo, userInfo, subject, comment, rating) {
             profilePictureUrl: userInfo.photoURL || userInfo.profilePictureUrl || '', // Shouldn't matter because it's the student pero ps si se echan redesign at some point
             // Datos para excel
             area: userInfo.area || '',
-            campus: userInfo.campus || ''
+            campus: userInfo.campus || '',
+            // Added pq me interesa, could help in the future si queremos detectar cuanta de la gente son alumnos o si son maes entre ellos
+            role: userInfo.role
         },
         rating,
         comment,

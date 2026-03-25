@@ -209,7 +209,7 @@ function getDisplayedSubject(subjects) {
     min-height: 100%;
     display: flex;
     flex-direction: column;
-    background-color: #fff;
+    background-color: var(--surface-card);
 }
 
 .custom-skeleton {

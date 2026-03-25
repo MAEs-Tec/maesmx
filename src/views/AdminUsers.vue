@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue';
 import { FilterMatchMode } from 'primevue/api';
 import { useToast } from 'primevue/usetoast';
 import { getMaes } from '../firebase/db/users';
+import { getAsesoriasCountForUserInCurrentSemester } from '../firebase/db/asesorias';
 
 const toast = useToast();
 
@@ -17,15 +18,21 @@ const filters = ref({
 
 const roles = ref(["mae", "coordi", "subjectCoordi", "admin","publi","tec"])
 
-onMounted(() => {
-  getMaes()
-    .then((data) => {
-      maes.value = data;
-      loading.value =false;
-    })
-    .catch(() => {
-      maes.value = [];
-    })
+onMounted(async () => {
+  try {
+    const data = await getMaes();
+    const counts = await Promise.all(
+      data.map(mae => getAsesoriasCountForUserInCurrentSemester(mae.uid))
+    );
+    data.forEach((mae, i) => {
+      mae.asesoriasCount = counts[i];
+    });
+    maes.value = data;
+    loading.value = false;
+  } catch {
+    maes.value = [];
+    loading.value = false;
+  }
 });
 
 import { getAuth } from "firebase/auth";
@@ -75,28 +82,28 @@ checkUserRole();
             >
             <template #empty>No se encontraron Maes. </template>
             <template #loading>Cargando información. Por favor espera.</template>
-            <Column header="Matrícula" field="uid">
+            <Column header="Matrícula" field="uid" sortable style="width: 23%">
                 <template #body="{ data }">
                     <a :href="`#/mae/${data.uid}`" class="text-lg uppercase cursor-pointer font-semibold underline text-primary">{{ data.uid }}</a>
                 </template>
                 <template #filter="{ filterModel, filterCallback }">
-                    <InputText v-model="filterModel.value" type="text" @input="filterCallback()" class="p-column-filter" placeholder="Matrícula" />
+                    <InputText v-model="filterModel.value" type="text" @input="filterCallback()" class="p-column-filter w-full" placeholder="Matrícula" />
                 </template>
             </Column>
-            <Column header="Nombre" field="name">
+            <Column header="Nombre" field="name" sortable style="width: 22%">
                 <template #body="{ data }">
                     <p class="text-lg font-semibold">{{ data.name }}</p>
                 </template>
                 <template #filter="{ filterModel, filterCallback }">
-                    <InputText v-model="filterModel.value" type="text" @input="filterCallback()" class="p-column-filter" placeholder="Nombre" />
+                    <InputText v-model="filterModel.value" type="text" @input="filterCallback()" class="p-column-filter w-full" placeholder="Nombre" />
                 </template>
             </Column>
-            <Column header="Rol" field="role">
+            <Column header="Rol" field="role" style="width: 8%">
                 <template #body="{ data }">
                     <p class="text-lg font-semibold uppercase">{{ data.role }}</p>
                 </template>
                 <template #filter="{ filterModel, filterCallback }">
-                    <MultiSelect v-model="filterModel.value" @change="filterCallback()" :options="roles" placeholder="Cualquiera" class="p-column-filter" style="min-width: 14rem" :maxSelectedLabels="1">
+                    <MultiSelect v-model="filterModel.value" @change="filterCallback()" :options="roles" placeholder="Rol" class="p-column-filter w-full" :maxSelectedLabels="1">
                         <template #option="slotProps">
                             <div class="flex align-items-center gap-2">
                                 <span class="uppercase"> {{ slotProps.option }}</span>
@@ -105,23 +112,23 @@ checkUserRole();
                     </MultiSelect>
                 </template>
             </Column>
-            <Column header="Asesorías" field="asesorias" sortable>
+            <Column header="Asesorías" field="asesoriasCount" sortable style="width: 10%">
                 <template #body="{ data }">
-                    <p class="text-lg font-semibold">{{ Math.floor(Math.random() * 21) + 10 }}</p>
+                    <p class="text-lg font-semibold">{{ data.asesoriasCount ?? '...' }}</p>
                 </template>
             </Column>
-            <Column header="Horas" field="totalTime" sortable>
+            <Column header="Horas" field="totalTime" sortable style="width: 13%">
                 <template #body="{ data }">
-                    <p class="text-lg font-semibold">{{ Math.round(((data.totalTime ?? 0) / 60) * 100) / 100 }}</p>
+                    <p class="text-lg font-semibold">{{ Math.floor((data.totalTime ?? 0) / 60) }}h {{ (data.totalTime ?? 0) % 60 }}min</p>
                 </template>
             </Column>
-            <Column header="Horario" field="totalTime">
+            <Column header="Horario" style="width: 7%">
               <template #body="{ data }">
                 <i v-if="data.weekSchedule && typeof data.weekSchedule === 'object' && Object.keys(data.weekSchedule).length > 0" class="pi pi-check-circle text-green-500"></i>
                 <i v-else class="pi pi-times-circle text-red-500"></i>
               </template>
             </Column>
-            <Column header="Materias" field="totalTime">
+            <Column header="Materias" style="width: 7%">
                 <template #body="{ data }">
                     <p class="text-lg font-semibold">{{ data.subjects ? data.subjects.length : 0 }}</p>
                 </template>

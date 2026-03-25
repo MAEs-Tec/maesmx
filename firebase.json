@@ -12,5 +12,11 @@
         "destination": "/index.html"
       }
     ]
+  },
+  "functions": {
+    "source": "functions"
+  },
+  "firestore": {
+    "indexes": "firestore.indexes.json"
   }
 }

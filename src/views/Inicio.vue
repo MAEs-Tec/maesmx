@@ -1,13 +1,13 @@
 <script setup>
-import { onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router'; 
+import { onMounted, ref, computed, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { getCurrentUser, getUser, startActiveSession, stopActiveSession,
   updatePoints } from '../firebase/db/users';
 import { useToast } from 'primevue/usetoast';
 import { getSubjects } from '../firebase/db/subjects';
 import { addAsesoria,getAsesoriasByUidAndRating,
   updateAsesoria} from '../firebase/db/asesorias';
-import { getMaes} from '@/firebase/db/users';
+import { getMaesNames } from '@/firebase/db/users';
 import { getAnnouncements } from '@/firebase/db/annoucement'; 
 import {
   formatDate,
@@ -15,7 +15,7 @@ import {
 } from '@/utils/AnunciosUtils';
 
 const userInfo = ref(null);
-const maeInfo = ref(null);
+const maeList = ref([]);
 const toast = useToast();
 const showDialogSession = ref(false);
 const location = ref('Biblioteca Piso 3');
@@ -27,6 +27,23 @@ const comentarioAsesoria = ref('');
 const materiaAsesoria = ref(null)
 const maeAsesoria = ref(null)
 const subjects = ref([]);
+
+const groupedSubjects = computed(() => {
+  if (!maeAsesoria.value || !maeAsesoria.value.subjects || maeAsesoria.value.subjects.length === 0) {
+    return [{ label: 'Todas las materias', items: subjects.value }];
+  }
+  const maeSubjectIds = new Set(maeAsesoria.value.subjects.map(s => s.id));
+  const maeSubjects = subjects.value.filter(s => maeSubjectIds.has(s.id));
+  const otherSubjects = subjects.value.filter(s => !maeSubjectIds.has(s.id));
+  const groups = [];
+  if (maeSubjects.length > 0) groups.push({ label: 'Materias del MAE', items: maeSubjects });
+  if (otherSubjects.length > 0) groups.push({ label: 'Otras materias', items: otherSubjects });
+  return groups;
+});
+
+watch(maeAsesoria, () => {
+  materiaAsesoria.value = null;
+});
 const anuncios = ref([]);
 const currentAnuncio = ref({});
 const currentIndex = ref(-1);
@@ -36,12 +53,22 @@ const showDialogEvaluacion = ref(false);
 
 onMounted(async () => {
   userInfo.value = await getCurrentUser();
-  maeInfo.value = await getMaes()
   subjects.value = await getSubjects();
   anuncios.value  = await  getAnnouncements()
-  evalInfo.value = await getAsesoriasByUidAndRating(  userInfo.value.uid,);
+  if (userInfo.value) {
+    evalInfo.value = await getAsesoriasByUidAndRating(userInfo.value.uid);
+  }
   nextAnuncio()
   autoAdvance();
+});
+
+watch(showDialogAsesoria, async (newVal) => {
+  if (newVal && maeList.value.length === 0) {
+     const maes = await getMaesNames();
+     if (maes) {
+        maeList.value = maes;
+     }
+  }
 });
 
 const startSession = async () => {
@@ -49,7 +76,6 @@ const startSession = async () => {
     await startActiveSession(userInfo.value.uid, userInfo.value, location.value);
     toast.add({ severity: 'success', summary: 'Inicio de turno exitoso', life: 3000 });
     userInfo.value = await getCurrentUser();
-    maeInfo.value = await getUser(userInfo.value.uid);
     showDialogSession.value = false;
   } catch (error) {
     toast.add({ severity: 'error', summary: 'Ocurrió un error al tratar de iniciar turno', detail: 'Consulta con un administrador de la página', life: 3000 });
@@ -69,7 +95,6 @@ const stopSession = async () => {
       toast.add({ severity: 'success', summary: 'Se ha cerrado el turno con éxito', detail: `${res.differenceInMinutes} minutos registrados`, life: 3000 });
     }
     userInfo.value = await getCurrentUser();
-    maeInfo.value = await getUser(userInfo.value.uid);
   } catch (error) {
     toast.add({ severity: 'error', summary: 'Ocurrió un error al tratar de cerrar turno', detail: 'Consulta con un administrador de la página', life: 3000 });
   }
@@ -172,9 +197,11 @@ const guardarEvaluacion = async () => {
       rating: ratingAsesoria.value,
     });
     if(ratingAsesoria.value > 3){
-      await updatePoints(maeInfo.value.uid, ratingAsesoria.value * 5)
-      if(comentarioAsesoria.value !== ""){
-        await updatePoints(maeInfo.value.uid, 25)
+      if (userInfo.value && userInfo.value.uid) {
+         await updatePoints(userInfo.value.uid, ratingAsesoria.value * 5)
+         if(comentarioAsesoria.value !== ""){
+           await updatePoints(userInfo.value.uid, 25)
+         }
       }
     }
 
@@ -236,7 +263,7 @@ const guardarEvaluacion = async () => {
       </div>
       <div class="flex flex-column md:flex-row md:gap-4   w-full  ">
         <!-- <Button
-              v-if="maeInfo  && userInfo && userInfo.role !== 'user'"
+              v-if="userInfo && userInfo.role !== 'user'"
               label="Solicitar asistencia" 
               icon="pi pi-question-circle" 
               class="border-none p-button-warn p-button-lg py-4 w-full md:w-5   mb-3 text-2xl"
@@ -245,7 +272,7 @@ const guardarEvaluacion = async () => {
             /> -->
             
             <Button 
-                v-if="maeInfo && userInfo && userInfo['activeSession']  && userInfo && userInfo.role !== 'user'"
+                v-if="userInfo && userInfo['activeSession']  && userInfo.role !== 'user'"
                 class="p-button-help p-button-lg py-4 w-full md:w-5 text-white  border-round-3xl  mb-5 text-2xl font-bold flex justify-content-center align-items-center border-none	"
                 :style="{ background: 'linear-gradient(to right, #4466A7, #A073BB)' }"
                 @click="stopSession"
@@ -255,7 +282,7 @@ const guardarEvaluacion = async () => {
             </Button>
 
             <Button 
-                v-else-if="maeInfo && userInfo && userInfo.role !== 'user'"
+                v-else-if="userInfo && userInfo.role !== 'user'"
                 class="p-button-help p-button-lg py-4 w-full md:w-5 text-white  border-round-3xl  mb-5 text-2xl font-bold flex justify-content-center align-items-center border-none	"
                 :style="{ background: 'linear-gradient(to right, #A74497, #D8899C)',  }"
                 @click="showDialogSession = true"
@@ -348,10 +375,10 @@ const guardarEvaluacion = async () => {
   <Dialog v-model:visible="showDialogAsesoria" modal header="Registrar asesoría" class="md:w-4">
     
     <p class="font-bold">Mae</p>
-    <Dropdown v-model="maeAsesoria" :options="maeInfo" filter optionLabel="name" placeholder="Mae" checkmark :highlightOnSelect="false" class="w-12 mb-2" />
+    <Dropdown v-model="maeAsesoria" :options="maeList" filter optionLabel="name" placeholder="Mae" checkmark :highlightOnSelect="false" class="w-12 mb-2" />
 
     <p class="font-bold">Materia</p>
-    <Dropdown v-model="materiaAsesoria" :options="subjects" filter optionLabel="name" placeholder="Materia" checkmark :highlightOnSelect="false" class="w-12 mb-2" />
+    <Dropdown v-model="materiaAsesoria" :options="groupedSubjects" optionGroupLabel="label" optionGroupChildren="items" filter optionLabel="name" placeholder="Materia" checkmark :highlightOnSelect="false" class="w-12 mb-2" />
 
     <div class="aviso__asesoria">
       <svg xmlns="http://www.w3.org/2000/svg" width="33" height="33" viewBox="0 0 33 33" fill="none">

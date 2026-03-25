@@ -186,7 +186,7 @@ onBeforeUnmount(() => {
 }
 
 .student-card {
-  background-color: white;
+  background-color: var(--surface-card);
   border-radius: 12px;
   overflow: auto;
   width: calc(33.33% - 1rem);
@@ -229,7 +229,7 @@ onBeforeUnmount(() => {
 
 .student-description {
   font-size: 1.1rem;
-  color: #666;
+  color: var(--text-color-secondary, #666);
   margin: 0;
   line-height: 1.4;
 }
@@ -238,7 +238,7 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  background-color: white;
+  background-color: var(--surface-card);
   border: none;
   border-radius: 50%;
   width: 2.5rem;
@@ -253,7 +253,7 @@ onBeforeUnmount(() => {
 }
 
 .carousel-control:hover {
-  background-color: #f0f0f0;
+  background-color: var(--surface-200, #f0f0f0);
 }
 
 .control-icon {

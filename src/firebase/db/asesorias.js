@@ -17,17 +17,41 @@ import {
 
 // Registra la asesoría del mae
 export async function addAsesoria(maeInfo, userInfo, subject, comment, rating) {
+    // Changing to use payload instead to debug it
+    const payload = {
+        peerInfo: {
+            uid: maeInfo.uid,
+            name: maeInfo.name,
+            career: maeInfo.career,
+            profilePictureUrl: maeInfo.photoURL || '', // Uses the photoURL pretty sure lol instead of profilePictureURL for some reason -_-
+            area: maeInfo.area || '',
+            campus: maeInfo.campus || ''
+        },
+        userInfo,
+        rating,
+        comment,
+        subject,
+        date: Timestamp.now()
+    };
+
+    // Debug: print the payload before saving
+    console.log("Saving asesoria:", payload);
+
+    await addDoc(collection(firestoreDB, "asesorias"), payload);
+
+    updateExperienceAsesorias(maeInfo.uid, userInfo.uid, subject.id, Timestamp.now());
+    return;
+    /*
     // Modificando para solo guardar los datos q se usan en vistas de asesorias en vez de todo el perfil
     await addDoc(collection(firestoreDB, "asesorias"), {
         peerInfo: {
             uid: maeInfo.uid, 
             name: maeInfo.name, 
             career: maeInfo.career,
-            profilePictureUrl: maeInfo.profilePictureUrl,
+            profilePictureUrl: maeInfo.profilePictureUrl || "https://randomuser.me/api/portraits/lego/5.jpg", // Uses their pfp or a random one
             // Datos del excel
-            peerInfo: maeInfo.area || '', 
-            campus: cmaeInfo.campus || '', 
-
+            area: maeInfo.area || '', 
+            campus: maeInfo.campus || ''
         },
         userInfo,
         rating,
@@ -37,7 +61,7 @@ export async function addAsesoria(maeInfo, userInfo, subject, comment, rating) {
     });
 
     updateExperienceAsesorias(maeInfo.uid ,userInfo.uid, subject.id,Timestamp.now());
-    return;
+    return;*/
 }
 
 export async function getAsesoriasCountForUserInCurrentSemester(userId) {

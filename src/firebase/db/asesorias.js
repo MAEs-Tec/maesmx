@@ -46,7 +46,7 @@ export async function addAsesoria(maeInfo, userInfo, subject, comment, rating) {
     };
 
     // Debug para ver q se anden guardando los datos correctos
-    console.log("Saving asesoria:", payload);
+    //console.log("Saving asesoria:", payload);
 
     await addDoc(collection(firestoreDB, "asesorias"), payload);
 

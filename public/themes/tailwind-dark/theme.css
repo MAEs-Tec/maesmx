@@ -5,7 +5,7 @@
   --surface-d:#45475a;
   --surface-e:#1e1e2e;
   --surface-f:#1e1e2e;
-  --text-color:#cdd6f4;
+  --text-color:#dce1f5;
   --text-color-secondary:#a6adc8;
   --primary-color:#89b4fa;
   --secondary-color:#b4befe;
@@ -35,10 +35,10 @@
   --content-padding:1.25rem;
   --inline-spacing:0.5rem;
   --border-radius:0.375rem;
-  --surface-ground:#11111b;
-  --surface-section:#1e1e2e;
-  --surface-card:#1e1e2e;
-  --surface-overlay:#1e1e2e;
+  --surface-ground:#121212;
+  --surface-section:#161628;
+  --surface-card:#161628;
+  --surface-overlay:#161628;
   --surface-border:#313244;
   --surface-hover: #313244;
   --focus-ring: 0 0 0 1px var(--secondary-color);

@@ -365,7 +365,7 @@ const guardarEvaluacion = async () => {
   </div>
 
   <Dialog v-model:visible="showDialogSession" modal header="Iniciar turno" class="md:w-4">
-    <label for="location">Por favor indica donde te encuentras</label>
+    <label for="location" class="block mb-2">Por favor indica donde te encuentras</label>
     <InputText id="text" v-model="location" placeholder="Biblioteca Piso 3" class="w-full mb-4"/>
     <div class="flex justify-content-end gap-2">
       <Button type="button" label="Cerrar" severity="secondary" @click="showDialogSession = false"></Button>

@@ -68,6 +68,23 @@ a {
         border-color: var(--surface-border) !important;
     }
 
+    .mae-activity-card {
+        box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.42), 0px 2px 8px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    .mae-activity-card:hover {
+        box-shadow: 0px 12px 28px rgba(0, 0, 0, 0.52), 0px 4px 12px rgba(0, 0, 0, 0.38) !important;
+    }
+
+    .aviso__asesoria {
+        background: rgba(180, 130, 30, 0.22) !important;
+        border: 1px solid rgba(214, 168, 68, 0.5) !important;
+    }
+
+    .aviso__asesoria p {
+        color: #f3d48a !important;
+    }
+
     /* ── DataTable ── */
     .p-datatable .p-datatable-header {
         background: var(--surface-card) !important;
@@ -398,7 +415,6 @@ body.app-dark {
     .p-dialog .p-dialog-header {
         background: var(--surface-card) !important;
         color: var(--text-color) !important;
-        border-bottom: 1px solid var(--surface-border) !important;
     }
 
     .p-dialog .p-dialog-content {
@@ -413,6 +429,15 @@ body.app-dark {
 
     .p-dialog .p-dialog-header .p-dialog-header-icon {
         color: var(--text-color-secondary) !important;
+    }
+
+    .p-dialog .aviso__asesoria {
+        background: rgba(180, 130, 30, 0.22) !important;
+        border: 1px solid rgba(214, 168, 68, 0.5) !important;
+    }
+
+    .p-dialog .aviso__asesoria p {
+        color: #f3d48a !important;
     }
 
     /* Inputs inside dialogs */

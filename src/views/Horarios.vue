@@ -148,7 +148,7 @@ function getDisplayedSubject(subjects) {
         <!-- Cada tarjeta ocupa 1/3 del ancho y se asegura de tener la misma altura -->
         <div v-for="mae in filteredMaes" :key="mae.uid" class="col-12 md:col-6 lg:col-4 p-2">
             <a :href="`#/mae/${mae.uid}`" class="block transition-transform duration-300 transform hover:scale-105">
-                <div class="card h-full p-4 border-round-3xl shadow-md cursor-pointer flex flex-column justify-between">
+                <div class="mae-activity-card card h-full p-4 border-round-3xl shadow-md cursor-pointer flex flex-column justify-between">
                     <div class="flex flex-column">
                         <span class="flex flex-row items-center">
                             <img v-if="mae.profilePictureUrl" :src="mae.profilePictureUrl" alt="Foto de perfil"

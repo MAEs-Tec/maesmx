@@ -245,7 +245,7 @@ const onMajorSelect = () => {
     <div class="grid" v-if="sortedMAEs.length > 0">
         <span v-for="mae in sortedMAEs" :key="mae.uid" class="col-12 md:col-6 lg:col-6 xl:col-4">
             <a :href="`#/mae/${mae.uid}`" v-if="isMAEActive(mae)" class="no-blue-link">
-                <div class="p-0 w-full h-full border-round-xl bg-white shadow-1 hover:shadow-3 transition-duration-300 transition-ease-out">
+                <div class="mae-activity-card p-0 w-full h-full border-round-xl bg-white shadow-1 hover:shadow-3 transition-duration-300 transition-ease-out">
                     <!-- Mostrar carta para MAEs activos -->
                     <div class="flex flex-column">
                         <!-- Color de rol -->
@@ -299,7 +299,7 @@ const onMajorSelect = () => {
 
             <!-- Carta para MAEs inactivos (gris) -->
             <a :href="`#/mae/${mae.uid}`" v-else class="no-blue-link">
-                <div class="p-0 w-full h-full border-round-xl bg-white shadow-1 transition-duration-300 transition-ease-out">
+                <div class="mae-activity-card p-0 w-full h-full border-round-xl bg-white shadow-1 transition-duration-300 transition-ease-out">
                     <div class="flex flex-column">
                         <div class="flex border-round-top-xl h-1rem w-full" v-if="mae.role === 'admin'" style="background-color: #8358CA;"></div>
                         <div class="flex border-round-top-xl h-1rem w-full" v-if="mae.role === 'coordi'" style="background-color: #58AFCA;"></div>

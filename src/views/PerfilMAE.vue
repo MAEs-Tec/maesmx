@@ -520,7 +520,7 @@ const guardarEvaluacion = async () => {
             @click="showDialogEditar = true"
           >
             Editar perfil
-            <img src="/assets/edit.svg" class="ml-2 " alt="store icon" style="width: 1.2rem; height: 1.2rem;" />
+            <i class="pi pi-pencil ml-2" style="font-size: 0.9rem;"></i>
     </Button>
   </div>
 
@@ -647,7 +647,7 @@ const guardarEvaluacion = async () => {
         <div class="border-round-lg border-gray-300 flex flex-row p-2 shadow-md card  flex flex-column mb-2">
           <span class="flex flex-row justify-content-center text-center ml-2">
             <p class="text-lg font-bold">Mis estadísticas</p>
-            <img src="/assets/est.svg" class="ml-2" alt="mentoring icon" style="width: 1.6rem; height: 1.6rem;" />
+            <i class="pi pi-chart-bar ml-2" style="font-size: 1.2rem;"></i>
           </span>
           <span class="flex flex-row  mb-2">
             <img src="/assets/grad.svg" class="ml-2" alt="mentoring icon" style="width: 1.6rem; height: 1.6rem;" />
@@ -912,7 +912,7 @@ const guardarEvaluacion = async () => {
   <template #header>
     <div class="flex align-items-center justify-content-center text-center h-0.5rem m-auto">
       <p class="text-2xl font-bold mr-2 mt-3">Editar perfil </p>
-      <img src="/assets/edit.svg" alt="trophy icon" style="width: 1.6rem; height: 1.6rem;" />
+      <i class="pi pi-pencil" style="font-size: 1.4rem;"></i>
     </div>
   </template>
 

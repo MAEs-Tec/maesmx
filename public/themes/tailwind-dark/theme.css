@@ -7,6 +7,7 @@
   --surface-f:#1e1e2e;
   --text-color:#dce1f5;
   --text-color-secondary:#a6adc8;
+  --text-color-leaderboard:#3f3f46;
   --primary-color:#5a8ee1;
   --secondary-color:#4772b8;
   --primary-color-text:#1e1e2e;
@@ -41,6 +42,7 @@
   --surface-overlay:#161628;
   --surface-border:#161628;
   --surface-hover: #313244;
+  --columna-anuncios:#292424;;
   --focus-ring: 0 0 0 1px var(--secondary-color);
   --maskbg: rgba(0, 0, 0, 0.6);
   --highlight-bg: rgba(137, 180, 250, 0.16);

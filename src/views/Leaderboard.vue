@@ -49,7 +49,7 @@ const formatName = (name) => {
 
 
         <div class="flex justify-content-center align-items-center	mt-6 md:mt-0 lg:flex-row gap-8 mb-6 md:mb-0  podium-container">
-            <div class="podium-background"></div>
+            <!-- <div class="podium-background"></div> -->
 
             <!-- Segundo lugar (Izquierda) -->
             <div v-if="users[1]" class="flex flex-column items-center" style="transform: translateY(20%);">
@@ -113,30 +113,26 @@ const formatName = (name) => {
             </div>
             </div>
         </div>
-
+<!-- Desde el 4 en adelante se supondría que es lo mejor -->
     <div class="bg-white border-round-3xl p-3">
         <ul class="list-none p-0">
             <li 
-                v-for="(user, index) in users" 
+                v-for="(user, index) in users.slice(3)" 
                 :key="user.uid" 
                 :class="[ 
-                    'flex justify-between items-center p-2 py-4', 
-                    index === 0 ? 'border-2 border-yellow-500 border-round-3xl' : '',  
+                    'flex justify-between items-center p-2 py-4',  
                     'bg-white m-1 rounded-3xl' 
                 ]"
             >
                 <div class="flex justify-content-center align-items-center">
-                    <img v-if="index === 0" src="/assets/gold.svg" class="font-semibold mr-3 ml-4" alt="gold icon" style="width: 2.5rem; height: 2.5rem;" />
-                    <img v-if="index === 1" src="/assets/silver.svg" class="font-semibold mr-3 ml-4" alt="gold icon" style="width: 2.5rem; height: 2.5rem;" />
-                    <img v-if="index === 2" src="/assets/bronze.svg" class="font-semibold mr-3 ml-4" alt="gold icon" style="width: 2.5rem; height: 2.5rem;" />
-                    <span class="font-semibold mr-4 ml-5" v-if="index !== 0 && index !== 1 && index !== 2">
+                    <span class="font-semibold mr-4 ml-5" >
                         {{ user.rank }}. 
                     </span>
                     <img v-if="user.photoURL" 
                          :src="user.photoURL" 
                          alt="Foto de perfil"
-                         :class="['border-circle h-4rem w-4rem', { 'border-gold': index === 0, 'border-silver': index === 1, 'border-bronze': index === 2 }]">
-                    <img v-else src="/assets/lego.jpg" :class="['border-circle h-4rem w-4rem', { 'border-gold': index === 0, 'border-silver': index === 1, 'border-bronze': index === 2 }]" alt="default profile" 
+                         :class="['border-circle h-4rem w-4rem']">
+                    <img v-else src="/assets/lego.jpg" :class="['border-circle h-4rem w-4rem']" alt="default profile" 
                     style="width: 4rem; height: 4rem;" />
                     <div class="flex flex-column ml-3">
                         <span class="font-bold">{{ user.name }} </span>
@@ -179,7 +175,7 @@ const formatName = (name) => {
   justify-content: center; 
   font-size: 1rem; 
   font-weight: bold; 
-  color: var(--text-color);
+  color: var(--text-color-leaderboard);
   position: absolute;
   bottom: -10px;
   left: 20px; 
@@ -194,7 +190,7 @@ const formatName = (name) => {
   justify-content: center; 
   font-size: 1rem; 
   font-weight: bold; 
-  color: var(--text-color);
+  color: var(--text-color-leaderboard);
   position: absolute;
   bottom: -10px;
   left: 26px; 

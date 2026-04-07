@@ -1015,7 +1015,7 @@ const handleEditAnn = async () => {
 
 <style scoped>
 .second-column{
-  background-color: #d2d2d2;
+  background-color: var(--columna-anuncios);
 }
 
 .custom-button {

@@ -14,6 +14,7 @@ import { formatDate } from '@/utils/AnunciosUtils';
 import { FilterMatchMode } from 'primevue/api';
 import { useToast } from 'primevue/usetoast';
 import { uploadFile } from '../firebase/img/users';
+import { useLayout } from '@/layout/composables/layout';
 import {
     getSubjectColor,
     isInSchedule,
@@ -28,6 +29,7 @@ import {
 
 const toast = useToast();
 const route = useRoute();
+const { isDarkTheme } = useLayout();
 const userId = ref(route.path.split('/').pop());
 const maeInfo = ref(null);
 const evalInfo = ref(null);
@@ -504,13 +506,13 @@ const guardarEvaluacion = async () => {
     
     <div class="sm:flex sm:flex-1 justify-center w-full px-3">
       <div class="relative flex align-items-center justify-content-center mr-4">
-        <img v-if="maeInfo" :src="maeInfo.profilePictureUrl" alt="Foto de perfil" class="border-circle h-10rem w-10rem border-3 border-white mt-8 ml-6">
+        <img v-if="maeInfo" :src="maeInfo.profilePictureUrl" alt="Foto de perfil" :class="['border-circle h-10rem w-10rem border-3 mt-8 ml-6', isDarkTheme ?  'perfil-fixes' : 'border-white' ]">
       </div>
       
     </div>
     <Button 
     v-if="userInfo.uid == userId" 
-            class="p-button-help p-button-sm font-bold flex  border-none border-round-3xl mr-4 mb-6 texto-negro bg-white border-3 border-white"
+            :class="['p-button-help p-button-sm font-bold flex  border-none border-round-3xl mr-4 mb-6 texto-negro bg-white border-3', isDarkTheme ?  'perfil-fixes' : 'border-white' ]"
             :style="{
               padding: '1.2rem 1rem',
               height: '1.5rem',

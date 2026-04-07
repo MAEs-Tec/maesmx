@@ -353,7 +353,7 @@ const hasAttended = (asesoria) => {
 }
 
 .boder-gray {
-    border: 2px solid #e0e0e0;
+    border: 2px solid var(--surface-border);
 }
 
 .btn {

@@ -80,7 +80,7 @@ const isOutsideClicked = (event) => {
 <template>
     <div class="layout-topbar">
         <router-link to="/" class="layout-topbar-logo">
-            <img :src="`../../public/layout/images/${layoutConfig.darkTheme.value ?  'maes-dark.png' : 'logo-maes.svg'}`" alt="logo" />
+            <img :src="`/layout/images/${layoutConfig.darkTheme.value ?  'maes-dark.png' : 'logo-maes.svg'}`" alt="logo" />
             <span>Dashboard</span>
         </router-link>
 

@@ -80,7 +80,7 @@ const goToAsesoria = async (asesoria) => {
         <div class="md:w-10 mx-auto flex p-2" :style="{justifyContent: 'space-between', alignItems: 'center', background: '#EFF3F8'}">
 
             <button class="p-0 m-0 h-100 w-100 bg-transparent border-transparent w-2 md:w-1" @click="scrollToSection('target-start')">
-                <img class="w-full h-full object-cover" src="../../../public/layout/images/logo-maes.svg" alt="logo" />
+                <img class="w-full h-full object-cover" src="/layout/images/logo-maes.svg" alt="logo" />
             </button>
 
             <div class="flex gap-4">

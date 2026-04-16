@@ -42,6 +42,7 @@ export async function addAsesoria(maeInfo, userInfo, subject, comment, rating) {
         rating,
         comment,
         subject,
+        duplicate: false,
         date: Timestamp.now()
     };
 
@@ -52,6 +53,29 @@ export async function addAsesoria(maeInfo, userInfo, subject, comment, rating) {
 
     updateExperienceAsesorias(maeInfo.uid, userInfo.uid, subject.id, Timestamp.now());
     return;
+}
+
+export async function backfillDuplicateField() {
+    try {
+        const asesoriasRef = collection(firestoreDB, "asesorias");
+        const querySnapshot = await getDocs(asesoriasRef);
+        let updated = 0;
+
+        const promises = querySnapshot.docs.map(async (docSnap) => {
+            const data = docSnap.data();
+            if (data.duplicate === undefined) {
+                await updateDoc(doc(firestoreDB, "asesorias", docSnap.id), { duplicate: false });
+                updated++;
+            }
+        });
+
+        await Promise.all(promises);
+        console.log(`Backfill completado: ${updated} asesorías actualizadas con duplicate: false`);
+        return updated;
+    } catch (error) {
+        console.error("Error en backfill de duplicate:", error);
+        return 0;
+    }
 }
 
 export async function getAsesoriasCountForUserInCurrentSemester(userId) {
@@ -92,7 +116,7 @@ export async function getAsesoriasCountForUserInCurrentSemester(userId) {
 
       const isDuplicate = data.duplicate === true;
 
-      return ms >= startMs && ms <= endMs && !isDuplicate;
+      return ms >= startMs && ms <= endMs && !isDuplicate && !data._test;
     }).length;
 
     return filteredCount;
@@ -126,10 +150,9 @@ export async function getAsesorias(startDate = null, endDate = null) {
         }
 
         const querySnapshot = await getDocs(q);
-        const asesorias = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
+        const asesorias = querySnapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(a => !a._test && !a._type);
 
         // Ordena las asesorías por fecha de la más reciente a la más antigua
         asesorias.sort((a, b) => {
@@ -287,23 +310,82 @@ export async function updateExperienceAsesorias(peerUid, userUid, subjectId, adv
     }
 }
 
-// Función para obtener asesorías por UID, reutilizando getAsesorias
-export async function getCommentsByUid(uid) {
+export async function getEvaluacionesRecibidas(uid, revealedAt = undefined) {
     try {
-        const startDate = new Date('2024-08-05'); 
-        const today = new Date(); 
-        const asesorias = await getAsesorias(startDate, today);
-
-        const asesoriasFiltradas = asesorias.filter(asesoria => 
-            asesoria.peerInfo?.uid === uid && asesoria.comment?.trim()
+        const asesoriasRef = collection(firestoreDB, "asesorias");
+        const q = query(
+            asesoriasRef,
+            where("peerInfo.uid", "==", uid)
         );
-
-        return asesoriasFiltradas;
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(a => a.rating != null && a.duplicate !== true && !a._test)
+            .filter(a => {
+                if (revealedAt === undefined) return true;
+                if (!revealedAt) return false;
+                return (a.date?.seconds || 0) <= (revealedAt.seconds || 0);
+            })
+            .sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
     } catch (error) {
-        console.error("Error fetching asesorias by UID: ", error);
+        console.error("Error fetching evaluaciones recibidas:", error);
         return [];
     }
 }
+
+export async function getCommentsByUid(uid) {
+    return getEvaluacionesRecibidas(uid);
+}
+
+export async function eliminarAsesoriasDePrueba() {
+    const asesoriasRef = collection(firestoreDB, "asesorias");
+    const q = query(asesoriasRef, where("userInfo.uid", "==", "test-student-001"));
+    const snap = await getDocs(q);
+    let deleted = 0;
+    for (const docSnap of snap.docs) {
+        await deleteDoc(doc(firestoreDB, "asesorias", docSnap.id));
+        deleted++;
+    }
+    const qConfig = query(asesoriasRef, where("_type", "==", "reveal_config"));
+    const snapConfig = await getDocs(qConfig);
+    for (const docSnap of snapConfig.docs) {
+        await deleteDoc(doc(firestoreDB, "asesorias", docSnap.id));
+        deleted++;
+    }
+    const oldConfig = doc(firestoreDB, "asesorias", "_config");
+    try { await deleteDoc(oldConfig); deleted++; } catch (e) { /* may not exist */ }
+    return deleted;
+}
+
+export async function crearEvaluacionDePrueba(maeInfo, rating, comment) {
+    const fake = {
+        peerInfo: {
+            uid: maeInfo.uid,
+            name: maeInfo.name,
+            career: maeInfo.career || 'N/A',
+            profilePictureUrl: maeInfo.photoURL || maeInfo.profilePictureUrl || '',
+            area: maeInfo.area || '',
+            campus: maeInfo.campus || ''
+        },
+        userInfo: {
+            uid: 'test-student-001',
+            name: 'Estudiante de Prueba',
+            career: 'ITC',
+            profilePictureUrl: '',
+            area: 'CIS',
+            campus: 'MTY',
+            role: 'user'
+        },
+        subject: { id: 'TEST001', area: 'CIS', name: 'Materia de Prueba' },
+        rating,
+        comment,
+        duplicate: false,
+        date: Timestamp.now(),
+        _test: true
+    };
+    await addDoc(collection(firestoreDB, "asesorias"), fake);
+}
+
 
 
 export async function getAsesoriasByUidAndRating(uidUser , uidPeer = null) {
@@ -311,9 +393,8 @@ export async function getAsesoriasByUidAndRating(uidUser , uidPeer = null) {
         const asesoriasRef = collection(firestoreDB, "asesorias");
 
         let queryConstraints = [
-            where("userInfo.uid", "==", uidUser),           
+            where("userInfo.uid", "==", uidUser),
             where("rating", "==", null),
-            where("duplicate", "==", false),
         ];
 
         if (uidPeer) {
@@ -323,10 +404,9 @@ export async function getAsesoriasByUidAndRating(uidUser , uidPeer = null) {
         const q = query(asesoriasRef, ...queryConstraints);
         const querySnapshot = await getDocs(q);
 
-        const asesorias = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
+        const asesorias = querySnapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(a => a.duplicate !== true);
 
         return asesorias;
     } catch (error) {

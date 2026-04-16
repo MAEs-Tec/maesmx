@@ -48,6 +48,7 @@ const anuncios = ref([]);
 const currentAnuncio = ref({});
 const currentIndex = ref(-1);
 const isSavingAsesoria = ref(false);
+const isSavingEval = ref(false);
 const evalInfo = ref(null);
 const showDialogEvaluacion = ref(false);
 
@@ -192,7 +193,9 @@ const guardarEvaluacion = async () => {
     toast.add({ severity: 'warn', summary: 'Debes llenar la evaluación', detail: 'Selecciona una asesoría antes de guardar', life: 3000 });
     return;
   }
-  
+
+  isSavingEval.value = true;
+  try {
     await updateAsesoria(selectedAsesoria.value, {
       comment: comentarioAsesoria.value,
       rating: ratingAsesoria.value,
@@ -209,6 +212,7 @@ const guardarEvaluacion = async () => {
     ratingAsesoria.value = null;
     comentarioAsesoria.value = '';
     selectedAsesoria.value = null;
+    showDialogEvaluacion.value = false;
     evalInfo.value = await getAsesoriasByUidAndRating(userInfo.value.uid);
     toast.add({
       severity: 'success',
@@ -216,7 +220,12 @@ const guardarEvaluacion = async () => {
       detail: 'La evaluación se registró con éxito',
       life: 3000,
     });
-  
+  } catch (error) {
+    console.error("Error al guardar evaluación:", error);
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al guardar la evaluación: ' + error.message, life: 5000 });
+  } finally {
+    isSavingEval.value = false;
+  }
 };
 
 </script>
@@ -456,21 +465,20 @@ const guardarEvaluacion = async () => {
     <div v-else class="text-center p-4">
       <p class="text-gray-600 font-bold">Sin asesorías para evaluar</p>
     </div>
-    <template #footer v-if="evalInfo && evalInfo.length">
-      <div class="flex justify-content-end mt-4">
-        <Button 
-          label="Confirmar" 
-          @click="guardarEvaluacion" 
-           :style="{ background: 'linear-gradient(to right, #44a79b, #69ac51)' }"
-        />
-        <Button 
-          label="Cancelar" 
-          class="p-button-text mr-2" 
-          @click="showDialogEvaluacion = false"
-        />
-       
-      </div>
-    </template>
+    <div v-if="evalInfo && evalInfo.length" class="flex justify-content-end mt-4">
+      <Button
+        label="Confirmar"
+        @click="guardarEvaluacion"
+        :loading="isSavingEval"
+        :disabled="isSavingEval"
+        :style="{ background: 'linear-gradient(to right, #44a79b, #69ac51)' }"
+      />
+      <Button
+        label="Cancelar"
+        class="p-button-text mr-2"
+        @click="showDialogEvaluacion = false"
+      />
+    </div>
   </Dialog>
 
 </template>

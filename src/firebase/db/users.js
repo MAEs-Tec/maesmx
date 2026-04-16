@@ -259,6 +259,11 @@ export async function updateUserInfo(userId, userInfo) {
     return await updateDoc(userRef, userInfo);
 }
 
+export async function updateUserCareer(userId, career, area) {
+    const userRef = doc(firestoreDB, "users", userId);
+    return await updateDoc(userRef, { career, area });
+}
+
 export async function updateUserSubjects(userId, newSubjects) {
     const userRef = doc(firestoreDB, "users", userId);
     return await updateDoc(userRef, {

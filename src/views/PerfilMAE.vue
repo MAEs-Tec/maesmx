@@ -994,7 +994,7 @@ const guardarEvaluacion = async () => {
             @click="openCarreraDialog"
           >
             Carrera
-          <i class="pi pi-graduation-cap ml-4" style="font-size: 2rem;"></i>
+          <i class="pi pi-graduation-cap text-lg ml-4 font-bold text-white" style="font-size: 2rem"></i>
       </Button>
     </div>
  

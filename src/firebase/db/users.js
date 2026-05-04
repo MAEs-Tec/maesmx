@@ -17,8 +17,11 @@ import {
 import { getUserProfilePicture } from "../img/users";
 import * as XLSX from 'xlsx';
 import { writeBatch } from "firebase/firestore";
+import { invalidateCacheTags, withCache } from "../cache/cache";
+import { CACHE_TAGS, CACHE_TTL_MS, cacheKeys, userTag } from "../cache/config";
 
 const db = getFirestore();
+const MAE_DIRECTORY_ROLES = ['mae', 'coordi', 'admin', 'subjectCoordi', 'publi', 'tec'];
 
 
 function getEmailUsername(email) {
@@ -27,6 +30,82 @@ function getEmailUsername(email) {
         return email.slice(0, atIndex);
     }
     return null;
+}
+
+function getCurrentDayKey() {
+    return ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][new Date().getDay()];
+}
+
+function sortUsersByClosestSchedule(data) {
+    const today = new Date().getDay();
+
+    data.sort((a, b) => {
+        const { day: dayA, startTime: startTimeA } = getClosestDayAndStartTime(a.weekSchedule);
+        const { day: dayB, startTime: startTimeB } = getClosestDayAndStartTime(b.weekSchedule);
+
+        const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        const daysOrdered = [...daysOfWeek.slice(today), ...daysOfWeek.slice(0, today)];
+
+        const dayIndexA = daysOrdered.indexOf(dayA);
+        const dayIndexB = daysOrdered.indexOf(dayB);
+        const dayComparison = (dayIndexA === -1 ? 1 : (dayIndexB === -1 ? -1 : dayIndexA - dayIndexB));
+        if (dayComparison !== 0) return dayComparison;
+
+        const startTimeComparison = (startTimeA === null ? 1 : (startTimeB === null ? -1 : startTimeA.localeCompare(startTimeB)));
+        if (startTimeComparison !== 0) return startTimeComparison;
+
+        return a.name.localeCompare(b.name);
+    });
+
+    return data;
+}
+
+async function fetchMaeDirectoryFresh() {
+    const usersRef = collection(firestoreDB, "users");
+    const q = query(usersRef, where('role', 'in', MAE_DIRECTORY_ROLES));
+    const querySnapshot = await getDocs(q);
+
+    if (!querySnapshot) {
+        return null;
+    }
+
+    let data = querySnapshot.docs.map(doc => doc.data()).filter(item => item.name);
+
+    data = await Promise.all(data.map(async (item) => {
+        const profilePictureUrl = await getUserProfilePicture(item.email);
+        return { ...item, profilePictureUrl };
+    }));
+
+    return sortUsersByClosestSchedule(data);
+}
+
+async function getMaeDirectory(options = {}) {
+    return await withCache(
+        cacheKeys.maeDirectory(),
+        {
+            ttlMs: CACHE_TTL_MS.MAE_DIRECTORY,
+            persist: true,
+            forceRefresh: options.forceRefresh ?? false,
+            tags: [CACHE_TAGS.USERS, CACHE_TAGS.MAES]
+        },
+        fetchMaeDirectoryFresh
+    );
+}
+
+async function invalidateUserCaches(userId, { includeActive = false, includeLeaderboard = false } = {}) {
+    const tags = [CACHE_TAGS.USERS, CACHE_TAGS.USER_DETAILS, CACHE_TAGS.CURRENT_USER, CACHE_TAGS.MAES];
+
+    if (userId) {
+        tags.push(userTag(userId));
+    }
+    if (includeActive) {
+        tags.push(CACHE_TAGS.ACTIVE_MAES);
+    }
+    if (includeLeaderboard) {
+        tags.push(CACHE_TAGS.LEADERBOARD);
+    }
+
+    await invalidateCacheTags(tags);
 }
 
 export async function createUser(userInfo) {
@@ -40,28 +119,49 @@ export async function createUser(userInfo) {
     userInfo.name = userInfo.firstname.trim() + ' ' + userInfo.lastname.trim();
 
     const userRef = doc(firestoreDB, "users", userInfo.uid);
-    return await setDoc(userRef, userInfo);
+    const result = await setDoc(userRef, userInfo);
+    await invalidateUserCaches(userInfo.uid);
+    return result;
 }
 
-export async function getUser(uid) {
-    const userRef = doc(firestoreDB, "users", uid);
-    const docSnap = await getDoc(userRef);
+export async function getUser(uid, options = {}) {
+    return await withCache(
+        cacheKeys.userById(uid),
+        {
+            ttlMs: CACHE_TTL_MS.USER,
+            persist: true,
+            forceRefresh: options.forceRefresh ?? false,
+            tags: [CACHE_TAGS.USERS, CACHE_TAGS.USER_DETAILS, userTag(uid)]
+        },
+        async () => {
+            const userRef = doc(firestoreDB, "users", uid);
+            const docSnap = await getDoc(userRef);
 
-    if (docSnap.exists()) {
-        const data = docSnap.data()
-        const profilePictureUrl = await getUserProfilePicture(data.email);
-        return { ...data, profilePictureUrl };
-    } else {
-        return null;
-    }
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                const profilePictureUrl = await getUserProfilePicture(data.email);
+                return { ...data, profilePictureUrl };
+            }
+
+            return null;
+        }
+    );
 }
 
-export async function getCurrentUser() {
+export async function getCurrentUser(options = {}) {
     const auth = getAuth();
     if (auth.currentUser) {
         const uid = getEmailUsername(auth.currentUser.email);
-        const user = await getUser(uid);
-        return user;
+        return await withCache(
+            cacheKeys.currentUser(uid),
+            {
+                ttlMs: CACHE_TTL_MS.CURRENT_USER,
+                persist: true,
+                forceRefresh: options.forceRefresh ?? false,
+                tags: [CACHE_TAGS.USERS, CACHE_TAGS.CURRENT_USER, userTag(uid)]
+            },
+            async () => await getUser(uid, options)
+        );
     }
     return null;
 }
@@ -117,137 +217,47 @@ export const getClosestDayAndStartTime = (schedules) => {
 };
 
 
-export async function getMaes() {
-    const usersRef = collection(firestoreDB, "users");
-    const q = query(usersRef, where('role', 'in', ['mae', 'coordi', 'admin', 'subjectCoordi', 'publi','tec']));
-
-    const querySnapshot = await getDocs(q);
-
-    if (querySnapshot) {
-        let data = querySnapshot.docs.map(doc => doc.data());
-
-        // Filtrar usuarios que tienen un nombre
-        data = data.filter(item => item.name);
-
-        // Obtener la URL de la foto de perfil
-        data = await Promise.all(data.map(async (item) => {
-            const profilePictureUrl = await getUserProfilePicture(item.email);
-            return { ...item, profilePictureUrl };
-        }));
-
-        // Obtener el día actual
-        const today = new Date().getDay(); // Día actual (0-6)
-
-        // Ordenar por el día más cercano, la hora de inicio más temprana y alfabéticamente por nombre
-        data.sort((a, b) => {
-            // Obtener el día más cercano y la hora de inicio más temprana
-            const { day: dayA, startTime: startTimeA } = getClosestDayAndStartTime(a.weekSchedule);
-            const { day: dayB, startTime: startTimeB } = getClosestDayAndStartTime(b.weekSchedule);
-
-            const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday','sunday'];
-
-            // Crear un array cíclico desde el día actual
-            const daysOrdered = [...daysOfWeek.slice(today), ...daysOfWeek.slice(0, today)];
-
-            // Comparar días más cercanos, teniendo en cuenta el ciclo
-            const dayIndexA = daysOrdered.indexOf(dayA);
-            const dayIndexB = daysOrdered.indexOf(dayB);
-            const dayComparison = (dayIndexA === -1 ? 1 : (dayIndexB === -1 ? -1 : dayIndexA - dayIndexB));
-            if (dayComparison !== 0) return dayComparison;
-
-            // Comparar horas de inicio si los días son iguales
-            const startTimeComparison = (startTimeA === null ? 1 : (startTimeB === null ? -1 : startTimeA.localeCompare(startTimeB)));
-            if (startTimeComparison !== 0) return startTimeComparison;
-
-            // Comparar alfabéticamente si ambos días y horas son iguales
-            return a.name.localeCompare(b.name);
-        });
-
-        return data;
-    } else {
-        return null;
-    }
+export async function getMaes(options = {}) {
+    return await getMaeDirectory(options);
 }
 
-export async function getMaesNames() {
-    const usersRef = collection(firestoreDB, "users");
-    const q = query(usersRef, where('role', 'in', ['mae', 'coordi', 'admin', 'subjectCoordi', 'publi', 'tec']));
-
-    const querySnapshot = await getDocs(q);
-
-    if (querySnapshot) {
-        let data = querySnapshot.docs.map(doc => doc.data());
-
-        // Filtrar usuarios que tienen un nombre
-        data = data.filter(item => item.name);
-
-        // Obtener el día actual
-        const today = new Date().getDay(); // Día actual (0-6)
-
-        // Ordenar por el día más cercano, la hora de inicio más temprana y alfabéticamente por nombre
-        data.sort((a, b) => {
-            // Obtener el día más cercano y la hora de inicio más temprana
-            const { day: dayA, startTime: startTimeA } = getClosestDayAndStartTime(a.weekSchedule);
-            const { day: dayB, startTime: startTimeB } = getClosestDayAndStartTime(b.weekSchedule);
-
-            const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-
-            // Crear un array cíclico desde el día actual
-            const daysOrdered = [...daysOfWeek.slice(today), ...daysOfWeek.slice(0, today)];
-
-            // Comparar días más cercanos, teniendo en cuenta el ciclo
-            const dayIndexA = daysOrdered.indexOf(dayA);
-            const dayIndexB = daysOrdered.indexOf(dayB);
-            const dayComparison = (dayIndexA === -1 ? 1 : (dayIndexB === -1 ? -1 : dayIndexA - dayIndexB));
-            if (dayComparison !== 0) return dayComparison;
-
-            // Comparar horas de inicio si los días son iguales
-            const startTimeComparison = (startTimeA === null ? 1 : (startTimeB === null ? -1 : startTimeA.localeCompare(startTimeB)));
-            if (startTimeComparison !== 0) return startTimeComparison;
-
-            // Comparar alfabéticamente si ambos días y horas son iguales
-            return a.name.localeCompare(b.name);
-        });
-
-        return data;
-    } else {
-        return null;
-    }
+export async function getMaesNames(options = {}) {
+    return await getMaeDirectory(options);
 }
 
 
-export async function getUsersWithActiveSession(getProfilePicture = false) {
+export async function getUsersWithActiveSession(getProfilePicture = false, options = {}) {
     try {
-        // Get a reference to the users collection
-        const usersRef = collection(firestoreDB, "users");
+        return await withCache(
+            cacheKeys.activeMaes(getProfilePicture ? 'with-photo' : 'basic'),
+            {
+                ttlMs: CACHE_TTL_MS.ACTIVE_MAES,
+                persist: false,
+                forceRefresh: options.forceRefresh ?? false,
+                tags: [CACHE_TAGS.USERS, CACHE_TAGS.ACTIVE_MAES]
+            },
+            async () => {
+                const usersRef = collection(firestoreDB, "users");
+                const q = query(usersRef, where('activeSession', '!=', null));
+                const querySnapshot = await getDocs(q);
 
-        // Use where clause to filter users with 'activeSession' object
-        const q = query(usersRef, where('activeSession', '!=', null));
-        const querySnapshot = await getDocs(q);
+                if (!querySnapshot) {
+                    return null;
+                }
 
-        // Process the query results
-        if (querySnapshot) {
-            // Calculate the time 5 hours ago in seconds (18000 is 5hrs in seconds)
-            const fiveHoursAgoTimestampSeconds = Math.floor(Date.now() / 1000) - 18000;
+                const fiveHoursAgoTimestampSeconds = Math.floor(Date.now() / 1000) - 18000;
+                const filteredDocs = querySnapshot.docs.filter((doc) => {
+                    const data = doc.data();
+                    return data.activeSession?.startTime?.seconds > fiveHoursAgoTimestampSeconds;
+                });
 
-            // Filter the docs before mapping to get profile pictures
-            const filteredDocs = querySnapshot.docs.filter(doc => {
-                const data = doc.data();
-                return data.activeSession.startTime.seconds > fiveHoursAgoTimestampSeconds;
-            });
-
-            // Map the filtered docs to an array of promises
-            const usersPromises = filteredDocs.map(async (doc) => {
-                const data = doc.data();
-                const profilePictureUrl = await getUserProfilePicture(data.email);
-                return { ...data, profilePictureUrl };
-            });
-
-            // Wait for all promises to resolve and return the users
-            return Promise.all(usersPromises);
-        } else {
-            return null;
-        }
+                return await Promise.all(filteredDocs.map(async (doc) => {
+                    const data = doc.data();
+                    const profilePictureUrl = getProfilePicture ? await getUserProfilePicture(data.email) : null;
+                    return { ...data, ...(profilePictureUrl ? { profilePictureUrl } : {}) };
+                }));
+            }
+        );
     } catch (error) {
         console.error('Error retrieving users:', error);
     }
@@ -256,14 +266,18 @@ export async function getUsersWithActiveSession(getProfilePicture = false) {
 export async function updateUserInfo(userId, userInfo) {
     userInfo['name'] = userInfo['firstname'].trim() + ' ' + userInfo['lastname'].trim()
     const userRef = doc(firestoreDB, "users", userId);
-    return await updateDoc(userRef, userInfo);
+    const result = await updateDoc(userRef, userInfo);
+    await invalidateUserCaches(userId);
+    return result;
 }
 
 export async function updateUserSubjects(userId, newSubjects) {
     const userRef = doc(firestoreDB, "users", userId);
-    return await updateDoc(userRef, {
+    const result = await updateDoc(userRef, {
         subjects: newSubjects
     });
+    await invalidateUserCaches(userId);
+    return result;
 }
 
 export async function updateUserSchedule(userId, newSchedule) {
@@ -276,54 +290,38 @@ export async function updateUserSchedule(userId, newSchedule) {
             delete newSchedule[day];
         }
     }
-    return await updateDoc(userRef, {
+    const result = await updateDoc(userRef, {
         weekSchedule: newSchedule
     });
+    await invalidateUserCaches(userId);
+    return result;
 }
 
-export async function getTodaysMae() {
+export async function getTodaysMae(options = {}) {
     try {
-        // Step 1: Define the query to get users with a role different from 'user'
-        const usersRef = collection(firestoreDB, "users");
-        const roleQuery = query(usersRef, where("role", "!=", "user"));
+        return await withCache(
+            cacheKeys.maesToday(getCurrentDayKey()),
+            {
+                ttlMs: CACHE_TTL_MS.MAES_TODAY,
+                persist: false,
+                forceRefresh: options.forceRefresh ?? false,
+                tags: [CACHE_TAGS.USERS, CACHE_TAGS.MAES]
+            },
+            async () => {
+                const users = await getMaeDirectory(options);
+                const currentDay = getCurrentDayKey();
 
-        // Step 2: Execute the role query
-        const querySnapshot = await getDocs(roleQuery);
-        
-        // Step 3: Get current day of the week
-        const daysOfWeek = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-        const currentDayIndex = new Date().getDay();
-        const currentDay = daysOfWeek[currentDayIndex]
-
-
-        // Step 4: Filter results client-side to include only those with 'wednesday' in 'weekSchedule'
-        const users = [];
-        querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            //   if (data.weekSchedule && data.weekSchedule["thursday"]) {
-            if (data.weekSchedule && data.weekSchedule[currentDay]) {
-                users.push(data);
+                return (users ?? [])
+                    .filter((user) => user.weekSchedule && user.weekSchedule[currentDay])
+                    .sort((a, b) => {
+                        const aStartTime = a.weekSchedule[currentDay][0]?.start;
+                        const bStartTime = b.weekSchedule[currentDay][0]?.start;
+                        const aTime = aStartTime ? new Date(`1970-01-01T${aStartTime}:00Z`) : new Date();
+                        const bTime = bStartTime ? new Date(`1970-01-01T${bStartTime}:00Z`) : new Date();
+                        return aTime - bTime;
+                    });
             }
-        });
-
-        // Step 5: Sort users by the earliest start time of the current day
-        users.sort((a, b) => {
-
-            // TODO: Change to this when updating user schedule format
-            const aStartTime = a.weekSchedule[currentDay][0]?.start;
-            const bStartTime = b.weekSchedule[currentDay][0]?.start;            
-
-            // const bStartTime = b.weekSchedule[currentDay][0]?.start ?? `${Math.round((b.weekSchedule[currentDay][0]))}:00`;
-            // const aStartTime = a.weekSchedule[currentDay][0]?.start ?? `${Math.round((a.weekSchedule[currentDay][0]))}:00`;
-            
-            // Convert time strings to Date objects for comparison
-            const aTime = aStartTime ? new Date(`1970-01-01T${aStartTime}:00Z`) : new Date();
-            const bTime = bStartTime ? new Date(`1970-01-01T${bStartTime}:00Z`) : new Date();
-
-            return aTime - bTime;
-        });
-
-        return users;
+        );
     } catch (error) {
         console.error("Error fetching filtered users: ", error);
         return [];
@@ -333,7 +331,7 @@ export async function getTodaysMae() {
 export async function startActiveSession(userId, userInfo, location) {
     try {
         const userRef = doc(firestoreDB, "users", userId);
-        return await updateDoc(userRef, {
+        const result = await updateDoc(userRef, {
             activeSession: {
                 peerInfo: userInfo,
                 location,
@@ -341,6 +339,8 @@ export async function startActiveSession(userId, userInfo, location) {
                 startTime: serverTimestamp(),
             }
         });
+        await invalidateUserCaches(userId, { includeActive: true });
+        return result;
     } catch (error) {
         console.error("Error fetching filtered users: ", error);
         return [];
@@ -372,6 +372,7 @@ export async function stopActiveSession(userId) {
             await updateDoc(userRef, {
                 activeSession: deleteField()
             });
+            await invalidateUserCaches(userId, { includeActive: true });
             return { timeLimitExceded: true, activeSessionDeleted: false, differenceInMinutes }
         }
 
@@ -382,6 +383,7 @@ export async function stopActiveSession(userId) {
             totalTime: totalTime,
             activeSession: deleteField()
         });
+        await invalidateUserCaches(userId, { includeActive: true, includeLeaderboard: true });
 
         return { totalTime, differenceInMinutes, activeSessionDeleted: true };
     } catch (error) {
@@ -395,6 +397,7 @@ export async function incrementTotalTime(userId, time) {
     await updateDoc(userRef, {
         totalTime: increment(time*60)
     });
+    await invalidateUserCaches(userId, { includeLeaderboard: true });
 }
 
 
@@ -405,6 +408,7 @@ export async function updateUserProfilePicture(userId, photoURL) {
         await updateDoc(userRef, {
             photoURL: photoURL
         });
+        await invalidateUserCaches(userId);
         
     } catch (error) {
         console.error('Error updating user profile picture: ', error);
@@ -443,6 +447,7 @@ export async function clearAllUsersWeekSchedule() {
         });
 
         await Promise.all(promises);
+        await invalidateUserCaches(null, { includeActive: true, includeLeaderboard: true });
 
         console.log("Week schedule content has been successfully cleared for eligible users.");
     } catch (error) {
@@ -501,6 +506,7 @@ export async function checkAndUpdateUserRole(file = null) {
                     });
             
                     await Promise.all(promises);
+                    await invalidateUserCaches(null, { includeActive: true, includeLeaderboard: true });
                     //console.log("Roles actualizados con base en el archivo Excel.");
                 } catch (error) {
                     console.error("Error al procesar el archivo Excel:", error);
@@ -529,6 +535,7 @@ export async function checkAndUpdateUserRole(file = null) {
             });
 
             await Promise.all(promises);
+            await invalidateUserCaches(null, { includeActive: true, includeLeaderboard: true });
             console.log("Roles actualizados con base en weekSchedule, totalTime, y subjects.");
         }
     } catch (error) {
@@ -614,6 +621,7 @@ export async function updateUserToMae(data) {
         });
 
         await Promise.all(promises);
+        await invalidateUserCaches(null, { includeActive: true, includeLeaderboard: true });
         console.log("Usuarios actualizados exitosamente.");
     } catch (error) {
         console.error("Error al actualizar los usuarios: ", error);
@@ -665,6 +673,7 @@ export const saveScheduleSubjectsExperience = async () => {
         });
 
         await Promise.all(updatePromises);
+        await invalidateUserCaches(null, { includeActive: true, includeLeaderboard: true });
     } catch (error) {
         console.error("Error al guardar la experiencia:", error);
     }
@@ -672,46 +681,40 @@ export const saveScheduleSubjectsExperience = async () => {
 
 
 export async function updatePoints(uid, newPoints) {
-    const usersRef = collection(db, 'users');
-    const usersSnap = await getDocs(usersRef);
-    const users = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const user = users.find(user => user.uid === uid);
+    const userRef = doc(db, 'users', uid);
+    const userSnap = await getDoc(userRef);
 
-    if (user) {
-        const userRef = doc(db, 'users', user.id); 
-        const updatedPoints = (user.points || 0) + newPoints; 
-        await updateDoc(userRef, { points: updatedPoints });
-        //console.log(`Puntos actualizados para ${user.name}: ${updatedPoints}`);
-        user.points = updatedPoints; 
-        if (newPoints < 0){
-            await updateUserAchievementBadge(uid, "18")
-        }
-    } else {
+    if (!userSnap.exists()) {
         console.log(`Usuario con uid ${uid} no encontrado.`);
+        return [];
     }
 
-    return users; 
+    const user = userSnap.data();
+    const updatedPoints = (user.points || 0) + newPoints;
+
+    await updateDoc(userRef, { points: updatedPoints });
+    if (newPoints < 0) {
+        await updateUserAchievementBadge(uid, "18");
+    }
+
+    await invalidateUserCaches(uid, { includeLeaderboard: true });
+    return [{ id: uid, ...user, points: updatedPoints }];
 }
 
-export async function getExperience() {
-    const usersRef = collection(firestoreDB, "users");
-    const q = query(usersRef, where('role', 'in', ['mae', 'coordi', 'admin', 'subjectCoordi', 'publi','tec']));
-
-    const querySnapshot = await getDocs(q);
-
-    if (querySnapshot) {
-        let data = querySnapshot.docs.map(doc => doc.data());
-
-        // Filtrar usuarios que tienen un nombre
-        data = data.filter(item => item.name);
-
-        // Ordenar por puntos de mayor a menor
-        data.sort((a, b) => b.points - a.points);
-
-        return data;
-    } else {
-        return null;
-    }
+export async function getExperience(options = {}) {
+    return await withCache(
+        cacheKeys.leaderboard(),
+        {
+            ttlMs: CACHE_TTL_MS.LEADERBOARD,
+            persist: true,
+            forceRefresh: options.forceRefresh ?? false,
+            tags: [CACHE_TAGS.USERS, CACHE_TAGS.LEADERBOARD]
+        },
+        async () => {
+            const data = await getMaeDirectory(options);
+            return (data ?? []).slice().sort((a, b) => (b.points || 0) - (a.points || 0));
+        }
+    );
 }
 
 // Funcion especial si mas adelante quieren agregar logros
@@ -757,6 +760,7 @@ export async function addBadgesToEligibleUsers() {
         });
 
         await Promise.all(promises);
+        await invalidateUserCaches(null, { includeActive: true, includeLeaderboard: true });
 
         console.log("Badges have been successfully added to eligible users.");
     } catch (error) {
@@ -791,6 +795,7 @@ export async function updateUserAchievementBadge(uid, badgeId) {
         await updateDoc(userRef, {
             badges: updatedBadges
         });
+        await invalidateUserCaches(uid, { includeLeaderboard: true });
 
        // console.log(`El logro con id ${badgeId} se ha actualizado correctamente para el usuario ${uid}.`);
     } catch (error) {
@@ -803,28 +808,22 @@ export async function updateUserAchievementBadge(uid, badgeId) {
 // Contador de badges
 export async function countAchievedBadges(uid) {
     try {
-        const userRef = doc(firestoreDB, "users", uid);
-        const userDoc = await getDoc(userRef);
+        const user = await getUser(uid);
 
-        if (!userDoc.exists()) {
+        if (!user) {
             console.error("Usuario no encontrado");
             return 0;
         }
 
-        const badges = userDoc.data().badges || [];
-
-        const achievedCount = badges.reduce((count, badge) => {
-            return count + (badge.achieved ? 1 : 0);
-        }, 0);
-
-        return achievedCount;
+        const badges = user.badges || [];
+        return badges.reduce((count, badge) => count + (badge.achieved ? 1 : 0), 0);
     } catch (error) {
         console.error("Error al contar los logros alcanzados:", error);
         throw error;
     }
 }
 
-// Añadir nuevos backgrounds a los usuarios sin borrar los existentes
+// A??adir nuevos backgrounds a los usuarios sin borrar los existentes
 export async function addBackgroundUsers() {
     try {
         const usersRef = collection(firestoreDB, "users");
@@ -867,6 +866,7 @@ export async function addBackgroundUsers() {
         });
 
         await Promise.all(promises);
+        await invalidateUserCaches(null, { includeActive: true, includeLeaderboard: true });
 
         console.log("Backgrounds have been merged successfully for eligible users.");
     } catch (error) {
@@ -902,6 +902,7 @@ export async function updateUserBackground(uid, backId, coins, userCoins) {
             background: updatedBackground,  
             useCoins: userCoins + coins
         });
+        await invalidateUserCaches(uid, { includeLeaderboard: true });
 
         console.log(`El fondo con id ${backId} se ha actualizado correctamente para el usuario ${uid}.`);
     } catch (error) {
@@ -917,6 +918,7 @@ export async function updateUserBackgroundImage(uid, backgroundUrl) {
         await updateDoc(userRef, {
             myBackground: backgroundUrl
         });
+        await invalidateUserCaches(uid);
         console.log(`El fondo se ha actualizado a ${backgroundUrl} para el usuario ${uid}.`);
     } catch (error) {
         console.error("Error al actualizar el fondo del usuario:", error);
@@ -925,17 +927,10 @@ export async function updateUserBackgroundImage(uid, backgroundUrl) {
 }
 
 
-export async function getTotalMaes() {
+export async function getTotalMaes(options = {}) {
     try {
-        const usersRef = collection(firestoreDB, "users");
-
-        const eligibleRoles = ['admin', 'coordi', 'mae', 'tec', 'publi'];
-
-        const q = query(usersRef, where("role", "in", eligibleRoles));
-
-        const querySnapshot = await getDocs(q);
-
-        return querySnapshot.size -1 ; 
+        const maes = await getMaeDirectory(options);
+        return (maes ?? []).filter((user) => user.uid !== 'jackpot').length;
     } catch (error) {
         console.error("Error al obtener el total de MAEs: ", error);
         throw error;
@@ -966,6 +961,7 @@ export async function addExtraVariables() {
         });
 
         await Promise.all(promises);
+        await invalidateUserCaches(null, { includeActive: true, includeLeaderboard: true });
 
         console.log("Background have been successfully added to eligible users.");
     } catch (error) {
@@ -997,6 +993,7 @@ export async function clearUsersData() {
         });
         
         await Promise.all(updatePromises);
+        await invalidateUserCaches(null, { includeActive: true, includeLeaderboard: true });
         console.log("Usuarios actualizados correctamente.");
     } catch (error) {
         console.error("Error al actualizar usuarios: ", error);
@@ -1029,6 +1026,7 @@ export async function resetAllUsersTotalTimeAndPoints({ dryRun = false, batchSiz
     console.log(`✅ Restablecimiento en progreso: ${updated}/${docs.length}`);
   }
 
-  console.log(`🎉 Listo. Se restablecieron totalTime y points para ${updated} usuarios.`);
+  await invalidateUserCaches(null, { includeActive: true, includeLeaderboard: true });
+  console.log(`Reset complete. Se restablecieron totalTime y points para ${updated} usuarios.`);
   return { scanned: docs.length, updated };
 }

@@ -15,7 +15,7 @@ import {
     clearUsersData,
     resetAllUsersTotalTimeAndPoints
 } from '../firebase/db/users';
-import { deleteOldAsesorias} from '../firebase/db/asesorias.js'
+import { deleteOldAsesorias} from '../firebase/db/asesorias'
 
 const toast = useToast();
 const confirm = useConfirm();

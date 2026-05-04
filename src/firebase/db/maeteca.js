@@ -14,16 +14,13 @@ export function filterVideosByText(videos, text) {
 import { firestoreDB } from "../../main";
 import {
     getDocs,
-    getDoc,
     addDoc,
-    setDoc,
-    doc,
     collection,
-    query,
-    where,
     serverTimestamp
 } from 'firebase/firestore';
 import { getCurrentUser } from './users';
+import { invalidateCacheTags, withCache } from '../cache/cache';
+import { CACHE_TAGS, CACHE_TTL_MS, cacheKeys } from '../cache/config';
 
 export const VIDEO_MANAGER_ROLES = ['admin', 'tec', 'coordi'];
 
@@ -34,8 +31,24 @@ function assertVideoPermissions(user) {
     }
 }
 
+async function invalidateVideoCaches() {
+    await invalidateCacheTags([CACHE_TAGS.VIDEOS]);
+}
+
+async function fetchAllVideosFresh() {
+    const videosRef = collection(firestoreDB, "videos");
+    const snapshot = await getDocs(videosRef);
+
+    if (snapshot.empty) {
+        console.log("No se encontraron videos ");
+        return [];
+    }
+
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+}
+
 //  CREAR documentos
-export async function addVideoToMaeteca(videoData) {
+export async function addVideoToMaeteca(videoData, { invalidate = true } = {}) {
     try {
         const user = await getCurrentUser();
         if (!user) throw new Error('No authenticated user for write');
@@ -49,6 +62,9 @@ export async function addVideoToMaeteca(videoData) {
         };
 
         const docRef = await addDoc(collection(firestoreDB, "videos"), payload);
+        if (invalidate) {
+            await invalidateVideoCaches();
+        }
         console.log("Documento agregado con ID:", docRef.id);
         return docRef;
     } catch (error) {
@@ -59,22 +75,18 @@ export async function addVideoToMaeteca(videoData) {
 
 
 //  LEER todos los videos
-export async function getAllVideos() {
+export async function getAllVideos(options = {}) {
     try {
-        const videosRef = collection(firestoreDB, "videos");
-        const snapshot = await getDocs(videosRef);
-
-        if (snapshot.empty) {
-            console.log("No se encontraron videos ");
-            return [];
-        }
-
-        const videos = [];
-        snapshot.forEach(doc => {
-            videos.push({ id: doc.id, ...doc.data() });
-        });
-
-        return videos;
+        return await withCache(
+            cacheKeys.videosAll(),
+            {
+                ttlMs: CACHE_TTL_MS.VIDEOS,
+                persist: true,
+                forceRefresh: options.forceRefresh ?? false,
+                tags: [CACHE_TAGS.VIDEOS]
+            },
+            fetchAllVideosFresh
+        );
     } catch (error) {
         console.error("Error obteniendo videos:", error);
         throw error;
@@ -143,22 +155,28 @@ export function extractYoutubeId(url) {
     return null;
 }
 
-export async function loadMaetecaVideos() {
-    const data = await getAllVideos();
+export async function loadMaetecaVideos(options = {}) {
+    const data = await getAllVideos(options);
     return Array.isArray(data) ? data : [];
 }
 
 // Obtener un video por su id de documento
-export async function getVideoById(id) {
+export async function getVideoById(id, options = {}) {
     if (!id) return null;
     try {
-        const docRef = doc(firestoreDB, 'videos', id);
-        const snapshot = await getDoc(docRef);
-        if (!snapshot.exists()) {
-            console.log(`Documento con id ${id} no encontrado`);
-            return null;
-        }
-        return { id: snapshot.id, ...snapshot.data() };
+        return await withCache(
+            cacheKeys.videoById(id),
+            {
+                ttlMs: CACHE_TTL_MS.VIDEOS,
+                persist: true,
+                forceRefresh: options.forceRefresh ?? false,
+                tags: [CACHE_TAGS.VIDEOS]
+            },
+            async () => {
+                const videos = await getAllVideos(options);
+                return (videos ?? []).find((video) => video.id === id) ?? null;
+            }
+        );
     } catch (error) {
         console.error(`Error obteniendo video ${id}:`, error);
         throw error;
@@ -198,27 +216,21 @@ export function handleThumbnailKey(event, url) {
 }
 
 //  BUSCAR por array "Relacionado"
-export async function getVideosByRelated(relacionadoItem) {
+export async function getVideosByRelated(relacionadoItem, options = {}) {
     try {
-        const videosRef = collection(firestoreDB, "videos");
-        const q = query(
-            videosRef, 
-            where("Relacionado", "array-contains", relacionadoItem)
+        return await withCache(
+            cacheKeys.videosByRelated(relacionadoItem),
+            {
+                ttlMs: CACHE_TTL_MS.VIDEOS,
+                persist: true,
+                forceRefresh: options.forceRefresh ?? false,
+                tags: [CACHE_TAGS.VIDEOS]
+            },
+            async () => {
+                const videos = await getAllVideos(options);
+                return (videos ?? []).filter((video) => Array.isArray(video.Relacionado) && video.Relacionado.includes(relacionadoItem));
+            }
         );
-        
-        const snapshot = await getDocs(q);
-
-        if (snapshot.empty) {
-            console.log("No se encontraron documentos ");
-            return [];
-        }
-
-        const videos = [];
-        snapshot.forEach(doc => {
-            videos.push({ id: doc.id, ...doc.data() });
-        });
-
-        return videos;
     } catch (error) {
         console.error("Error buscando por relacionado:", error);
         throw error;
@@ -392,10 +404,11 @@ export async function createSampleVideos() {
         try {
                 for (const item of samples) {
                         // addVideoToMaeteca will attach createdBy and createdAt
-                        const ref = await addVideoToMaeteca(item);
+                        const ref = await addVideoToMaeteca(item, { invalidate: false });
                         if (ref && ref.id) insertedIds.push(ref.id);
                         console.log(`Agregado: ${item.Titulo} -> ${ref?.id}`);
                 }
+                await invalidateVideoCaches();
                 console.log(`Videos de ejemplo creados  Total: ${insertedIds.length}`);
                 return insertedIds;
         } catch (error) {

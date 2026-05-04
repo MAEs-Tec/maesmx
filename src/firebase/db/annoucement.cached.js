@@ -66,11 +66,15 @@ export async function updateUserAsistence(announcementId, userId) {
     return result;
 }
 
-export const addExtraVariables = announcementDb.addExtraVariables;
+export async function addExtraVariables() {
+    const result = await announcementDb.addExtraVariables();
+    await invalidateAnnouncementCaches();
+    return result;
+}
 
 export async function getAnnouncementsAllGrupales(options = {}) {
     return await withCache(
-        'announcements:group:all',
+        cacheKeys.announcementsAllGroup(),
         {
             ttlMs: CACHE_TTL_MS.GROUP_ANNOUNCEMENTS,
             persist: true,

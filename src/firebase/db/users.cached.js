@@ -92,12 +92,6 @@ async function getMaeDirectory(options = {}) {
     );
 }
 
-function getSemesterCacheKey() {
-    const now = new Date();
-    const semester = now.getMonth() < 6 ? '01' : '02';
-    return `${now.getFullYear()}-${semester}`;
-}
-
 async function invalidateUserCaches(userId, { includeActive = false, includeLeaderboard = false } = {}) {
     const tags = [CACHE_TAGS.USERS, CACHE_TAGS.USER_DETAILS, CACHE_TAGS.CURRENT_USER, CACHE_TAGS.MAES];
 

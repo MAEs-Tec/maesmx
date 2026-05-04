@@ -57,6 +57,7 @@ export const cacheKeys = {
     announcementsVisible: () => 'announcements:visible',
     announcementsEdit: () => 'announcements:edit',
     announcementsGroup: () => 'announcements:group',
+    announcementsAllGroup: () => 'announcements:group:all',
     attendanceToday: (dateString) => `attendance:today:${dateString}`,
     attendanceByDate: (dateString) => `attendance:date:${dateString}`,
     attendanceStudent: (uid, dateString) => `attendance:student:${uid}:${dateString}`,

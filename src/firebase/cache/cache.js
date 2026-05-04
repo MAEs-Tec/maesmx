@@ -240,7 +240,11 @@ export async function setCachedValue(key, value, { ttlMs = 0, tags = [], persist
     setMemoryEntry(key, entry);
 
     if (persist) {
-        await writePersistentEntry(entry);
+        try {
+            await writePersistentEntry(entry);
+        } catch (error) {
+            console.warn(`Persistent cache write failed for ${key}; using memory cache only.`, error);
+        }
     }
 
     return cloneValue(entry.value);
@@ -258,9 +262,13 @@ export async function withCache(
         }
 
         if (persist) {
-            const persistentEntry = await hydratePersistentEntry(key);
-            if (persistentEntry) {
-                return cloneValue(persistentEntry.value);
+            try {
+                const persistentEntry = await hydratePersistentEntry(key);
+                if (persistentEntry) {
+                    return cloneValue(persistentEntry.value);
+                }
+            } catch (error) {
+                console.warn(`Persistent cache read failed for ${key}; loading fresh data.`, error);
             }
         }
     }
@@ -285,7 +293,11 @@ export async function withCache(
 
 export async function invalidateCacheKey(key) {
     memoryCache.delete(key);
-    await deletePersistentEntry(key);
+    try {
+        await deletePersistentEntry(key);
+    } catch (error) {
+        console.warn(`Persistent cache delete failed for ${key}.`, error);
+    }
 }
 
 export async function invalidateCacheTags(tags = []) {
@@ -300,12 +312,16 @@ export async function invalidateCacheTags(tags = []) {
         }
     }
 
-    const persistentEntries = await getAllPersistentEntries();
-    const keysToDelete = persistentEntries
-        .filter((entry) => entry.tags?.some((tag) => wantedTags.includes(tag)))
-        .map((entry) => entry.key);
+    try {
+        const persistentEntries = await getAllPersistentEntries();
+        const keysToDelete = persistentEntries
+            .filter((entry) => entry.tags?.some((tag) => wantedTags.includes(tag)))
+            .map((entry) => entry.key);
 
-    await Promise.all(keysToDelete.map((key) => deletePersistentEntry(key)));
+        await Promise.all(keysToDelete.map((key) => deletePersistentEntry(key)));
+    } catch (error) {
+        console.warn('Persistent cache tag invalidation failed.', error);
+    }
 }
 
 export function clearMemoryCache() {

@@ -392,15 +392,14 @@ export async function getAsesoriasCountByUser(options = {}) {
     }
 }
 
-export async function getAsesoriasCountByArea() {
+export async function getAsesoriasCountByArea(options = {}) {
     try {
-        const querySnapshot = await getDocs(collection(firestoreDB, "asesorias"));
+        const asesorias = await getAsesorias(null, null, options);
         const areasCount = {};
 
-        querySnapshot.docs.forEach(doc => {
-            const asesoríaData = doc.data();
-            const subjectArea = asesoríaData?.subject?.area;
-            const userUid = asesoríaData?.userInfo?.uid;
+        (asesorias ?? []).forEach(asesoriaData => {
+            const subjectArea = asesoriaData?.subject?.area;
+            const userUid = asesoriaData?.userInfo?.uid;
 
             if (subjectArea && userUid) {
                 if (!areasCount[subjectArea]) {
@@ -427,13 +426,13 @@ export async function getAsesoriasCountByArea() {
 }
 
 
-export async function getAsesoriasCountByCampus() {
+export async function getAsesoriasCountByCampus(options = {}) {
     try {
-        const querySnapshot = await getDocs(collection(firestoreDB, "asesorias"));
+        const asesorias = await getAsesorias(null, null, options);
         const campusCount = {};
 
-        querySnapshot.forEach(doc => {
-            const campus = doc.data()?.userInfo?.campus;
+        (asesorias ?? []).forEach(doc => {
+            const campus = doc?.userInfo?.campus;
             if (campus) {
                 campusCount[campus] = (campusCount[campus] || 0) + 1;
             }
@@ -467,9 +466,39 @@ export async function deleteOldAsesorias() {
         });
         
         await Promise.all(deletePromises);
+        await invalidateAsesoriaCaches();
         console.log("Asesorías antiguas eliminadas correctamente.");
     } catch (error) {
         console.error("Error al eliminar asesorías antiguas: ", error);
         throw error;
     }
+}
+
+export async function getAsesorias(startDate = null, endDate = null, options = {}) {
+    const startKey = normalizeDateKey(startDate);
+    const endKey = normalizeDateKey(endDate);
+
+    return await withCache(
+        cacheKeys.asesoriasRange(startKey, endKey),
+        {
+            ttlMs: CACHE_TTL_MS.ASESORIAS,
+            persist: true,
+            forceRefresh: options.forceRefresh ?? false,
+            tags: [CACHE_TAGS.ASESORIAS]
+        },
+        async () => await fetchAsesoriasFresh(startDate, endDate)
+    );
+}
+
+export async function getAsesoriasByUidAndRating(uidUser, uidPeer = null, options = {}) {
+    return await withCache(
+        cacheKeys.asesoriasPendingRating(uidUser, uidPeer ?? 'all'),
+        {
+            ttlMs: CACHE_TTL_MS.ASESORIAS,
+            persist: true,
+            forceRefresh: options.forceRefresh ?? false,
+            tags: [CACHE_TAGS.ASESORIAS]
+        },
+        async () => await fetchAsesoriasByUidAndRatingFresh(uidUser, uidPeer)
+    );
 }

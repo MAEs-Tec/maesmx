@@ -58,8 +58,6 @@ export async function updateReport(userInfo, report) {
     try {
         // Defensive checks + unwrap reactive proxy
         const uid = userInfo?.uid ?? userInfo?.id ?? userInfo?.value?.uid;
-        const name = userInfo?.name ?? userInfo?.value?.name ?? '';
-        const totalTime = userInfo?.totalTime ?? userInfo?.value?.totalTime ?? 0;
 
         console.log(uid, report, "Updating report")
         const reportRef = doc(firestoreDB, "attendance", getCurrentDateFormatted(), "report", userInfo.uid); // Final de semestre, quitar report de aca y luego when accessing data para que sean menos datos

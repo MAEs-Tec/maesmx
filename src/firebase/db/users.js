@@ -302,8 +302,8 @@ export async function getTodaysMae(options = {}) {
         return await withCache(
             cacheKeys.maesToday(getCurrentDayKey()),
             {
-                ttlMs: CACHE_TTL_MS.MAE_DIRECTORY,
-                persist: true,
+                ttlMs: CACHE_TTL_MS.MAES_TODAY,
+                persist: false,
                 forceRefresh: options.forceRefresh ?? false,
                 tags: [CACHE_TAGS.USERS, CACHE_TAGS.MAES]
             },

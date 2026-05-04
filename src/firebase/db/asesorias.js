@@ -369,9 +369,9 @@ export async function updateAsesoria(id, data) {
   }
   
 
-  export async function getTotalAsesorias(startDate = null, endDate = null) {
+  export async function getTotalAsesorias(startDate = null, endDate = null, options = {}) {
     try {
-        const asesorias = await getAsesorias(startDate, endDate);
+        const asesorias = await getAsesorias(startDate, endDate, options);
         const totalAsesorias = asesorias.length;
         return totalAsesorias;
     } catch (error) {
@@ -381,12 +381,10 @@ export async function updateAsesoria(id, data) {
 }
 
 
-export async function getAsesoriasCountByUser() {
+export async function getAsesoriasCountByUser(options = {}) {
     try {
-        const querySnapshot = await getDocs(collection(firestoreDB, "asesorias"));
-        const userAsesoriasSet = new Set(
-            querySnapshot.docs.map(doc => doc.data().userInfo?.uid).filter(Boolean)
-        );
+        const asesorias = await getAsesorias(null, null, options);
+        const userAsesoriasSet = new Set((asesorias ?? []).map(doc => doc.userInfo?.uid).filter(Boolean));
         return userAsesoriasSet.size;
     } catch (error) {
         console.error("Error al obtener el conteo de asesorías por usuario: ", error);

@@ -6,6 +6,8 @@ import {
     setDoc,
     collection,
 } from 'firebase/firestore';
+import { attendanceDateTag, CACHE_TAGS, CACHE_TTL_MS, cacheKeys } from '../cache/config';
+import { invalidateCacheTags, withCache } from '../cache/cache';
 
 function getCurrentDateFormatted() {
     const today = new Date();
@@ -16,7 +18,22 @@ function getCurrentDateFormatted() {
     return `${year}-${month}-${day}`;
 }
 
-export async function getTodaysReport() {
+function formatDateString(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function resolveAttendanceTtl(dateString) {
+    return dateString === getCurrentDateFormatted() ? CACHE_TTL_MS.ATTENDANCE_TODAY : CACHE_TTL_MS.ATTENDANCE_DAY;
+}
+
+async function invalidateAttendanceForDate(dateString) {
+    await invalidateCacheTags([CACHE_TAGS.ATTENDANCE, attendanceDateTag(dateString)]);
+}
+
+async function fetchTodaysReportFresh() {
     try {
         const reportRef = collection(firestoreDB, "attendance", getCurrentDateFormatted(), "report");
         // const reportRef = collection(firestoreDB, "attendance", "2024-05-16", "report");
@@ -41,8 +58,6 @@ export async function updateReport(userInfo, report) {
     try {
         // Defensive checks + unwrap reactive proxy
         const uid = userInfo?.uid ?? userInfo?.id ?? userInfo?.value?.uid;
-        const name = userInfo?.name ?? userInfo?.value?.name ?? '';
-        const totalTime = userInfo?.totalTime ?? userInfo?.value?.totalTime ?? 0;
 
         console.log(uid, report, "Updating report")
         const reportRef = doc(firestoreDB, "attendance", getCurrentDateFormatted(), "report", userInfo.uid); // Final de semestre, quitar report de aca y luego when accessing data para que sean menos datos
@@ -58,7 +73,9 @@ export async function updateReport(userInfo, report) {
 
         console.log('Writing to Firestore path:', reportRef.path, 'payload:', dataUpload);
         
-        return await setDoc(reportRef, dataUpload, { merge : true }); // Use merge so that it can keep otehr fields if write more data
+        const result = await setDoc(reportRef, dataUpload, { merge : true }); // Use merge so that it can keep otehr fields if write more data
+        await invalidateAttendanceForDate(getCurrentDateFormatted());
+        return result;
     } catch (error) {
         console.error("Error updating the report: ", error);
         return [];
@@ -68,10 +85,7 @@ export async function updateReport(userInfo, report) {
 // Update attendance report for a specific date (used for makeup attendance)
 export async function updateReportByDate(userInfo, date, report) {
     try {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const dateString = `${year}-${month}-${day}`;
+        const dateString = formatDateString(date);
 
         const dateDocRef = doc(firestoreDB, "attendance", dateString);
         await setDoc(dateDocRef, { initialized: true }, { merge: true });
@@ -84,6 +98,7 @@ export async function updateReportByDate(userInfo, date, report) {
             totalTime: userInfo.totalTime,
             report: report,
         }, { merge: true });
+        await invalidateAttendanceForDate(dateString);
     } catch (error) {
         console.error("Error updating report by date: ", error);
     }
@@ -92,10 +107,7 @@ export async function updateReportByDate(userInfo, date, report) {
 // To get date info
 export async function addRegister(userInfo, date) {
     try {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const dateString = `${year}-${month}-${day}`;
+        const dateString = formatDateString(date);
 
         // Root date doc is created w dummy field
         const dateDocRef = doc(firestoreDB, "attendance", dateString);
@@ -106,13 +118,14 @@ export async function addRegister(userInfo, date) {
             ...userInfo,
             report: 'RR'
         });
+        await invalidateAttendanceForDate(dateString);
 
     } catch (error) {
         console.error("Error updating the report: ", error);
     }
 }
 
-export async function getStudentReport(uid) {
+async function fetchStudentReportFresh(uid) {
   const d = new Date();
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -130,7 +143,7 @@ export async function getStudentReport(uid) {
 
 
 // Para obtener los datos de asistencia de una fecha 
-export async function getReportByDate (dateString) {
+async function fetchReportByDateFresh(dateString) {
     try {
         // Reference with root de attendance, document es dateString del input parameter, y luego report subcollection 
         const reportRef = collection(firestoreDB, "attendance", dateString, "report");
@@ -182,7 +195,7 @@ function getDateStringsBetween(startDate, endDate) {
 }
 
 // Gets the attendance reports for every day
-export async function getReportByDateRange(startDate, endDate) {
+async function fetchReportByDateRangeFresh(startDate, endDate) {
     const dateStrings = getDateStringsBetween(startDate, endDate);
     const report = [];
 
@@ -216,4 +229,60 @@ export async function getReportByDateRange(startDate, endDate) {
     }
 
     return report;
+}
+
+export async function getTodaysReport(options = {}) {
+    const today = getCurrentDateFormatted();
+
+    return await withCache(
+        cacheKeys.attendanceToday(today),
+        {
+            ttlMs: CACHE_TTL_MS.ATTENDANCE_TODAY,
+            persist: false,
+            forceRefresh: options.forceRefresh ?? false,
+            tags: [CACHE_TAGS.ATTENDANCE, attendanceDateTag(today)]
+        },
+        fetchTodaysReportFresh
+    );
+}
+
+export async function getStudentReport(uid, options = {}) {
+    const today = getCurrentDateFormatted();
+
+    return await withCache(
+        cacheKeys.attendanceStudent(uid, today),
+        {
+            ttlMs: CACHE_TTL_MS.ATTENDANCE_TODAY,
+            persist: false,
+            forceRefresh: options.forceRefresh ?? false,
+            tags: [CACHE_TAGS.ATTENDANCE, attendanceDateTag(today)]
+        },
+        async () => await fetchStudentReportFresh(uid)
+    );
+}
+
+export async function getReportByDate(dateString, options = {}) {
+    return await withCache(
+        cacheKeys.attendanceByDate(dateString),
+        {
+            ttlMs: resolveAttendanceTtl(dateString),
+            persist: dateString !== getCurrentDateFormatted(),
+            forceRefresh: options.forceRefresh ?? false,
+            tags: [CACHE_TAGS.ATTENDANCE, attendanceDateTag(dateString)]
+        },
+        async () => await fetchReportByDateFresh(dateString)
+    );
+}
+
+export async function getReportByDateRange(startDate, endDate, options = {}) {
+    return await withCache(
+        cacheKeys.attendanceRange(startDate, endDate),
+        {
+            ttlMs: CACHE_TTL_MS.ATTENDANCE_RANGE,
+            persist: true,
+            forceRefresh: options.forceRefresh ?? false,
+            tags: [CACHE_TAGS.ATTENDANCE]
+        },
+        async () => await fetchReportByDateRangeFresh(startDate, endDate)
+    );
 }

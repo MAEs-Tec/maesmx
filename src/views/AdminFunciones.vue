@@ -15,8 +15,7 @@ import {
     clearUsersData,
     resetAllUsersTotalTimeAndPoints
 } from '../firebase/db/users';
-import { deleteOldAsesorias, eliminarAsesoriasDePrueba } from '../firebase/db/asesorias.js'
-import { revelarEvaluaciones } from '../firebase/db/settings'
+import { deleteOldAsesorias} from '../firebase/db/asesorias'
 
 const toast = useToast();
 const confirm = useConfirm();
@@ -81,49 +80,6 @@ const restartMaes = () => {
             } catch (error) {
                 console.error("Error al restablecer valores:", error);
                 toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al restablecer los valores de los maes.', life: 3000 });
-            }
-        },
-        reject: () => {
-            toast.add({ severity: 'info', summary: 'Cancelado', detail: 'No se han realizado cambios.', life: 3000 });
-        }
-    });
-};
-
-const confirmLimpiarPruebas = () => {
-    confirm.require({
-        message: '¿Eliminar todas las asesorías/evaluaciones de prueba de Firestore?',
-        header: 'Limpiar datos de prueba',
-        icon: 'pi pi-trash',
-        acceptLabel: 'Sí, eliminar',
-        rejectLabel: 'Cancelar',
-        acceptClass: 'p-button-danger',
-        accept: async () => {
-            try {
-                const count = await eliminarAsesoriasDePrueba();
-                toast.add({ severity: 'success', summary: 'Éxito', detail: `Se eliminaron ${count} documentos de prueba.`, life: 3000 });
-            } catch (error) {
-                console.error("Error al limpiar pruebas:", error);
-                toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error: ' + error.message, life: 5000 });
-            }
-        }
-    });
-};
-
-const confirmRevealEvaluaciones = () => {
-    confirm.require({
-        message: '¿Estás seguro de revelar todas las evaluaciones pendientes a los MAEs? Las evaluaciones creadas después de este momento permanecerán ocultas hasta la próxima revelación.',
-        header: 'Revelar evaluaciones',
-        icon: 'pi pi-eye',
-        acceptLabel: 'Sí, revelar',
-        rejectLabel: 'Cancelar',
-        acceptClass: 'p-button-success',
-        accept: async () => {
-            try {
-                await revelarEvaluaciones();
-                toast.add({ severity: 'success', summary: 'Éxito', detail: 'Las evaluaciones han sido reveladas a los MAEs.', life: 3000 });
-            } catch (error) {
-                console.error("Error al revelar evaluaciones:", error);
-                toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al revelar las evaluaciones.', life: 3000 });
             }
         },
         reject: () => {
@@ -379,20 +335,11 @@ const handleUpdatePoints = async () => {
         </div>
 
         <div class="flex justify-content-center w-full mt-4">
-            <Button
-                label="Revelar evaluaciones a MAEs"
-                icon="pi pi-eye"
-                class="p-button-success p-button-rounded p-button-lg w-full md:w-6"
-                @click="confirmRevealEvaluaciones"
-            />
-        </div>
-
-        <div class="flex justify-content-center w-full mt-4">
-            <Button
-                label="Eliminar las asesorías del semestre pasado"
-                icon="pi pi-trash"
+            <Button 
+                label="Eliminar las asesorías del semestre pasado" 
+                icon="pi pi-trash" 
                 class="p-button-danger p-button-rounded p-button-lg w-full md:w-6"
-                @click="confirmDeleteAsesorias"
+                @click="confirmDeleteAsesorias" 
             />
         </div>
 

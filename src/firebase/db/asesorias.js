@@ -64,6 +64,10 @@ function timestampToMs(value) {
     return toMillis(value);
 }
 
+function isRealAsesoria(asesoria) {
+    return asesoria?._test !== true && !asesoria?._type;
+}
+
 // Registra la asesoría del mae
 export async function addAsesoria(maeInfo, userInfo, subject, comment, rating) {
     const createdAt = Timestamp.now();
@@ -129,6 +133,7 @@ export async function getAsesoriasCountForUserInCurrentSemester(userId, options 
                 const dateMs = timestampToMs(doc.date);
                 return (
                     doc.peerInfo?.uid === userId &&
+                    isRealAsesoria(doc) &&
                     doc.duplicate !== true &&
                     dateMs !== null &&
                     dateMs >= start.getTime() &&
@@ -187,8 +192,12 @@ export async function getAsesoriasByUid(uid, options = {}) {
     try {
         const today = new Date(); 
         const asesorias = await getAsesorias(SEMESTER_START, today, options);
+        const includeTests = options.includeTests === true;
 
-        const asesoriasFiltradas = asesorias.filter(asesoria => asesoria.peerInfo?.uid === uid);
+        const asesoriasFiltradas = asesorias.filter(asesoria =>
+            asesoria.peerInfo?.uid === uid &&
+            (includeTests || isRealAsesoria(asesoria))
+        );
 
         return asesoriasFiltradas;
     } catch (error) {
@@ -279,6 +288,9 @@ export async function updateExperienceAsesorias(peerUid, userUid, subjectId, adv
             const advisoryRef = doc(firestoreDB, "asesorias", advisoryId);
             const advisorySnap = await getDoc(advisoryRef);
             const currentData = advisorySnap.exists() ? advisorySnap.data() : null;
+            if (!isRealAsesoria(currentData)) {
+                return 0;
+            }
             if (typeof currentData?.pointsAwarded === 'number' && currentData.pointsAwarded > 0) {
                 return currentData.pointsAwarded;
             }
@@ -293,8 +305,7 @@ export async function updateExperienceAsesorias(peerUid, userUid, subjectId, adv
             .filter((advisory) => {
                 const dateMs = toMillis(advisory.date);
                 return advisory.id !== advisoryId &&
-                    !advisory._test &&
-                    !advisory._type &&
+                    isRealAsesoria(advisory) &&
                     advisory.userInfo?.uid === userUid &&
                     dateMs !== null &&
                     dateMs < advisoryMs;
@@ -418,7 +429,7 @@ async function fetchAsesoriasByUidAndRatingFresh(uidUser , uidPeer = null) {
         const asesorias = querySnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
-        }));
+        })).filter(isRealAsesoria);
 
         return asesorias;
     } catch (error) {
@@ -443,7 +454,7 @@ export async function updateAsesoria(id, data) {
   export async function getTotalAsesorias(startDate = null, endDate = null, options = {}) {
     try {
         const asesorias = await getAsesorias(startDate, endDate, options);
-        const totalAsesorias = asesorias.length;
+        const totalAsesorias = (asesorias ?? []).filter(isRealAsesoria).length;
         return totalAsesorias;
     } catch (error) {
         console.error("Error fetching total asesorias: ", error);
@@ -455,7 +466,7 @@ export async function updateAsesoria(id, data) {
 export async function getAsesoriasCountByUser(options = {}) {
     try {
         const asesorias = await getAsesorias(null, null, options);
-        const userAsesoriasSet = new Set((asesorias ?? []).map(doc => doc.userInfo?.uid).filter(Boolean));
+        const userAsesoriasSet = new Set((asesorias ?? []).filter(isRealAsesoria).map(doc => doc.userInfo?.uid).filter(Boolean));
         return userAsesoriasSet.size;
     } catch (error) {
         console.error("Error al obtener el conteo de asesorías por usuario: ", error);
@@ -468,7 +479,7 @@ export async function getAsesoriasCountByArea(options = {}) {
         const asesorias = await getAsesorias(null, null, options);
         const areasCount = {};
 
-        (asesorias ?? []).forEach(asesoriaData => {
+        (asesorias ?? []).filter(isRealAsesoria).forEach(asesoriaData => {
             const subjectArea = asesoriaData?.subject?.area;
             const userUid = asesoriaData?.userInfo?.uid;
 
@@ -502,7 +513,7 @@ export async function getAsesoriasCountByCampus(options = {}) {
         const asesorias = await getAsesorias(null, null, options);
         const campusCount = {};
 
-        (asesorias ?? []).forEach(doc => {
+        (asesorias ?? []).filter(isRealAsesoria).forEach(doc => {
             const campus = doc?.userInfo?.campus;
             if (campus) {
                 campusCount[campus] = (campusCount[campus] || 0) + 1;
@@ -552,7 +563,7 @@ export async function borrarTodasEvaluaciones() {
 
     const docs = snap.docs.filter(d => {
         const data = d.data();
-        return !data._type && data.rating != null;
+        return isRealAsesoria(data) && data.rating != null;
     });
 
     const results = await Promise.allSettled(

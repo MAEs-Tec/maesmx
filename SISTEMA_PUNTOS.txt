@@ -13,6 +13,8 @@ Puntos importantes:
 - Los estudiantes son quienes registran las asesorias que recibieron.
 - Los puntos se otorgan al MAE que el estudiante selecciona como asesor.
 - El sistema nuevo aplica hacia adelante.
+- Las asesorias marcadas como prueba no cuentan para puntos, perfil,
+  evaluaciones, estadisticas ni leaderboard.
 
 Formula general:
 

@@ -19,9 +19,28 @@ import * as XLSX from 'xlsx';
 import { writeBatch } from "firebase/firestore";
 import { invalidateCacheTags, withCache } from "../cache/cache";
 import { CACHE_TAGS, CACHE_TTL_MS, cacheKeys, userTag } from "../cache/config";
+import { applyPointsDelta, LEADERBOARD_ROLES, roundPoints } from "../../utils/PointsUtils";
 
 const db = getFirestore();
 const MAE_DIRECTORY_ROLES = ['mae', 'coordi', 'admin', 'subjectCoordi', 'publi', 'tec'];
+
+async function getUserRecordByUid(uid) {
+    if (!uid) return null;
+
+    const directRef = doc(db, 'users', uid);
+    const directSnap = await getDoc(directRef);
+    if (directSnap.exists()) {
+        return { id: directSnap.id, ref: directRef, data: directSnap.data() };
+    }
+
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('uid', '==', uid));
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) return null;
+
+    const userDoc = querySnapshot.docs[0];
+    return { id: userDoc.id, ref: userDoc.ref, data: userDoc.data() };
+}
 
 
 function getEmailUsername(email) {
@@ -634,76 +653,50 @@ export async function updateUserToMae(data) {
 }
 
 export const saveScheduleSubjectsExperience = async () => {
-    try {
-        const usersRef = collection(db, 'users');
-        const usersSnap = await getDocs(usersRef);
-
-        if (usersSnap.empty) {
-            console.error("No se encontraron usuarios en la tabla 'users'.");
-            return;
-        }
-
-        const rolesPermitidos = ['admin', 'publi', 'mae', 'coordi', 'tec'];
-
-        const updatePromises = []; 
-        usersSnap.forEach(async (userDoc) => {
-            const user = userDoc.data();
-
-            if (!rolesPermitidos.includes(user.role)) {
-                return;
-            }
-
-            let puntos = 0;
-
-            if (user.subjects && user.subjects.length > 0) {
-                puntos += 15;
-            } else {
-                puntos -= 30;
-                await  updateUserAchievementBadge(user.uid, "18");
-            }
-
-            if (user.weekSchedule && Object.keys(user.weekSchedule).length > 0) {
-                puntos += 100;
-            } else {
-                puntos -= 500;
-                await updateUserAchievementBadge(user.uid, "18");
-            }
-
-            const userRef = doc(db, 'users', userDoc.id); 
-            updatePromises.push(
-                updateDoc(userRef, {
-                    points: (user.points || 0) + puntos
-                })
-            );
-        });
-
-        await Promise.all(updatePromises);
-        await invalidateUserCaches(null, { includeActive: true, includeLeaderboard: true });
-    } catch (error) {
-        console.error("Error al guardar la experiencia:", error);
-    }
+    console.warn("saveScheduleSubjectsExperience está desactivada: el nuevo leaderboard no suma puntos por materias/horario configurado.");
+    return { updated: 0 };
 };
 
 
 export async function updatePoints(uid, newPoints) {
-    const userRef = doc(db, 'users', uid);
-    const userSnap = await getDoc(userRef);
+    const user = await getUserRecordByUid(uid);
+    const pointsDelta = Number(newPoints) || 0;
 
-    if (!userSnap.exists()) {
+    if (user) {
+        const updatedPoints = applyPointsDelta(user.data.points, pointsDelta);
+        await updateDoc(user.ref, { points: updatedPoints });
+        await invalidateUserCaches(uid, { includeLeaderboard: true });
+        return [{ id: user.id, ...user.data, points: updatedPoints }];
+    } else {
         console.log(`Usuario con uid ${uid} no encontrado.`);
         return [];
     }
+}
 
-    const user = userSnap.data();
-    const updatedPoints = (user.points || 0) + newPoints;
-
-    await updateDoc(userRef, { points: updatedPoints });
-    if (newPoints < 0) {
-        await updateUserAchievementBadge(uid, "18");
+export async function updateRatingBonusPoints(uid, newBonusPoints) {
+    const user = await getUserRecordByUid(uid);
+    if (!user) {
+        console.log(`Usuario con uid ${uid} no encontrado.`);
+        return null;
     }
 
+    const previousBonus = Number(user.data.ratingBonusPoints) || 0;
+    const nextBonus = roundPoints(newBonusPoints);
+    const delta = roundPoints(nextBonus - previousBonus);
+    const updatedPoints = applyPointsDelta(user.data.points, delta);
+
+    await updateDoc(user.ref, {
+        points: updatedPoints,
+        ratingBonusPoints: nextBonus
+    });
     await invalidateUserCaches(uid, { includeLeaderboard: true });
-    return [{ id: uid, ...user, points: updatedPoints }];
+
+    return {
+        previousBonus,
+        nextBonus,
+        delta,
+        points: updatedPoints
+    };
 }
 
 export async function getExperience(options = {}) {
@@ -717,7 +710,7 @@ export async function getExperience(options = {}) {
         },
         async () => {
             const data = await getMaeDirectory(options);
-            return (data ?? []).slice().sort((a, b) => (b.points || 0) - (a.points || 0));
+            return (data ?? []).slice().sort((a, b) => (Number(b.points) || 0) - (Number(a.points) || 0));
         }
     );
 }
@@ -1034,4 +1027,36 @@ export async function resetAllUsersTotalTimeAndPoints({ dryRun = false, batchSiz
   await invalidateUserCaches(null, { includeActive: true, includeLeaderboard: true });
   console.log(`Reset complete. Se restablecieron totalTime y points para ${updated} usuarios.`);
   return { scanned: docs.length, updated };
+}
+
+export async function resetAllUsersLeaderboardPoints({ dryRun = false, batchSize = 450 } = {}) {
+  const usersSnap = await getDocs(collection(firestoreDB, "users"));
+  if (usersSnap.empty) return { scanned: 0, updated: 0 };
+
+  const docs = usersSnap.docs.filter((d) => LEADERBOARD_ROLES.includes(d.data().role));
+  let updated = 0;
+
+  if (dryRun) {
+    return { scanned: usersSnap.size, updated: docs.length };
+  }
+
+  for (let i = 0; i < docs.length; i += batchSize) {
+    const chunk = docs.slice(i, i + batchSize);
+    const batch = writeBatch(firestoreDB);
+
+    chunk.forEach((d) => {
+      batch.update(d.ref, {
+        points: 0,
+        ratingBonusPoints: 0
+      });
+    });
+
+    await batch.commit();
+    updated += chunk.length;
+    console.log(`Reinicio de leaderboard en progreso: ${updated}/${docs.length}`);
+  }
+
+  await invalidateUserCaches(null, { includeLeaderboard: true });
+  console.log(`Listo. Se reiniciaron los puntos del leaderboard para ${updated} usuarios.`);
+  return { scanned: usersSnap.size, updated };
 }

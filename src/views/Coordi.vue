@@ -1,11 +1,12 @@
 <script setup>
-import { getSubjectColor, pointsRules } from '@/utils/CoordiUtils';
+import { getSubjectColor } from '@/utils/CoordiUtils';
 import { ref, onMounted, watch } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import { getTodaysMae, getUser, incrementTotalTime, getCurrentUser } from '@/firebase/db/users';
 import { addRegister, getTodaysReport, updateReport, updateReportByDate, getReportByDate } from '../firebase/db/attendance';
 import { getUsersWithActiveSession, updatePoints } from '@/firebase/db/users';
 import { nextTick } from 'vue';
+import { getAttendancePointsDelta } from '@/utils/PointsUtils';
 
 const toast = useToast();
 const loading = ref(true);
@@ -88,11 +89,12 @@ const checkLocationAndAttendance = () => {
   });
 };
 
-const handlePointsUpdate = async (uid, newAttendance) => {
-    const points = pointsRules[newAttendance] || 0;
-    await updatePoints(uid, points); 
-   
-    if (newAttendance !== "C") {
+const handlePointsUpdate = async (uid, previousAttendance, newAttendance, showToast = true) => {
+    const pointsDelta = getAttendancePointsDelta(previousAttendance, newAttendance);
+    if (pointsDelta !== 0) {
+        await updatePoints(uid, pointsDelta);
+    }
+    if (showToast) {
         toast.add({ severity: 'success', summary: 'Se ha actualizado su asistencia ', detail: 'Se ha actualizo de forma correcta', life: 3000 });
     }
 };
@@ -111,7 +113,15 @@ watch(report, async (newValue, oldValue) => {
             return;
         }
         
+        if (!selectedId.value) {
+            return;
+        }
+
         const maeInfo = maes.value.find(mae => mae.uid === selectedId.value);
+        if (!maeInfo) {
+            return;
+        }
+
         const uidUser = userInfo.value.uid;
 
         if (maeInfo && maeInfo.uid === uidUser && maeInfo.role === "coordi")  {
@@ -125,12 +135,13 @@ watch(report, async (newValue, oldValue) => {
         } else {
             const previousAttendance = initialReport.value[selectedId.value];
             const newAttendanceValue = newValue[selectedId.value];
-            updateReport(maeInfo, newAttendanceValue);
-
-            if (previousAttendance === undefined) {
-                handlePointsUpdate(maeInfo.uid, newAttendanceValue);
-                handlePointsUpdate(userInfo.value.uid, "C");
+            if (previousAttendance === newAttendanceValue) {
+                return;
             }
+
+            await updateReport(maeInfo, newAttendanceValue);
+            await handlePointsUpdate(maeInfo.uid, previousAttendance, newAttendanceValue);
+            initialReport.value[selectedId.value] = newAttendanceValue;
         }
     }
 }, { deep: true });
@@ -188,6 +199,7 @@ watch([reponerDate, reponerMaeInfo], async ([date, mae]) => {
 const reponerAsistencia = async () => {
     try {
         await updateReportByDate(reponerMaeInfo.value, reponerDate.value, reponerAttendance.value);
+        await handlePointsUpdate(reponerMaeInfo.value.uid, reponerCurrentReport.value, reponerAttendance.value, false);
         toast.add({ severity: 'success', summary: 'Asistencia repuesta', detail: `Se marcó ${reponerAttendance.value === 'A' ? 'Asistencia' : reponerAttendance.value === 'R' ? 'Retraso' : 'Justificado'} para ${reponerMaeInfo.value.name}`, life: 3000 });
         reponerMaeId.value = '';
         reponerMaeInfo.value = null;
@@ -260,11 +272,12 @@ const handleAutoMarkAbsence = async (startTime, endTime, uid) => {
 
     if (activo && diffInMinutes > 45 && now < endDateTime && report.value[uid] === 'F') {
         const maeInfo = maes.value.find(mae => mae.uid === uid);
+        const previousAttendance = report.value[uid];
         report.value[uid] = 'R';
         report.value = { ...report.value };
-        updateReport(maeInfo, 'R');
-        await updatePoints('jackpot', 10);
-        await updatePoints(uid, 8);
+        await updateReport(maeInfo, 'R');
+        await handlePointsUpdate(uid, previousAttendance, 'R', false);
+        initialReport.value[uid] = 'R';
         await nextTick();
     }
     if (activo && diffInMinutes > 20 && diffInMinutes < 40 && report.value[uid] !== 'A' &&
@@ -272,11 +285,12 @@ const handleAutoMarkAbsence = async (startTime, endTime, uid) => {
         report.value[uid] !== 'R' &&
         report.value[uid] !== 'F') {
         const maeInfo = maes.value.find(mae => mae.uid === uid);
+        const previousAttendance = report.value[uid];
         report.value[uid] = 'A';
         report.value = { ...report.value };
-        updateReport(maeInfo, 'A');
-        await updatePoints('jackpot', 10);
-        await updatePoints(uid, 8);
+        await updateReport(maeInfo, 'A');
+        await handlePointsUpdate(uid, previousAttendance, 'A', false);
+        initialReport.value[uid] = 'A';
         await nextTick();
     }
     if (
@@ -289,11 +303,12 @@ const handleAutoMarkAbsence = async (startTime, endTime, uid) => {
         report.value[uid] !== 'C'
       ) {
         const maeInfo = maes.value.find(mae => mae.uid === uid);
+        const previousAttendance = report.value[uid];
         report.value[uid] = 'F';
         report.value = { ...report.value };
-        updateReport(maeInfo, 'F');
-        await updatePoints('jackpot', 10);
-        await updatePoints(uid, -5);
+        await updateReport(maeInfo, 'F');
+        await handlePointsUpdate(uid, previousAttendance, 'F', false);
+        initialReport.value[uid] = 'F';
         await nextTick();
       } 
   

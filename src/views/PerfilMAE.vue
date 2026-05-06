@@ -4,12 +4,13 @@ import { useRoute } from 'vue-router';
 import { getUser, updateUserSubjects, updateUserSchedule, getCurrentUser, startActiveSession,
   stopActiveSession,updateUserProfilePicture,  countAchievedBadges,
   updateUserAchievementBadge, updateUserBackground, updateUserBackgroundImage,
-  updateUserCareer
-,updatePoints, addBackgroundUsers} from '../firebase/db/users';
+  updateUserCareer,
+  addBackgroundUsers } from '../firebase/db/users';
 import { getMajors } from '../firebase/db/majors';
 import { getSubjects } from '../firebase/db/subjects';
-import { addAsesoria, getAsesoriasCountForUserInCurrentSemester,getAsesoriasByUidAndRating,
-  updateAsesoria
+import { addAsesoria, getAsesoriasCountForUserInCurrentSemester, getAsesoriasByUidAndRating,
+  updateAsesoria,
+  updateRatingBonusForMae
  } from '../firebase/db/asesorias';
 import { getStudentReport } from '../firebase/db/attendance';
 import { formatDate } from '@/utils/AnunciosUtils';
@@ -511,11 +512,8 @@ const guardarEvaluacion = async () => {
       comment: comentarioAsesoria.value,
       rating: ratingAsesoria.value,
     });
-    if(ratingAsesoria.value > 3){
-      await updatePoints(maeInfo.value.uid, ratingAsesoria.value * 5)
-      if(comentarioAsesoria.value !== ""){
-        await updatePoints(maeInfo.value.uid, 25)
-      }
+    if (maeInfo.value?.uid) {
+      await updateRatingBonusForMae(maeInfo.value.uid);
     }
 
     ratingAsesoria.value = null;

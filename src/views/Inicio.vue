@@ -1,12 +1,12 @@
 <script setup>
 import { onMounted, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { getCurrentUser, getUser, startActiveSession, stopActiveSession,
-  updatePoints } from '../firebase/db/users';
+import { getCurrentUser, startActiveSession, stopActiveSession } from '../firebase/db/users';
 import { useToast } from 'primevue/usetoast';
 import { getSubjects } from '../firebase/db/subjects';
-import { addAsesoria,getAsesoriasByUidAndRating,
-  updateAsesoria} from '../firebase/db/asesorias';
+import { addAsesoria, getAsesoriasByUidAndRating,
+  updateAsesoria,
+  updateRatingBonusForMae } from '../firebase/db/asesorias';
 import { getMaesNames } from '@/firebase/db/users';
 import { getAnnouncements } from '@/firebase/db/annoucement'; 
 import {
@@ -196,17 +196,13 @@ const guardarEvaluacion = async () => {
 
   isSavingEval.value = true;
   try {
+    const selectedEvaluation = evalInfo.value?.find(asesoria => asesoria.id === selectedAsesoria.value);
     await updateAsesoria(selectedAsesoria.value, {
       comment: comentarioAsesoria.value,
       rating: ratingAsesoria.value,
     });
-    if(ratingAsesoria.value > 3){
-      if (userInfo.value && userInfo.value.uid) {
-         await updatePoints(userInfo.value.uid, ratingAsesoria.value * 5)
-         if(comentarioAsesoria.value !== ""){
-           await updatePoints(userInfo.value.uid, 25)
-         }
-      }
+    if (selectedEvaluation?.peerInfo?.uid) {
+      await updateRatingBonusForMae(selectedEvaluation.peerInfo.uid);
     }
 
     ratingAsesoria.value = null;

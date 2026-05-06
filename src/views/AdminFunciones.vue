@@ -10,12 +10,13 @@ import {
     clearAllUsersWeekSchedule, 
     checkAndUpdateUserRole,  
     updateUserToMae,
-    saveScheduleSubjectsExperience,
     updatePoints,
     clearUsersData,
-    resetAllUsersTotalTimeAndPoints
+    resetAllUsersTotalTimeAndPoints,
+    resetAllUsersLeaderboardPoints
 } from '../firebase/db/users';
-import { deleteOldAsesorias} from '../firebase/db/asesorias'
+import { deleteOldAsesorias, eliminarAsesoriasDePrueba, borrarTodasEvaluaciones } from '../firebase/db/asesorias.js'
+import { revelarEvaluaciones, borrarEvaluaciones } from '../firebase/db/settings'
 
 const toast = useToast();
 const confirm = useConfirm();
@@ -88,6 +89,95 @@ const restartMaes = () => {
     });
 };
 
+const confirmLimpiarPruebas = () => {
+    confirm.require({
+        message: '¿Eliminar todas las asesorías/evaluaciones de prueba de Firestore?',
+        header: 'Limpiar datos de prueba',
+        icon: 'pi pi-trash',
+        acceptLabel: 'Sí, eliminar',
+        rejectLabel: 'Cancelar',
+        acceptClass: 'p-button-danger',
+        accept: async () => {
+            try {
+                const count = await eliminarAsesoriasDePrueba();
+                toast.add({ severity: 'success', summary: 'Éxito', detail: `Se eliminaron ${count} documentos de prueba.`, life: 3000 });
+            } catch (error) {
+                console.error("Error al limpiar pruebas:", error);
+                toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error: ' + error.message, life: 5000 });
+            }
+        }
+    });
+};
+
+const confirmRevealEvaluaciones = () => {
+    confirm.require({
+        message: '¿Estás seguro de revelar todas las evaluaciones pendientes a los MAEs? Las evaluaciones creadas después de este momento permanecerán ocultas hasta la próxima revelación.',
+        header: 'Revelar evaluaciones',
+        icon: 'pi pi-eye',
+        acceptLabel: 'Sí, revelar',
+        rejectLabel: 'Cancelar',
+        acceptClass: 'p-button-success',
+        accept: async () => {
+            try {
+                await revelarEvaluaciones();
+                toast.add({ severity: 'success', summary: 'Éxito', detail: 'Las evaluaciones han sido reveladas a los MAEs.', life: 3000 });
+            } catch (error) {
+                console.error("Error al revelar evaluaciones:", error);
+                toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al revelar las evaluaciones.', life: 3000 });
+            }
+        },
+        reject: () => {
+            toast.add({ severity: 'info', summary: 'Cancelado', detail: 'No se han realizado cambios.', life: 3000 });
+        }
+    });
+};
+
+const confirmDeleteAllEvaluaciones = () => {
+    confirm.require({
+        message: 'Vas a borrar TODAS las evaluaciones (rating y comentario) de la base de datos. Las asesorías en sí se mantienen. Esta acción no se puede deshacer. ¿Continuar?',
+        header: 'Borrar todas las evaluaciones',
+        icon: 'pi pi-exclamation-triangle',
+        acceptLabel: 'Sí, borrar evaluaciones',
+        rejectLabel: 'Cancelar',
+        acceptClass: 'p-button-danger',
+        accept: async () => {
+            let dbRes = { cleared: 0, failed: 0, sampleErrors: [] };
+            let dbError = null;
+            try {
+                dbRes = await borrarTodasEvaluaciones();
+            } catch (error) {
+                dbError = error;
+                console.error("Error al borrar evaluaciones en DB:", error);
+            }
+
+            // Seguro extra: marcar timestamp para que la UI oculte evaluaciones
+            // previas aunque algunas hayan fallado por reglas.
+            try {
+                await borrarEvaluaciones();
+            } catch (error) {
+                console.error("Error al marcar evaluaciones como borradas:", error);
+            }
+
+            if (dbError) {
+                toast.add({ severity: 'error', summary: 'Error', detail: `Error: ${dbError.message || dbError}`, life: 7000 });
+            } else if (dbRes.failed > 0) {
+                const firstErr = dbRes.sampleErrors?.[0]?.reason || 'desconocido';
+                toast.add({
+                    severity: 'warn',
+                    summary: 'Parcial',
+                    detail: `Borradas en DB: ${dbRes.cleared}. Fallidas: ${dbRes.failed} (${firstErr}). El UI se ocultó igualmente.`,
+                    life: 8000
+                });
+            } else {
+                toast.add({ severity: 'success', summary: 'Éxito', detail: `Se borraron ${dbRes.cleared} evaluaciones de la base de datos.`, life: 4000 });
+            }
+        },
+        reject: () => {
+            toast.add({ severity: 'info', summary: 'Cancelado', detail: 'No se han realizado cambios.', life: 3000 });
+        }
+    });
+};
+
 const confirmDeleteAsesorias = () => {
     confirm.require({
         message: '¿Estás seguro eliminar todas las asesorías deñ año pasado?',
@@ -126,6 +216,29 @@ const confirmResetTimeAndPoints = () => {
       } catch (error) {
         console.error("Error al restablecer totalTime/points:", error);
         toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al restablecer totalTime/points.', life: 4000 });
+      }
+    },
+    reject: () => {
+      toast.add({ severity: 'info', summary: 'Cancelado', detail: 'No se han realizado cambios.', life: 3000 });
+    }
+  });
+};
+
+const confirmResetLeaderboardPoints = () => {
+  confirm.require({
+    message: '¿Estás seguro de reiniciar SOLO los puntos del leaderboard a 0? Las horas, asesorías y evaluaciones se conservarán.',
+    header: 'Reiniciar puntos del leaderboard',
+    icon: 'pi pi-exclamation-triangle',
+    acceptLabel: 'Sí, reiniciar puntos',
+    rejectLabel: 'Cancelar',
+    acceptClass: 'p-button-danger',
+    accept: async () => {
+      try {
+        const res = await resetAllUsersLeaderboardPoints({ dryRun: false });
+        toast.add({ severity: 'success', summary: 'Éxito', detail: `Puntos del leaderboard reiniciados: ${res.updated} usuarios.`, life: 4000 });
+      } catch (error) {
+        console.error("Error al reiniciar puntos del leaderboard:", error);
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al reiniciar los puntos del leaderboard.', life: 4000 });
       }
     },
     reject: () => {
@@ -221,29 +334,6 @@ const handleAddUser = async () => {
 };
 
 
-const confirmSaveExperience = () => {
-    confirm.require({
-        message: '¿Estás seguro de que deseas guardar la experiencia  de horario y materias para los usuarios?',
-        header: 'Confirmación de guardar experiencia',
-        icon: 'pi pi-exclamation-circle',
-        acceptLabel: 'Sí, guardar',
-        rejectLabel: 'Cancelar',
-        acceptClass: 'p-button-success',
-        accept: async () => {
-            try {
-                await saveScheduleSubjectsExperience(); 
-                toast.add({ severity: 'success', summary: 'Éxito', detail: 'Experiencia guardada exitosamente.', life: 3000 });
-            } catch (error) {
-                console.error("Error al guardar la experiencia:", error);
-                toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al intentar guardar la experiencia.', life: 3000 });
-            }
-        },
-        reject: () => {
-            toast.add({ severity: 'info', summary: 'Cancelado', detail: 'No se han realizado cambios.', life: 3000 });
-        }
-    });
-};
-
 const userId = ref('');
 const newPoints = ref(null)
 
@@ -318,15 +408,6 @@ const handleUpdatePoints = async () => {
 
         <div class="flex justify-content-center w-full mt-4">
             <Button 
-                label="Guardar experiencia de horario/materias" 
-                icon="pi pi-save" 
-                class="p-button-info p-button-rounded p-button-lg w-full md:w-6"
-                @click="confirmSaveExperience" 
-            />
-        </div>
-
-        <div class="flex justify-content-center w-full mt-4">
-            <Button 
                 label="Actualizar Puntos" 
                 icon="pi pi-user-edit" 
                 class="p-button-experience p-button-rounded p-button-lg w-full md:w-6"
@@ -335,16 +416,43 @@ const handleUpdatePoints = async () => {
         </div>
 
         <div class="flex justify-content-center w-full mt-4">
-            <Button 
-                label="Eliminar las asesorías del semestre pasado" 
-                icon="pi pi-trash" 
+            <Button
+                label="Revelar evaluaciones a MAEs"
+                icon="pi pi-eye"
+                class="p-button-success p-button-rounded p-button-lg w-full md:w-6"
+                @click="confirmRevealEvaluaciones"
+            />
+        </div>
+
+        <div class="flex justify-content-center w-full mt-4">
+            <Button
+                label="Borrar TODAS las evaluaciones"
+                icon="pi pi-eye-slash"
+                class="p-button-danger p-button-rounded p-button-lg w-full md:w-6"
+                @click="confirmDeleteAllEvaluaciones"
+            />
+        </div>
+
+        <div class="flex justify-content-center w-full mt-4">
+            <Button
+                label="Eliminar las asesorías del semestre pasado"
+                icon="pi pi-trash"
                 class="p-button-danger p-button-rounded p-button-lg w-full md:w-6"
                 @click="confirmDeleteAsesorias" 
             />
         </div>
 
         <div class="flex justify-content-center w-full mt-4">
-            <Button 
+            <Button
+                label="Reiniciar puntos del leaderboard"
+                icon="pi pi-refresh"
+                class="p-button-danger p-button-rounded p-button-lg w-full md:w-6"
+                @click="confirmResetLeaderboardPoints"
+            />
+        </div>
+
+        <div class="flex justify-content-center w-full mt-4">
+            <Button
                 label="Eliminar horas y puntos de todos los usuarios" 
                 icon="pi pi-refresh" 
                 class="p-button-warning p-button-rounded p-button-lg w-full md:w-6"

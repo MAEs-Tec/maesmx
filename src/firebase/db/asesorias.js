@@ -6,16 +6,24 @@ import {
     where,
     getDocs,
     Timestamp,
-    updateDoc, 
+    updateDoc,
     doc,
     deleteDoc,
+    getDoc,
 } from 'firebase/firestore';
 import { 
     updatePoints,
-    updateUserAchievementBadge
+    updateRatingBonusPoints
 } from './users'; 
 import { invalidateCacheTags, withCache } from '../cache/cache';
 import { CACHE_TAGS, CACHE_TTL_MS, cacheKeys } from '../cache/config';
+import {
+    calculateRatingBonus,
+    getAdvisoryPointsReason,
+    getIndividualAdvisoryPoints,
+    POINTS_RULES,
+    toMillis
+} from "../../utils/PointsUtils";
 
 const SEMESTER_START = new Date('2024-08-05');
 
@@ -31,8 +39,8 @@ function normalizeDateKey(date) {
     return String(date);
 }
 
-function getCurrentSemesterRange() {
-    const now = new Date();
+function getCurrentSemesterRange(referenceDate = new Date()) {
+    const now = referenceDate;
     const currentYear = now.getFullYear();
 
     if (now.getMonth() < 6) {
@@ -53,16 +61,12 @@ async function invalidateAsesoriaCaches() {
 }
 
 function timestampToMs(value) {
-    if (!value) return null;
-    if (typeof value?.toMillis === 'function') return value.toMillis();
-    if (typeof value?.toDate === 'function') return value.toDate().getTime();
-    if (value instanceof Date) return value.getTime();
-    if (typeof value === 'string') return new Date(value).getTime();
-    return null;
+    return toMillis(value);
 }
 
 // Registra la asesoría del mae
 export async function addAsesoria(maeInfo, userInfo, subject, comment, rating) {
+    const createdAt = Timestamp.now();
     // Changing to use payload instead to debug it
     const payload = {
         peerInfo: {
@@ -88,15 +92,21 @@ export async function addAsesoria(maeInfo, userInfo, subject, comment, rating) {
         rating,
         comment,
         subject,
-        date: Timestamp.now()
+        duplicate: false,
+        pointsAwarded: 0,
+        pointsReason: null,
+        date: createdAt
     };
 
     // Debug para ver q se anden guardando los datos correctos
     //console.log("Saving asesoria:", payload);
 
-    await addDoc(collection(firestoreDB, "asesorias"), payload);
+    const docRef = await addDoc(collection(firestoreDB, "asesorias"), payload);
 
-    updateExperienceAsesorias(maeInfo.uid, userInfo.uid, subject.id, Timestamp.now());
+    await updateExperienceAsesorias(maeInfo.uid, userInfo.uid, subject.id, createdAt, docRef.id);
+    if (rating != null) {
+        await updateRatingBonusForMae(maeInfo.uid);
+    }
     await invalidateAsesoriaCaches();
     return;
 }
@@ -259,59 +269,121 @@ async function updateAdvisoryDuplicateField(advisoryDate, isDuplicate) {
 }
 
 
-// Función para actualizar puntos basados en asesorías similares
-export async function updateExperienceAsesorias(peerUid, userUid, subjectId, advisoryDate) {
+// Función para actualizar puntos basados en el nuevo sistema de asesorías.
+export async function updateExperienceAsesorias(peerUid, userUid, subjectId, advisoryDate, advisoryId = null) {
     try {
-        if (!(advisoryDate instanceof Date)) {
-            if (advisoryDate.toDate) {
-                advisoryDate = advisoryDate.toDate();
-            } else {
-                advisoryDate = new Date(advisoryDate); 
+        const advisoryMs = toMillis(advisoryDate);
+        if (!advisoryMs) return 0;
+
+        if (advisoryId) {
+            const advisoryRef = doc(firestoreDB, "asesorias", advisoryId);
+            const advisorySnap = await getDoc(advisoryRef);
+            const currentData = advisorySnap.exists() ? advisorySnap.data() : null;
+            if (typeof currentData?.pointsAwarded === 'number' && currentData.pointsAwarded > 0) {
+                return currentData.pointsAwarded;
             }
         }
 
-        const today = Timestamp.now().toDate();
-        const startOfDay = new Date(today);
-        startOfDay.setHours(0, 0, 0, 0); 
-        const endOfDay = new Date(today);
-        endOfDay.setHours(23, 59, 59, 999); 
-
         const asesoriasRef = collection(firestoreDB, "asesorias");
-
-        const q = query(
-            asesoriasRef,
-            where("date", ">=", startOfDay),
-            where("date", "<=", endOfDay)
-        );
-
-
+        const q = query(asesoriasRef, where("peerInfo.uid", "==", peerUid));
         const querySnapshot = await getDocs(q);
-        const asesorias = querySnapshot.docs.map(doc => doc.data());
-        const similarAdvisories = asesorias.filter(ad => {
-            const adDate = ad.date.toDate();
-            return ad.peerInfo.uid === peerUid &&
-                ad.userInfo.uid === userUid &&
-                ad.subject.id === subjectId && 
-                Math.abs(adDate.getTime() - advisoryDate.getTime()) <= 2 * 60 * 60 * 1000;
+
+        const previousAdvisories = querySnapshot.docs
+            .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
+            .filter((advisory) => {
+                const dateMs = toMillis(advisory.date);
+                return advisory.id !== advisoryId &&
+                    !advisory._test &&
+                    !advisory._type &&
+                    advisory.userInfo?.uid === userUid &&
+                    dateMs !== null &&
+                    dateMs < advisoryMs;
+            });
+
+        const isFirstTime = previousAdvisories.length === 0;
+        const antiFarmingWindowMs = POINTS_RULES.advisory.antiFarmingWindowHours * 60 * 60 * 1000;
+        const isWithinAntiFarmingWindow = previousAdvisories.some((advisory) => {
+            const dateMs = toMillis(advisory.date);
+            const diff = advisoryMs - dateMs;
+            return diff > 0 && diff < antiFarmingWindowMs;
         });
-        const ultimoElemento = asesorias[asesorias.length - 1];
-        if (similarAdvisories.length > 1) {
-            await updatePoints(peerUid, -150);
-            await updateAdvisoryDuplicateField(ultimoElemento.date, true );
-            await updateUserAchievementBadge(userUid, "18");
-        } else {
-            await updateAdvisoryDuplicateField(ultimoElemento.date, false );
-            if(subjectId === "MAE"){
-                await updatePoints(peerUid, 15); 
-            }else{
-                await updatePoints(peerUid, 60); 
-            }
-            
+        const pointsAwarded = getIndividualAdvisoryPoints({
+            isFirstTime,
+            isWithinAntiFarmingWindow
+        });
+        const pointsReason = getAdvisoryPointsReason({
+            isFirstTime,
+            isWithinAntiFarmingWindow
+        });
+
+        await updatePoints(peerUid, pointsAwarded);
+
+        if (advisoryId) {
+            await updateDoc(doc(firestoreDB, "asesorias", advisoryId), {
+                duplicate: false,
+                pointsAwarded,
+                pointsReason,
+                pointsSubjectId: subjectId,
+                pointsAwardedAt: Timestamp.now()
+            });
         }
         await invalidateAsesoriaCaches();
 
+        return pointsAwarded;
     } catch (error) {
         console.error("Error actualizando la experiencia de asesorías:", error);
+        return 0;
+    }
+}
+
+export async function getEvaluacionesRecibidas(uid, revealedAt = undefined, clearedAt = null, options = {}) {
+    try {
+        const includeTests = options.includeTests === true;
+        const asesorias = await getAsesoriasByUid(uid, options);
+
+        return (asesorias ?? [])
+            .filter(a => a.rating != null && a.duplicate !== true && (includeTests || !a._test))
+            .filter(a => {
+                const dateMs = toMillis(a.date);
+                if (includeTests && a._test) return true;
+                if (clearedAt && dateMs !== null && dateMs <= toMillis(clearedAt)) return false;
+                if (revealedAt === undefined) return true;
+                if (!revealedAt) return false;
+                return dateMs !== null && dateMs <= toMillis(revealedAt);
+            })
+            .sort((a, b) => (toMillis(b.date) || 0) - (toMillis(a.date) || 0));
+    } catch (error) {
+        console.error("Error fetching evaluaciones recibidas:", error);
+        return [];
+    }
+}
+
+export async function updateRatingBonusForMae(uid, referenceDate = new Date()) {
+    try {
+        if (!uid) return null;
+
+        const { start, end } = getCurrentSemesterRange(referenceDate);
+        const startMs = start.getTime();
+        const endMs = end.getTime();
+        const asesorias = await getAsesoriasByUid(uid);
+        const ratings = (asesorias ?? [])
+            .filter(a => {
+                const dateMs = toMillis(a.date);
+                return a.rating != null &&
+                    a.duplicate !== true &&
+                    !a._test &&
+                    !a._type &&
+                    dateMs !== null &&
+                    dateMs >= startMs &&
+                    dateMs <= endMs;
+            })
+            .map(a => a.rating);
+
+        const bonus = calculateRatingBonus(ratings);
+        return await updateRatingBonusPoints(uid, bonus);
+    } catch (error) {
+        console.error("Error actualizando bonus de rating:", error);
+        return null;
     }
 }
 
@@ -324,6 +396,79 @@ export async function getCommentsByUid(uid, options = {}) {
         console.error("Error fetching asesorias by UID: ", error);
         return [];
     }
+}
+
+export async function crearEvaluacionDePrueba(maeInfo) {
+    const payload = {
+        peerInfo: {
+            uid: maeInfo.uid,
+            name: maeInfo.name,
+            career: maeInfo.career || 'N/A',
+            profilePictureUrl: maeInfo.photoURL || maeInfo.profilePictureUrl || '',
+            area: maeInfo.area || '',
+            campus: maeInfo.campus || ''
+        },
+        userInfo: {
+            uid: 'test-student-001',
+            name: 'Estudiante de Prueba',
+            career: 'ITC',
+            profilePictureUrl: '',
+            area: 'CIS',
+            campus: 'MTY',
+            role: 'user'
+        },
+        subject: {
+            id: 'TEST001',
+            area: 'CIS',
+            name: 'Materia de Prueba'
+        },
+        rating: 5,
+        comment: `Evaluación de prueba creada el ${new Date().toLocaleString('es-MX')}.`,
+        duplicate: false,
+        date: Timestamp.now(),
+        _test: true
+    };
+
+    const docRef = await addDoc(collection(firestoreDB, "asesorias"), payload);
+    await invalidateAsesoriaCaches();
+    return { id: docRef.id, ...payload };
+}
+
+export async function eliminarAsesoriasDePrueba() {
+    const asesoriasRef = collection(firestoreDB, "asesorias");
+    const idsToDelete = new Set();
+
+    try {
+        const qTest = query(asesoriasRef, where("_test", "==", true));
+        const snapTest = await getDocs(qTest);
+        snapTest.docs.forEach(d => idsToDelete.add(d.id));
+    } catch (e) {
+        console.error("Error consultando por _test:", e);
+    }
+
+    try {
+        const qUid = query(asesoriasRef, where("userInfo.uid", "==", "test-student-001"));
+        const snapUid = await getDocs(qUid);
+        snapUid.docs.forEach(d => idsToDelete.add(d.id));
+    } catch (e) {
+        console.error("Error consultando por userInfo.uid:", e);
+    }
+
+    let deleted = 0;
+    const results = await Promise.allSettled(
+        [...idsToDelete].map(id => deleteDoc(doc(firestoreDB, "asesorias", id)))
+    );
+    results.forEach((r, i) => {
+        if (r.status === "fulfilled") {
+            deleted++;
+        } else {
+            console.error(`Fallo borrando ${[...idsToDelete][i]}:`, r.reason);
+        }
+    });
+
+    await invalidateAsesoriaCaches();
+    console.log(`eliminarAsesoriasDePrueba: ${deleted}/${idsToDelete.size} borradas`);
+    return deleted;
 }
 
 
@@ -472,6 +617,43 @@ export async function deleteOldAsesorias() {
         console.error("Error al eliminar asesorías antiguas: ", error);
         throw error;
     }
+}
+
+export async function borrarTodasEvaluaciones() {
+    const asesoriasRef = collection(firestoreDB, "asesorias");
+    const snap = await getDocs(asesoriasRef);
+    if (snap.empty) return { scanned: 0, cleared: 0, failed: 0, sampleErrors: [] };
+
+    const docs = snap.docs.filter(d => {
+        const data = d.data();
+        return !data._type && data.rating != null;
+    });
+
+    const results = await Promise.allSettled(
+        docs.map(d => updateDoc(d.ref, { rating: null, comment: '' }))
+    );
+
+    let cleared = 0;
+    let failed = 0;
+    const sampleErrors = [];
+    results.forEach((r, i) => {
+        if (r.status === 'fulfilled') {
+            cleared++;
+        } else {
+            failed++;
+            if (sampleErrors.length < 3) {
+                sampleErrors.push({ id: docs[i].id, reason: r.reason?.message || String(r.reason) });
+            }
+        }
+    });
+
+    await invalidateAsesoriaCaches();
+    if (failed > 0) {
+        console.error(`borrarTodasEvaluaciones: fallaron ${failed}/${docs.length}. Ejemplos:`, sampleErrors);
+    }
+    console.log(`borrarTodasEvaluaciones: ${cleared} limpiadas en DB, ${failed} fallidas`);
+
+    return { scanned: snap.size, cleared, failed, sampleErrors };
 }
 
 export async function getAsesorias(startDate = null, endDate = null, options = {}) {

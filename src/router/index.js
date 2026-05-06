@@ -107,42 +107,66 @@ const router = createRouter({
                 {
                     path: '/coordi',
                     name: 'coordi',
-                    component: () => import('@/views/Coordi.vue')
+                    component: () => import('@/views/Coordi.vue'),
+                    meta: {
+                        roles: ['admin', 'coordi', 'tec']
+                    }
                 },
                 {
                     path: '/gestionAnuncios',
                     name: 'gestionAnuncios',
-                    component: () => import('@/views/GestionAnuncios.vue')
+                    component: () => import('@/views/GestionAnuncios.vue'),
+                    meta: {
+                        roles: ['admin', 'coordi', 'tec']
+                    }
                 },
                 {
                     path: '/admin/asesorias',
                     name: 'adminasesorias',
-                    component: () => import('@/views/AdminAsesorias.vue')
+                    component: () => import('@/views/AdminAsesorias.vue'),
+                    meta: {
+                        roles: ['admin', 'tec']
+                    }
                 },
                 {
                     path: '/admin/usuarios',
                     name: 'adminusuarios',
-                    component: () => import('@/views/AdminUsers.vue')
+                    component: () => import('@/views/AdminUsers.vue'),
+                    meta: {
+                        roles: ['admin', 'tec']
+                    }
                 },
                 {
                     path: '/admin/materias',
                     name: 'adminmaterias',
-                    component: () => import('@/views/AdminSubjects.vue')
+                    component: () => import('@/views/AdminSubjects.vue'),
+                    meta: {
+                        roles: ['admin', 'tec']
+                    }
                 },
                 {
                     path: '/admin/funciones',
                     name: 'adminfunciones',
-                    component: () => import('@/views/AdminFunciones.vue')
+                    component: () => import('@/views/AdminFunciones.vue'),
+                    meta: {
+                        roles: ['admin', 'tec']
+                    }
                 },
                 {
                     path: '/admin/dashboard',
                     name: 'dashboard',
-                    component: () => import('@/views/Dashboard.vue')
+                    component: () => import('@/views/Dashboard.vue'),
+                    meta: {
+                        roles: ['admin', 'tec']
+                    }
                 },
                 {
                     path: '/admin/historialAsistencia',
                     name: 'asistencia',
-                    component: () => import('@/views/AdminHistorialAsistencias.vue')
+                    component: () => import('@/views/AdminHistorialAsistencias.vue'),
+                    meta: {
+                        roles: ['admin']
+                    }
                 },
                 /* 
                     TEMPLATE

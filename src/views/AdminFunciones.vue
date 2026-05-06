@@ -15,7 +15,7 @@ import {
     resetAllUsersTotalTimeAndPoints,
     resetAllUsersLeaderboardPoints
 } from '../firebase/db/users';
-import { deleteOldAsesorias, eliminarAsesoriasDePrueba, borrarTodasEvaluaciones } from '../firebase/db/asesorias.js'
+import { deleteOldAsesorias, borrarTodasEvaluaciones } from '../firebase/db/asesorias.js'
 import { revelarEvaluaciones, borrarEvaluaciones } from '../firebase/db/settings'
 
 const toast = useToast();
@@ -85,26 +85,6 @@ const restartMaes = () => {
         },
         reject: () => {
             toast.add({ severity: 'info', summary: 'Cancelado', detail: 'No se han realizado cambios.', life: 3000 });
-        }
-    });
-};
-
-const confirmLimpiarPruebas = () => {
-    confirm.require({
-        message: '¿Eliminar todas las asesorías/evaluaciones de prueba de Firestore?',
-        header: 'Limpiar datos de prueba',
-        icon: 'pi pi-trash',
-        acceptLabel: 'Sí, eliminar',
-        rejectLabel: 'Cancelar',
-        acceptClass: 'p-button-danger',
-        accept: async () => {
-            try {
-                const count = await eliminarAsesoriasDePrueba();
-                toast.add({ severity: 'success', summary: 'Éxito', detail: `Se eliminaron ${count} documentos de prueba.`, life: 3000 });
-            } catch (error) {
-                console.error("Error al limpiar pruebas:", error);
-                toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error: ' + error.message, life: 5000 });
-            }
         }
     });
 };

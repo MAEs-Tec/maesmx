@@ -1,17 +1,13 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useToast } from 'primevue/usetoast';
 import { getCurrentUser } from '../firebase/db/users';
-import { crearEvaluacionDePrueba, getEvaluacionesRecibidas } from '../firebase/db/asesorias';
+import { getEvaluacionesRecibidas } from '../firebase/db/asesorias';
 import { getEvaluationsRevealedAt, getEvaluationsClearedAt } from '../firebase/db/settings';
 import { getSubjectColor } from '@/utils/HorarioUtils';
 
-const toast = useToast();
 const userInfo = ref(null);
 const asesorias = ref([]);
 const isLoading = ref(true);
-const isCreatingTestEvaluation = ref(false);
-const includeTestEvaluations = ref(false);
 const revealedAt = ref(null);
 const clearedAt = ref(null);
 
@@ -50,26 +46,7 @@ const getEmoji = (id) => {
 
 const recargar = async () => {
   clearedAt.value = await getEvaluationsClearedAt();
-  asesorias.value = await getEvaluacionesRecibidas(userInfo.value.uid, revealedAt.value, clearedAt.value, {
-    includeTests: includeTestEvaluations.value
-  });
-};
-
-const crearPrueba = async () => {
-  if (!userInfo.value) return;
-
-  isCreatingTestEvaluation.value = true;
-  try {
-    includeTestEvaluations.value = true;
-    await crearEvaluacionDePrueba(userInfo.value);
-    await recargar();
-    toast.add({ severity: 'success', summary: 'Prueba creada', detail: 'Se agregó una evaluación de prueba.', life: 3000 });
-  } catch (error) {
-    console.error('Error creando evaluación de prueba:', error);
-    toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo crear la evaluación de prueba.', life: 4000 });
-  } finally {
-    isCreatingTestEvaluation.value = false;
-  }
+  asesorias.value = await getEvaluacionesRecibidas(userInfo.value.uid, revealedAt.value, clearedAt.value);
 };
 
 onMounted(async () => {
@@ -85,13 +62,6 @@ onMounted(async () => {
   <div>
     <div class="mb-5 flex flex-column sm:flex-row sm:align-items-center sm:justify-content-between gap-3">
       <h1 class="text-6xl font-bold text-center sm:text-left m-0">Mis evaluaciones</h1>
-      <Button
-        label="Crear evaluación de prueba"
-        icon="pi pi-plus"
-        class="p-button-warning p-button-rounded w-full sm:w-auto"
-        :loading="isCreatingTestEvaluation"
-        @click="crearPrueba"
-      />
     </div>
 
     <div v-if="isLoading" class="text-center">
@@ -123,7 +93,6 @@ onMounted(async () => {
             <div class="flex-1">
               <div class="flex align-items-center gap-2">
                 <p class="font-bold m-0">Estudiante anónimo</p>
-                <Tag v-if="asesoria._test" value="Prueba" severity="warning" />
               </div>
               <p class="text-sm text-color-secondary m-0">
                 {{ asesoria.subject?.id || '' }}

@@ -1,14 +1,19 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { FilterMatchMode } from 'primevue/api';
-import { getSubjects, addSubject, deleteSubject } from '../firebase/db/subjects';
+import { getSubjects, addSubject, deleteSubject, upsertSubjects } from '../firebase/db/subjects';
 import { getMaes } from '../firebase/db/users';
 import { topOptions, areaOptions } from '@/utils/PerfilUtils';
+import * as XLSX from 'xlsx';
 
 const loading = ref(true);
 const subjects = ref([]);
 const showAddDialog = ref(false);
 const editing = ref(false);
+const importInput = ref(null);
+const importing = ref(false);
+const importMessage = ref('');
+const importError = ref(false);
 
 const roles = ref(["mae", "coordi", "subjectCoordi", "admin", "publi", "tec"]);
 
@@ -108,6 +113,65 @@ const getAbreviacion = (abreviacion) => {
   }
 };
 
+const parseBoolean = (value) => typeof value === 'boolean' ? value : Number(value) === 1;
+
+const normalizeHeader = (header) => String(header ?? '').replace(/^\uFEFF/, '').trim()
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+const importSubjects = async (event) => {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+  importing.value = true;
+  importMessage.value = '';
+  importError.value = false;
+
+  try {
+    const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    const expectedHeaders = ['area', 'clave', 'nombre', 'semestre', 'top', 'intensiva'];
+    const actualHeaders = Object.keys(rows[0] || {}).map(normalizeHeader);
+    const missingHeaders = expectedHeaders.filter((header) => !actualHeaders.includes(header));
+    if (missingHeaders.length) throw new Error(`Faltan las columnas: ${missingHeaders.join(', ')}`);
+
+    const existingIds = new Set((subjects.value || []).map((subject) => String(subject.id).trim().toUpperCase()));
+    const importedById = new Map();
+    let invalidRows = 0;
+
+    rows.forEach((rawRow) => {
+      const row = Object.fromEntries(Object.entries(rawRow).map(([key, value]) => [normalizeHeader(key), value]));
+      const id = String(row.clave ?? '').trim().toUpperCase();
+      const name = String(row.nombre ?? '').trim();
+      const area = String(row.area ?? '').trim().toUpperCase();
+      const semester = Number(row.semestre);
+      const validFlags = [row.top, row.intensiva].every((value) => typeof value === 'boolean' || [0, 1].includes(Number(value)));
+
+      if (!id || !name || !area || !Number.isFinite(semester) || !validFlags) {
+        invalidRows++;
+        return;
+      }
+
+      importedById.set(id, { id, name, area, semester, top: parseBoolean(row.top), intensiva: parseBoolean(row.intensiva) });
+    });
+
+    const importedSubjects = [...importedById.values()];
+    if (!importedSubjects.length) throw new Error('El archivo no contiene materias válidas. Usa 0 o 1 para Top e Intensiva.');
+    const updated = importedSubjects.filter((subject) => existingIds.has(subject.id)).length;
+    const created = importedSubjects.length - updated;
+    await upsertSubjects(importedSubjects);
+    subjects.value = await getSubjects() || [];
+    await countMaesPerSubject();
+    importMessage.value = `Importación terminada: ${created} creadas, ${updated} actualizadas${invalidRows ? ` y ${invalidRows} filas omitidas` : ''}.`;
+  } catch (error) {
+    console.error('Error al importar materias:', error);
+    importError.value = true;
+    importMessage.value = error.message || 'No se pudo importar el archivo.';
+  } finally {
+    importing.value = false;
+  }
+};
+
 
 onMounted(async () => {
   subjects.value = await getSubjects();
@@ -122,10 +186,17 @@ onMounted(async () => {
 
     <div class="sm:flex sm:justify-content-between mb-2 sm:mb-5">
         <h1 class="text-black text-6xl font-bold text-center m-0 sm:text-left">Materias</h1>
-        <Button label="Agregar Materia" icon="pi pi-plus-circle" severity="info" size="large" class="ml-5 bg-0D294C" @click="openAddDialog" />
+        <div class="flex gap-2 justify-content-center mt-3 sm:mt-0">
+          <input ref="importInput" type="file" accept=".csv,.xls,.xlsx" class="hidden" @change="importSubjects" />
+          <Button label="Subir CSV o Excel" icon="pi pi-upload" severity="secondary" size="large" :loading="importing" @click="importInput && importInput.click()" />
+          <Button label="Agregar Materia" icon="pi pi-plus-circle" severity="info" size="large" class="bg-0D294C" @click="openAddDialog" />
+        </div>
     </div>
 
     <div class="card mb-0">
+        <Message v-if="importMessage" :severity="importError ? 'error' : 'success'" :closable="true" @close="importMessage = ''" class="mb-3">
+          {{ importMessage }}
+        </Message>
         <div class="flex flex-col gap-2 my-4">
             <InputText v-model="subjectTableFilter['global'].value" placeholder="Buscar materia por nombre o código" class="w-full" />
             <InputText v-model="subjectTableFilter['semester'].value"  placeholder="Semestre" class="" />

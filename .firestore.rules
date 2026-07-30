@@ -98,12 +98,17 @@ service cloud.firestore {
         allow write: if request.auth.token.role == "admin";
       }
       
-      // === SUBJECTS ===
-      match /subjects/{docId} {
-        allow read: if true;           
-        allow write: if request.auth.token.role == "admin";
-  			allow create, update, delete: if request.auth.token.role == "admin";
-      }
+    }
+
+    // === SUBJECTS ===
+    // User documents are keyed by the email prefix (for example, users/student
+    // for student@tec.mx), not by Firebase Auth UID. Roles also live in those
+    // documents rather than custom claims and must match the router roles.
+    match /schools/{schoolId}/subjects/{docId} {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null
+                    && request.auth.token.email != null
+                    && get(/databases/$(database)/documents/users/$(request.auth.token.email.split('@')[0])).data.role in ["admin", "tec"];
     }
 
     // === DEFAULT DENY ===

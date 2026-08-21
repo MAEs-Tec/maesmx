@@ -53,75 +53,63 @@ async function fetchTodaysReportFresh() {
     }
 }
 
-// Update the MAE attendance report w corresponding value 
+// Quita los campos undefined: Firestore rechaza el documento completo si recibe uno
+function buildAttendancePayload(userInfo, report) {
+    const uid = userInfo?.uid ?? userInfo?.id;
+
+    if (!uid) {
+        throw new Error('No se pudo identificar al MAE (uid faltante)');
+    }
+
+    const payload = { id: uid, report };
+
+    if (userInfo.email !== undefined) payload.email = userInfo.email;
+    if (userInfo.name !== undefined) payload.name = userInfo.name;
+    if (userInfo.totalTime !== undefined) payload.totalTime = userInfo.totalTime;
+
+    return { uid, payload };
+}
+
+async function writeAttendance(userInfo, dateString, report) {
+    const { uid, payload } = buildAttendancePayload(userInfo, report);
+
+    // El doc raiz de la fecha debe existir para que la fecha aparezca en los listados
+    const dateDocRef = doc(firestoreDB, "attendance", dateString);
+    await setDoc(dateDocRef, { initialized: true }, { merge: true });
+
+    const reportRef = doc(firestoreDB, "attendance", dateString, "report", uid);
+    await setDoc(reportRef, payload, { merge: true }); // merge para conservar otros campos
+
+    await invalidateAttendanceForDate(dateString);
+}
+
+// Update the MAE attendance report w corresponding value
 export async function updateReport(userInfo, report) {
     try {
-        // Defensive checks + unwrap reactive proxy
-        const uid = userInfo?.uid ?? userInfo?.id ?? userInfo?.value?.uid;
-
-        console.log(uid, report, "Updating report")
-        const reportRef = doc(firestoreDB, "attendance", getCurrentDateFormatted(), "report", userInfo.uid); // Final de semestre, quitar report de aca y luego when accessing data para que sean menos datos
-
-        // Stores less data for attendance
-        const dataUpload = {
-            id: userInfo.uid, // Student id
-            email: userInfo.email, // Student email, helps search data within firebase
-            name: userInfo.name, 
-            totalTime: userInfo.totalTime, 
-            report: report, // (A, R, F, J)
-        }
-
-        console.log('Writing to Firestore path:', reportRef.path, 'payload:', dataUpload);
-        
-        const result = await setDoc(reportRef, dataUpload, { merge : true }); // Use merge so that it can keep otehr fields if write more data
-        await invalidateAttendanceForDate(getCurrentDateFormatted());
-        return result;
+        await writeAttendance(userInfo, getCurrentDateFormatted(), report);
     } catch (error) {
         console.error("Error updating the report: ", error);
-        return [];
+        throw error; // Se propaga para que la vista avise y no de por guardado algo que fallo
     }
 }
 
 // Update attendance report for a specific date (used for makeup attendance)
 export async function updateReportByDate(userInfo, date, report) {
     try {
-        const dateString = formatDateString(date);
-
-        const dateDocRef = doc(firestoreDB, "attendance", dateString);
-        await setDoc(dateDocRef, { initialized: true }, { merge: true });
-
-        const reportRef = doc(firestoreDB, "attendance", dateString, "report", userInfo.uid);
-        await setDoc(reportRef, {
-            id: userInfo.uid,
-            email: userInfo.email,
-            name: userInfo.name,
-            totalTime: userInfo.totalTime,
-            report: report,
-        }, { merge: true });
-        await invalidateAttendanceForDate(dateString);
+        await writeAttendance(userInfo, formatDateString(date), report);
     } catch (error) {
         console.error("Error updating report by date: ", error);
+        throw error;
     }
 }
 
 // To get date info
 export async function addRegister(userInfo, date) {
     try {
-        const dateString = formatDateString(date);
-
-        // Root date doc is created w dummy field
-        const dateDocRef = doc(firestoreDB, "attendance", dateString);
-        await setDoc(dateDocRef, { initialized: true }, { merge: true });
-
-        const reportRef = doc(firestoreDB, "attendance", dateString, "report", userInfo.uid);
-        await setDoc(reportRef, {
-            ...userInfo,
-            report: 'RR'
-        });
-        await invalidateAttendanceForDate(dateString);
-
+        await writeAttendance(userInfo, formatDateString(date), 'RR');
     } catch (error) {
         console.error("Error updating the report: ", error);
+        throw error;
     }
 }
 

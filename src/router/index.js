@@ -109,7 +109,7 @@ const router = createRouter({
                     name: 'coordi',
                     component: () => import('@/views/Coordi.vue'),
                     meta: {
-                        roles: ['admin', 'coordi','tec']
+                        roles: ['admin', 'coordi', 'tec']
                     }
                 },
                 {
@@ -117,7 +117,7 @@ const router = createRouter({
                     name: 'gestionAnuncios',
                     component: () => import('@/views/GestionAnuncios.vue'),
                     meta: {
-                        roles: ['admin', 'coordi','tec']
+                        roles: ['admin', 'coordi', 'tec']
                     }
                 },
                 {
@@ -125,7 +125,7 @@ const router = createRouter({
                     name: 'adminasesorias',
                     component: () => import('@/views/AdminAsesorias.vue'),
                     meta: {
-                        roles: ['admin','tec']
+                        roles: ['admin', 'tec']
                     }
                 },
                 {
@@ -133,7 +133,7 @@ const router = createRouter({
                     name: 'adminusuarios',
                     component: () => import('@/views/AdminUsers.vue'),
                     meta: {
-                        roles: ['admin' ,'tec']
+                        roles: ['admin', 'tec']
                     }
                 },
                 {
@@ -141,7 +141,7 @@ const router = createRouter({
                     name: 'adminmaterias',
                     component: () => import('@/views/AdminSubjects.vue'),
                     meta: {
-                        roles: ['admin','tec']
+                        roles: ['admin', 'tec']
                     }
                 },
                 {
@@ -149,7 +149,7 @@ const router = createRouter({
                     name: 'adminfunciones',
                     component: () => import('@/views/AdminFunciones.vue'),
                     meta: {
-                        roles: ['admin','tec']
+                        roles: ['admin', 'tec']
                     }
                 },
                 {
@@ -157,10 +157,9 @@ const router = createRouter({
                     name: 'dashboard',
                     component: () => import('@/views/Dashboard.vue'),
                     meta: {
-                        roles: ['admin','tec']
+                        roles: ['admin', 'tec']
                     }
                 },
-                /* Adding path for historial */
                 {
                     path: '/admin/historialAsistencia',
                     name: 'asistencia',

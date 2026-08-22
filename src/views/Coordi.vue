@@ -1,17 +1,17 @@
 <script setup>
-import { getSubjectColor, pointsRules } from '@/utils/CoordiUtils';
+import { getSubjectColor } from '@/utils/CoordiUtils';
 import { ref, onMounted, watch } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import { getTodaysMae, getUser, incrementTotalTime, getCurrentUser } from '@/firebase/db/users';
 import { addRegister, getTodaysReport, updateReport, updateReportByDate, getReportByDate } from '../firebase/db/attendance';
 import { getUsersWithActiveSession, updatePoints } from '@/firebase/db/users';
 import { nextTick } from 'vue';
+import { getAttendancePointsDelta } from '@/utils/PointsUtils';
 
 const toast = useToast();
 const loading = ref(true);
 const maes = ref(null);
 const report = ref(null);
-const selectedId = ref(null);
 const userInfo = ref(null);
 const ubicacion = ref(true);
 
@@ -72,12 +72,15 @@ const checkLocationAndAttendance = () => {
             resolve(true);
           }
         }, (error) => {
-          console.error("Error al obtener la ubicación: ", error);
-          reject(error);
-        });
+          // No se bloquea el registro: solo se avisa en consola y se continua
+          console.warn("Error al obtener la ubicación: ", error);
+          ubicacion.value = true;
+          resolve(true);
+        }, { timeout: 10000, maximumAge: 60000 }); // sin timeout la promesa se puede quedar colgada
       } else {
-        console.log("La geolocalización no está disponible en este navegador.");
-        reject(new Error("La geolocalización no está disponible"));
+        console.warn("La geolocalización no está disponible en este navegador.");
+        ubicacion.value = true;
+        resolve(true);
       }
     } else {
       console.log('El usuario es admin y no requiere comprobación de ubicación.');
@@ -88,52 +91,15 @@ const checkLocationAndAttendance = () => {
   });
 };
 
-const handlePointsUpdate = async (uid, newAttendance) => {
-    const points = pointsRules[newAttendance] || 0;
-    await updatePoints(uid, points); 
-   
-    if (newAttendance !== "C") {
+const handlePointsUpdate = async (uid, previousAttendance, newAttendance, showToast = true) => {
+    const pointsDelta = getAttendancePointsDelta(previousAttendance, newAttendance);
+    if (pointsDelta !== 0) {
+        await updatePoints(uid, pointsDelta);
+    }
+    if (showToast) {
         toast.add({ severity: 'success', summary: 'Se ha actualizado su asistencia ', detail: 'Se ha actualizo de forma correcta', life: 3000 });
     }
 };
-
-watch(report, async (newValue, oldValue) => {
-    if (oldValue) {
-        await checkLocationAndAttendance();
-     
-        if (!ubicacion.value) {
-            console.error('No se pudo pasar asistencia');
-            return;
-        }
-
-        if (!userInfo.value) {
-            console.error('userInfo is undefined');
-            return;
-        }
-        
-        const maeInfo = maes.value.find(mae => mae.uid === selectedId.value);
-        const uidUser = userInfo.value.uid;
-
-        if (maeInfo && maeInfo.uid === uidUser && maeInfo.role === "coordi")  {
-            toast.add({ 
-                severity: 'error', 
-                summary: 'Error', 
-                detail: 'No te puedes poner autoasistencia', 
-                life: 5000 
-            });
-            return;
-        } else {
-            const previousAttendance = initialReport.value[selectedId.value];
-            const newAttendanceValue = newValue[selectedId.value];
-            updateReport(maeInfo, newAttendanceValue);
-
-            if (previousAttendance === undefined) {
-                handlePointsUpdate(maeInfo.uid, newAttendanceValue);
-                handlePointsUpdate(userInfo.value.uid, "C");
-            }
-        }
-    }
-}, { deep: true });
 
 const showDialogRegister = ref(false);
 const showDialogReponer = ref(false);
@@ -143,6 +109,67 @@ const date = ref(new Date());
 const maeInfo = ref(null);
 const activeMAEs = ref([]);
 const initialReport = ref(null);
+
+// Se guarda por fila con el MAE que disparo el cambio, en vez de un watch profundo
+// que dependia de selectedId (se perdian cambios al marcar varios MAEs seguidos)
+const handleAttendanceChange = async (mae, newAttendanceValue) => {
+    if (!mae || !newAttendanceValue || !initialReport.value) {
+        return;
+    }
+
+    const previousAttendance = initialReport.value[mae.uid];
+    if (previousAttendance === newAttendanceValue) {
+        return;
+    }
+
+    if (!userInfo.value) {
+        console.error('userInfo is undefined');
+        report.value[mae.uid] = previousAttendance ?? null;
+        return;
+    }
+
+    if (mae.uid === userInfo.value.uid && mae.role === "coordi") {
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'No te puedes poner autoasistencia',
+            life: 5000
+        });
+        report.value[mae.uid] = previousAttendance ?? null;
+        return;
+    }
+
+    try {
+        await updateReport(mae, newAttendanceValue);
+        initialReport.value[mae.uid] = newAttendanceValue;
+    } catch (error) {
+        console.error('Error al guardar la asistencia: ', error);
+        // Se revierte para que la tabla no muestre una asistencia que no quedo guardada
+        report.value[mae.uid] = previousAttendance ?? null;
+        toast.add({
+            severity: 'error',
+            summary: 'No se guardó la asistencia',
+            detail: error?.code === 'permission-denied'
+                ? `Tu cuenta no tiene permiso para registrar la asistencia de ${mae.name}. Avisa al equipo técnico.`
+                : `No se pudo guardar la asistencia de ${mae.name}. Intenta de nuevo.`,
+            life: 6000
+        });
+        return;
+    }
+
+    // Los puntos van aparte: si fallan, la asistencia ya quedo guardada y no se revierte
+    try {
+        await handlePointsUpdate(mae.uid, previousAttendance, newAttendanceValue);
+    } catch (error) {
+        console.error('Error al actualizar puntos: ', error);
+        toast.add({
+            severity: 'warn',
+            summary: 'Asistencia guardada',
+            detail: 'La asistencia se guardó, pero no se pudieron actualizar los puntos.',
+            life: 5000
+        });
+    }
+};
 
 const reponerMaeId = ref('');
 const reponerMaeInfo = ref(null);
@@ -188,6 +215,7 @@ watch([reponerDate, reponerMaeInfo], async ([date, mae]) => {
 const reponerAsistencia = async () => {
     try {
         await updateReportByDate(reponerMaeInfo.value, reponerDate.value, reponerAttendance.value);
+        await handlePointsUpdate(reponerMaeInfo.value.uid, reponerCurrentReport.value, reponerAttendance.value, false);
         toast.add({ severity: 'success', summary: 'Asistencia repuesta', detail: `Se marcó ${reponerAttendance.value === 'A' ? 'Asistencia' : reponerAttendance.value === 'R' ? 'Retraso' : 'Justificado'} para ${reponerMaeInfo.value.name}`, life: 3000 });
         reponerMaeId.value = '';
         reponerMaeInfo.value = null;
@@ -236,7 +264,7 @@ onMounted(async () => {
             const scheduleToday = mae.weekSchedule[currentDay];
             if (scheduleToday) {        
                 scheduleToday.forEach(({ start, end }) => {
-                    handleAutoMarkAbsence(start, end, mae.uid);
+                    handleAutoMarkAbsence(start, end, mae.uid).catch((error) => console.error('Error en marca automática: ', error));
                 });
             }
         });
@@ -246,6 +274,34 @@ onMounted(async () => {
         loading.value = false;
     }
 });
+
+// Marca automatica; si el guardado falla se revierte para no mostrar algo que no quedo en Firebase
+const applyAutoAttendance = async (uid, newValue) => {
+    const maeInfo = maes.value.find(mae => mae.uid === uid);
+    if (!maeInfo) {
+        return;
+    }
+
+    const previousAttendance = report.value[uid];
+    report.value[uid] = newValue;
+
+    try {
+        await updateReport(maeInfo, newValue);
+        initialReport.value[uid] = newValue;
+    } catch (error) {
+        console.error('Error al marcar asistencia automática: ', error);
+        report.value[uid] = previousAttendance ?? null;
+        return;
+    }
+
+    try {
+        await handlePointsUpdate(uid, previousAttendance, newValue, false);
+    } catch (error) {
+        console.error('Error al actualizar puntos en marca automática: ', error);
+    }
+
+    await nextTick();
+};
 
 const handleAutoMarkAbsence = async (startTime, endTime, uid) => {
     const now = new Date();
@@ -259,25 +315,13 @@ const handleAutoMarkAbsence = async (startTime, endTime, uid) => {
     const activo = activeMAEs.value.some(mae => mae.uid === uid);
 
     if (activo && diffInMinutes > 45 && now < endDateTime && report.value[uid] === 'F') {
-        const maeInfo = maes.value.find(mae => mae.uid === uid);
-        report.value[uid] = 'R';
-        report.value = { ...report.value };
-        updateReport(maeInfo, 'R');
-        await updatePoints('jackpot', 10);
-        await updatePoints(uid, 8);
-        await nextTick();
+        await applyAutoAttendance(uid, 'R');
     }
     if (activo && diffInMinutes > 20 && diffInMinutes < 40 && report.value[uid] !== 'A' &&
         report.value[uid] !== 'J' &&
         report.value[uid] !== 'R' &&
         report.value[uid] !== 'F') {
-        const maeInfo = maes.value.find(mae => mae.uid === uid);
-        report.value[uid] = 'A';
-        report.value = { ...report.value };
-        updateReport(maeInfo, 'A');
-        await updatePoints('jackpot', 10);
-        await updatePoints(uid, 8);
-        await nextTick();
+        await applyAutoAttendance(uid, 'A');
     }
     if (
         diffInMinutes > 40 &&
@@ -288,16 +332,11 @@ const handleAutoMarkAbsence = async (startTime, endTime, uid) => {
         &&
         report.value[uid] !== 'C'
       ) {
-        const maeInfo = maes.value.find(mae => mae.uid === uid);
-        report.value[uid] = 'F';
-        report.value = { ...report.value };
-        updateReport(maeInfo, 'F');
-        await updatePoints('jackpot', 10);
-        await updatePoints(uid, -5);
-        await nextTick();
-      } 
-  
+        await applyAutoAttendance(uid, 'F');
+      }
+
 };
+
 </script>
 
 <template>
@@ -360,7 +399,7 @@ const handleAutoMarkAbsence = async (startTime, endTime, uid) => {
             <Column header="Asistencia" style="min-width:8rem">
                 <template #body="{ data }">
                     <Dropdown 
-                    @click="selectedId = data.uid " 
+                        @change="handleAttendanceChange(data, $event.value)"
                         v-if="report" 
                         v-model="report[data.uid]" 
                         :options="options" 

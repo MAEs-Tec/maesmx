@@ -8,7 +8,8 @@ import {
     updateDoc,
     doc, 
     getDoc,
-    deleteDoc
+    deleteDoc,
+    serverTimestamp
 } from 'firebase/firestore';
 import { addAnnoucement } from "../img/users";
 import { 
@@ -16,6 +17,7 @@ import {
 } from './users'; 
 import { invalidateCacheTags, withCache } from '../cache/cache';
 import { CACHE_TAGS, CACHE_TTL_MS, cacheKeys } from '../cache/config';
+import { POINTS_RULES } from "../../utils/PointsUtils";
 
 async function invalidateAnnouncementCaches() {
     await invalidateCacheTags([CACHE_TAGS.ANNOUNCEMENTS, CACHE_TAGS.GROUP_ANNOUNCEMENTS]);
@@ -239,29 +241,28 @@ export async function updateUserAsistence(announcementId, userId) {
             [userId]: newAsistenceStatus,
         };
 
-        const totalMaes = maesAsignados.length;
+        const awardableMaes = maesAsignados.filter(mae => mae?.uid && mae.assigned !== false);
+        const shouldAwardGroupPoints = newAsistenceStatus && announcementData.pointsAwarded !== true;
+        const pointsUpdate = {};
 
-        if (totalMaes > 0) {
-            const pointsPerMae = 50 / totalMaes;
-
-            
-            for (const mae of maesAsignados) {
-                if (newAsistenceStatus) {
-
-                    await updatePoints(mae.uid, pointsPerMae);
-                    console.log(`Puntos distribuidos a ${mae.name}: +${pointsPerMae}`);
-                } else {
-
-                    await updatePoints(mae.uid, -pointsPerMae);
-                    console.log(`Puntos distribuidos a ${mae.name}: -${pointsPerMae}`);
+        if (shouldAwardGroupPoints) {
+            if (awardableMaes.length > 0) {
+                for (const mae of awardableMaes) {
+                    await updatePoints(mae.uid, POINTS_RULES.groupAdvisory);
+                    console.log(`Puntos de asesoría grupal para ${mae.name}: +${POINTS_RULES.groupAdvisory}`);
                 }
+
+                pointsUpdate.pointsAwarded = true;
+                pointsUpdate.pointsAwardedAt = serverTimestamp();
+                pointsUpdate.pointsAwardedTo = awardableMaes.map(mae => mae.uid);
+            } else {
+                console.log('No hay MAEs asignados para asignar puntos.');
             }
-        } else {
-            console.log('No hay MAEs asignados para asignar puntos.');
         }
 
         await updateDoc(announcementRef, {
             asistence: updatedAsistence,
+            ...pointsUpdate
         });
 
         await invalidateAnnouncementCaches();

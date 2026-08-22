@@ -1,3 +1,5 @@
+import { POINTS_RULES } from './PointsUtils';
+
 export const getSubjectColor = (area) => {
     switch (area) {
         case 'Ingeniería y Ciencias':
@@ -19,9 +21,5 @@ export const getSubjectColor = (area) => {
 
 
 export const pointsRules = {
-    A: 5,  // Asistencia
-    F: -5, // Falta
-    R: 3,  // Retraso
-    J: 0,   // Justificado
-    C: 10 // Coordi
+    ...POINTS_RULES.attendance
 };

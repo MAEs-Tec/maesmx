@@ -1,11 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { FilterMatchMode } from 'primevue/api';
-import { useToast } from 'primevue/usetoast';
 import { getMaes } from '../firebase/db/users';
 import { getAsesoriasCountForUserInCurrentSemester } from '../firebase/db/asesorias';
-
-const toast = useToast();
 
 const loading = ref(true);
 const maes = ref(null);

@@ -1,13 +1,16 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { getUser, updateUserSubjects, updateUserSchedule, getCurrentUser, startActiveSession, 
-  stopActiveSession,updateUserProfilePicture,  countAchievedBadges, 
-  updateUserAchievementBadge, updateUserBackground, updateUserBackgroundImage
-,updatePoints, addBackgroundUsers} from '../firebase/db/users';
+import { getUser, updateUserSubjects, updateUserSchedule, getCurrentUser, startActiveSession,
+  stopActiveSession,updateUserProfilePicture,  countAchievedBadges,
+  updateUserAchievementBadge, updateUserBackground, updateUserBackgroundImage,
+  updateUserCareer,
+  addBackgroundUsers } from '../firebase/db/users';
+import { getMajors } from '../firebase/db/majors';
 import { getSubjects } from '../firebase/db/subjects';
-import { addAsesoria, getAsesoriasCountForUserInCurrentSemester,getAsesoriasByUidAndRating,
-  updateAsesoria
+import { addAsesoria, getAsesoriasCountForUserInCurrentSemester, getAsesoriasByUidAndRating,
+  updateAsesoria,
+  updateRatingBonusForMae
  } from '../firebase/db/asesorias';
 import { getStudentReport } from '../firebase/db/attendance';
 import { formatDate } from '@/utils/AnunciosUtils';
@@ -343,10 +346,45 @@ const groupedSubjects = computed(() => {
 });
 const showDialogEvaluacion = ref(false);
 const showDialogEditar = ref(false);
+const showDialogCarrera = ref(false);
+const majorsList = ref([]);
+const selectedMajor = ref(null);
+const isSavingCarrera = ref(false);
 const ratingAsesoria = ref(null);
 const comentarioAsesoria = ref('');
 const materiaAsesoria = ref(null);
 const isSavingAsesoria = ref(false);
+const isSavingEval = ref(false);
+
+const openCarreraDialog = async () => {
+  if (majorsList.value.length === 0) {
+    majorsList.value = await getMajors();
+  }
+  selectedMajor.value = majorsList.value.find(m => m.id === maeInfo.value.career) || null;
+  showDialogCarrera.value = true;
+};
+
+const guardarCarrera = async () => {
+  if (!selectedMajor.value) {
+    toast.add({ severity: 'warn', summary: 'Selecciona una carrera', detail: 'Debes elegir una carrera para guardar', life: 3000 });
+    return;
+  }
+  isSavingCarrera.value = true;
+  try {
+    const newCareer = selectedMajor.value.id;
+    const newArea = selectedMajor.value.area || maeInfo.value.area;
+    await updateUserCareer(maeInfo.value.uid, newCareer, newArea);
+    maeInfo.value.career = newCareer;
+    maeInfo.value.area = newArea;
+    showDialogCarrera.value = false;
+    toast.add({ severity: 'success', summary: 'Carrera actualizada', detail: 'Tu carrera se actualizó con éxito', life: 3000 });
+  } catch (error) {
+    console.error("Error al guardar carrera:", error);
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al guardar la carrera', life: 5000 });
+  } finally {
+    isSavingCarrera.value = false;
+  }
+};
 
 // Para guardar la asesoría
 const saveAsesoria = async () => {
@@ -474,21 +512,21 @@ const guardarEvaluacion = async () => {
     toast.add({ severity: 'warn', summary: 'Debes llenar la evaluación', detail: 'Selecciona una asesoría antes de guardar', life: 3000 });
     return;
   }
-  
+
+  isSavingEval.value = true;
+  try {
     await updateAsesoria(selectedAsesoria.value, {
       comment: comentarioAsesoria.value,
       rating: ratingAsesoria.value,
     });
-    if(ratingAsesoria.value > 3){
-      await updatePoints(maeInfo.value.uid, ratingAsesoria.value * 5)
-      if(comentarioAsesoria.value !== ""){
-        await updatePoints(maeInfo.value.uid, 25)
-      }
+    if (maeInfo.value?.uid) {
+      await updateRatingBonusForMae(maeInfo.value.uid);
     }
 
     ratingAsesoria.value = null;
     comentarioAsesoria.value = '';
     selectedAsesoria.value = null;
+    showDialogEvaluacion.value = false;
     evalInfo.value = await getAsesoriasByUidAndRating(userInfo.value.uid, maeInfo.value.uid);
     toast.add({
       severity: 'success',
@@ -496,7 +534,12 @@ const guardarEvaluacion = async () => {
       detail: 'La evaluación se registró con éxito',
       life: 3000,
     });
-  
+  } catch (error) {
+    console.error("Error al guardar evaluación:", error);
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al guardar la evaluación: ' + error.message, life: 5000 });
+  } finally {
+    isSavingEval.value = false;
+  }
 };
 
 </script>
@@ -950,6 +993,14 @@ const guardarEvaluacion = async () => {
             Horarios
           <img src="/assets/clock.svg" class="ml-4" alt="mentoring icon" style="width: 2.0rem; height: 2.0rem;" />
       </Button>
+      <Button
+            class="p-button-help p-button-lg w-full mt-3 text-white  border-round-3xl text-xl font-bold flex justify-content-center align-items-center border-none "
+            :style="{ background: 'linear-gradient(to right, #6a44a7, #3ebee7)' }"
+            @click="openCarreraDialog"
+          >
+            Carrera
+          <i class="pi pi-graduation-cap text-lg ml-4 font-bold text-white" style="font-size: 2rem"></i>
+      </Button>
     </div>
  
 </Dialog>
@@ -995,21 +1046,51 @@ const guardarEvaluacion = async () => {
     <div v-else class="text-center p-4">
       <p class="text-gray-600 font-bold">Sin asesorías para evaluar</p>
     </div>
-    <template #footer v-if="evalInfo && evalInfo.length">
-      <div class="flex justify-content-end mt-4">
-        <Button 
-          label="Confirmar" 
-          @click="guardarEvaluacion" 
-           :style="{ background: 'linear-gradient(to right, #44a79b, #69ac51)' }"
-        />
-        <Button 
-          label="Cancelar" 
-          class="p-button-text mr-2" 
-          @click="showDialogEvaluacion = false"
-        />
-       
+    <div v-if="evalInfo && evalInfo.length" class="flex justify-content-end mt-4">
+      <Button
+        label="Confirmar"
+        @click="guardarEvaluacion"
+        :loading="isSavingEval"
+        :disabled="isSavingEval"
+        :style="{ background: 'linear-gradient(to right, #44a79b, #69ac51)' }"
+      />
+      <Button
+        label="Cancelar"
+        class="p-button-text mr-2"
+        @click="showDialogEvaluacion = false"
+      />
+    </div>
+  </Dialog>
+
+  <Dialog v-model:visible="showDialogCarrera" modal class="md:w-4">
+    <template #header>
+      <div class="flex align-items-center justify-content-center text-center h-0.5rem m-auto">
+        <p class="text-2xl font-bold mr-2 mt-3">Cambiar carrera</p>
+        <i class="pi pi-graduation-cap" style="font-size: 1.4rem;"></i>
       </div>
     </template>
+    <p class="font-bold text-lg mb-2">Selecciona tu carrera</p>
+    <Dropdown
+      v-model="selectedMajor"
+      :options="majorsList"
+      optionLabel="name"
+      filter
+      placeholder="Buscar carrera..."
+      class="w-full mb-3"
+    />
+    <p v-if="selectedMajor && selectedMajor.area" class="text-sm text-color-secondary mt-2">
+      Área: <span class="font-semibold">{{ selectedMajor.area }}</span>
+    </p>
+    <div class="flex justify-content-end gap-2 mt-4">
+      <Button label="Cancelar" class="p-button-text" @click="showDialogCarrera = false" />
+      <Button
+        label="Guardar"
+        :loading="isSavingCarrera"
+        :disabled="isSavingCarrera"
+        @click="guardarCarrera"
+        :style="{ background: 'linear-gradient(to right, #6a44a7, #3ebee7)', border: 'none' }"
+      />
+    </div>
   </Dialog>
 
   <Dialog v-model:visible="showDialogSession" modal header="Iniciar turno" class="md:w-4">

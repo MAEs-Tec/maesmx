@@ -8,12 +8,20 @@ import {
     updateDoc,
     doc, 
     getDoc,
-    deleteDoc
+    deleteDoc,
+    serverTimestamp
 } from 'firebase/firestore';
 import { addAnnoucement } from "../img/users";
 import { 
     updatePoints
 } from './users'; 
+import { invalidateCacheTags, withCache } from '../cache/cache';
+import { CACHE_TAGS, CACHE_TTL_MS, cacheKeys } from '../cache/config';
+import { POINTS_RULES } from "../../utils/PointsUtils";
+
+async function invalidateAnnouncementCaches() {
+    await invalidateCacheTags([CACHE_TAGS.ANNOUNCEMENTS, CACHE_TAGS.GROUP_ANNOUNCEMENTS]);
+}
 
 export async function saveAnnouncement(announcementData, selectedFile) {
     try {
@@ -33,6 +41,7 @@ export async function saveAnnouncement(announcementData, selectedFile) {
             visible: true
         });
 
+        await invalidateAnnouncementCaches();
         return docRef.id;
     } catch (error) {
         console.error('Error al guardar el anuncio:', error);
@@ -40,7 +49,7 @@ export async function saveAnnouncement(announcementData, selectedFile) {
     }
 }
 
-export async function getAnnouncementsEdit() {
+async function fetchAnnouncementsEditFresh() {
     try {
         const announcementsCollection = collection(firestoreDB, 'announcements');
         
@@ -62,7 +71,7 @@ export async function getAnnouncementsEdit() {
 }
 
 
-export async function getAnnouncements() {
+async function fetchAnnouncementsFresh() {
     try {
         const announcementsCollection = collection(firestoreDB, 'announcements');
         const q = query(announcementsCollection, where('visible', '==', true));
@@ -106,7 +115,7 @@ export async function getAnnouncements() {
 }
 
 
-export async function getAnnouncementsGrupales() {
+async function fetchAnnouncementsGrupalesFresh() {
     try {
         const announcementsCollection = collection(firestoreDB, 'announcements');
 
@@ -170,6 +179,7 @@ export async function addUserToPreregsiter(announcementId, user) {
             asistence: updatedAsistence,
         });
 
+        await invalidateAnnouncementCaches();
         console.log(`Usuario ${user.uid} agregado exitosamente a preregister y asistencia.`);
     } catch (error) {
         console.error('Error añadiendo usuario a preregister:', error);
@@ -231,31 +241,31 @@ export async function updateUserAsistence(announcementId, userId) {
             [userId]: newAsistenceStatus,
         };
 
-        const totalMaes = maesAsignados.length;
+        const awardableMaes = maesAsignados.filter(mae => mae?.uid && mae.assigned !== false);
+        const shouldAwardGroupPoints = newAsistenceStatus && announcementData.pointsAwarded !== true;
+        const pointsUpdate = {};
 
-        if (totalMaes > 0) {
-            const pointsPerMae = 50 / totalMaes;
-
-            
-            for (const mae of maesAsignados) {
-                if (newAsistenceStatus) {
-
-                    await updatePoints(mae.uid, pointsPerMae);
-                    console.log(`Puntos distribuidos a ${mae.name}: +${pointsPerMae}`);
-                } else {
-
-                    await updatePoints(mae.uid, -pointsPerMae);
-                    console.log(`Puntos distribuidos a ${mae.name}: -${pointsPerMae}`);
+        if (shouldAwardGroupPoints) {
+            if (awardableMaes.length > 0) {
+                for (const mae of awardableMaes) {
+                    await updatePoints(mae.uid, POINTS_RULES.groupAdvisory);
+                    console.log(`Puntos de asesoría grupal para ${mae.name}: +${POINTS_RULES.groupAdvisory}`);
                 }
+
+                pointsUpdate.pointsAwarded = true;
+                pointsUpdate.pointsAwardedAt = serverTimestamp();
+                pointsUpdate.pointsAwardedTo = awardableMaes.map(mae => mae.uid);
+            } else {
+                console.log('No hay MAEs asignados para asignar puntos.');
             }
-        } else {
-            console.log('No hay MAEs asignados para asignar puntos.');
         }
 
         await updateDoc(announcementRef, {
             asistence: updatedAsistence,
+            ...pointsUpdate
         });
 
+        await invalidateAnnouncementCaches();
         console.log(`Asistencia para el usuario ${userId} actualizada exitosamente a ${newAsistenceStatus}.`);
     } catch (error) {
         console.error('Error actualizando la asistencia del usuario:', error);
@@ -312,6 +322,7 @@ export async function addExtraVariables() {
         });
 
         await Promise.all(promises);
+        await invalidateAnnouncementCaches();
 
         console.log("Background have been successfully added to eligible users.");
     } catch (error) {
@@ -320,7 +331,7 @@ export async function addExtraVariables() {
     }
 }
 
-export async function getAnnouncementsAllGrupales() {
+async function fetchAnnouncementsAllGrupalesFresh() {
     try {
         const announcementsCollection = collection(firestoreDB, 'announcements');
 
@@ -368,6 +379,7 @@ export async function deleteAnnouncementById(id) {
         const announcementDocRef = doc(firestoreDB, "announcements", id);
         
         await deleteDoc(announcementDocRef);
+        await invalidateAnnouncementCaches();
         
         console.log(`Announcement with ID ${id} deleted successfully.`);
     } catch (error) {
@@ -384,6 +396,7 @@ export async function updateAnnouncement(announcementId, updatedData) {
             ...updatedData,
         });
 
+        await invalidateAnnouncementCaches();
         return docRef.id;  
     } catch (error) {
         console.error('Error al actualizar el anuncio:', error);
@@ -405,6 +418,7 @@ export const toggleVisibilityById = async (id) => {
         visible: !currentVisibility
       });
 
+      await invalidateAnnouncementCaches();
       console.log(`Visibilidad del diálogo con ID ${id} actualizada correctamente`);
     } else {
       console.log("El documento no existe");
@@ -414,3 +428,55 @@ export const toggleVisibilityById = async (id) => {
     throw error;
   }
 };
+
+export async function getAnnouncementsEdit(options = {}) {
+    return await withCache(
+        cacheKeys.announcementsEdit(),
+        {
+            ttlMs: CACHE_TTL_MS.ANNOUNCEMENTS_EDIT,
+            persist: true,
+            forceRefresh: options.forceRefresh ?? false,
+            tags: [CACHE_TAGS.ANNOUNCEMENTS]
+        },
+        fetchAnnouncementsEditFresh
+    );
+}
+
+export async function getAnnouncements(options = {}) {
+    return await withCache(
+        cacheKeys.announcementsVisible(),
+        {
+            ttlMs: CACHE_TTL_MS.ANNOUNCEMENTS,
+            persist: true,
+            forceRefresh: options.forceRefresh ?? false,
+            tags: [CACHE_TAGS.ANNOUNCEMENTS]
+        },
+        fetchAnnouncementsFresh
+    );
+}
+
+export async function getAnnouncementsGrupales(options = {}) {
+    return await withCache(
+        cacheKeys.announcementsGroup(),
+        {
+            ttlMs: CACHE_TTL_MS.GROUP_ANNOUNCEMENTS,
+            persist: true,
+            forceRefresh: options.forceRefresh ?? false,
+            tags: [CACHE_TAGS.ANNOUNCEMENTS, CACHE_TAGS.GROUP_ANNOUNCEMENTS]
+        },
+        fetchAnnouncementsGrupalesFresh
+    );
+}
+
+export async function getAnnouncementsAllGrupales(options = {}) {
+    return await withCache(
+        cacheKeys.announcementsAllGroup(),
+        {
+            ttlMs: CACHE_TTL_MS.GROUP_ANNOUNCEMENTS,
+            persist: true,
+            forceRefresh: options.forceRefresh ?? false,
+            tags: [CACHE_TAGS.ANNOUNCEMENTS, CACHE_TAGS.GROUP_ANNOUNCEMENTS]
+        },
+        fetchAnnouncementsAllGrupalesFresh
+    );
+}

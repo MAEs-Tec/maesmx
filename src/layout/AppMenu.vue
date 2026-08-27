@@ -27,7 +27,6 @@ onMounted(async () => {
 
     if (['admin', 'tec'].includes(role)) {
         const adminItems = [
-            
             { label: 'Usuarios', icon: 'pi pi-fw pi-users', to: '/admin/usuarios' },
             { label: 'Materias', icon: 'pi pi-fw pi-pencil', to: '/admin/materias' }
         ];
@@ -36,7 +35,7 @@ onMounted(async () => {
             adminItems.push(
                 { label: 'Asesorías', icon: 'pi pi-fw pi-list', to: '/admin/asesorias' },
                 { label: 'Funciones', icon: 'pi pi-fw pi-key', to: '/admin/funciones' },
-                { label: 'Dashboard', icon: 'pi pi-fw pi-chart-bar', to: '/admin/dashboard' }, 
+                { label: 'Dashboard', icon: 'pi pi-fw pi-chart-bar', to: '/admin/dashboard' },
                 { label: 'Historial asistencia', icon: 'pi pi-fw pi-history', to: '/admin/historialAsistencia'}
             );
         }
@@ -47,9 +46,7 @@ onMounted(async () => {
         });
     }
 
-    
-    
-    if (['publi','mae', 'coordi', 'subjectCoordi', 'admin','tec'].includes(role)) {
+    if (['publi', 'mae', 'coordi', 'subjectCoordi', 'admin', 'tec'].includes(role)) {
         model.value.push({
             label: 'MAE',
             items: [
@@ -59,18 +56,17 @@ onMounted(async () => {
                 { label: 'Mis evaluaciones', icon:'pi pi-fw pi-heart', to: '/misevaluaciones'},
                 { label: 'Asistencia grupales', icon:'pi pi-fw pi-th-large', to: '/asistenciaGrupales'},
             ]
-        })
+        });
     }
 
-    if (['coordi', 'subjectCoordi', 'admin','tec'].includes(role)) {
+    if (['coordi', 'subjectCoordi', 'admin', 'tec'].includes(role)) {
         model.value.push({
             label: 'Coordi',
             items: [
                 { label: 'Asistencia', icon: 'pi pi-fw pi-check-square', to: '/coordi' },
                 { label: 'Gestión de anuncios', icon: 'pi pi-fw pi-cog', to: '/gestionAnuncios' },
-                
             ]
-        })
+        });
     }
 
     // model.value.push({

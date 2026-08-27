@@ -170,6 +170,13 @@ const getHorasHorario = () => {
 
 
 const getHorasRequeridas = () => {
+  const career = maeInfo.value.career?.toUpperCase();
+  const isMaeOrCoordi = maeInfo.value.role === 'mae' || maeInfo.value.role === 'coordi';
+
+  if (maeInfo.value.status === 'becario' && isMaeOrCoordi && career === 'SLD') {
+    return 1.5;
+  }
+
   if (maeInfo.value.status === "becario" && 
     ((maeInfo.value.role === "mae" || maeInfo.value.role === "coordi") &&
     (maeInfo.value.career.toUpperCase() === "MC" || maeInfo.value.career.toUpperCase() === "LBC" || maeInfo.value.career.toUpperCase() === "LPS"))) {
@@ -297,8 +304,8 @@ const saveScheduleChanges = async () => {
   }
   if (maeInfo.value.status === "becario" && 
     ((maeInfo.value.role === "mae" || maeInfo.value.role === "coordi") &&
-    hours < 3)) {
-    toast.add({ severity: 'error', summary: 'Error de horas', detail: 'No puedes tener menos de 3 horas asignadas en total', life: 3000 });
+    hours < getHorasRequeridas())) {
+    toast.add({ severity: 'error', summary: 'Error de horas', detail: `No puedes tener menos de ${getHorasRequeridas()} horas asignadas en total`, life: 3000 });
     return;
   } else if (maeInfo.value.status === "becario" && 
            maeInfo.value.role === "publi" && 

@@ -1,0 +1,120 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+	// === MAETECA ==
+		match /videos/{videoId}
+    { allow read, write, create: if true } // Ajusta roles si quieres permitir más allow write: 
+    
+    
+    // === USERS ===
+    match /users/{userId} {
+      // Allow reading MAE profiles for any signed-in user while protecting
+      // regular student documents. Owners and admins can read everything.
+      allow read: if request.auth.uid != null;
+
+      // Users can update their own profile; admins may update any profile.
+      allow update: if request.auth.uid != null
+
+      // Creation allowed for any authenticated user
+      allow create: if request.auth.uid != null;
+
+      // Only admins may delete user documents
+      allow delete: if request.auth != null && request.auth.token.role == 'admin';
+    }
+
+    // === ANNOUNCEMENTS ===
+    match /announcements/{announcementId} {
+      allow read: if request.auth.uid != null;
+      allow write: if request.auth.uid != null;
+    }
+
+    // === ASESORIAS ===
+    match /asesorias/{asesoriaId} {
+      allow create, read: if request.auth.uid != null;
+      allow update: if resource.data.userInfo.uid == request.auth.uid
+                    || request.auth.token.role == "admin";
+      allow delete: if request.auth.token.role == "admin";
+    }
+
+    // === ATTENDANCE ===
+    match /attendance/{document=**} {
+      allow read, write: if request.auth.uid != null
+    }
+
+    // === BOT_FLAGS ===
+    match /bot_flags/{flagId} {
+      allow read, write: if request.auth.token.role == "admin";
+    }
+
+    // === DISCORD ===
+    match /discord/{docId} {
+      allow read, write: if request.auth.token.role == "admin";
+    }
+
+    // === GROUP_SESSIONS ===
+    match /group_sessions/{sessionId} {
+      allow create: if request.auth.uid != null;
+      allow read: if resource.data.userInfo.uid == request.auth.uid
+                || resource.data.peerInfo.uid == request.auth.uid
+                || request.auth.token.role == "admin";
+      allow update: if resource.data.userInfo.uid == request.auth.uid
+                 || resource.data.peerInfo.uid == request.auth.uid
+                 || request.auth.token.role == "admin";
+      allow delete: if request.auth.token.role == "admin";
+    }
+
+    // === REQUESTS ===
+    match /requests/{requestId} {
+      allow create: if request.auth.uid != null;
+      allow read: if resource.data.userInfo.uid == request.auth.uid
+                || resource.data.peerInfo.uid == request.auth.uid
+                || request.auth.token.role == "admin";
+      allow update: if resource.data.userInfo.uid == request.auth.uid
+                 || resource.data.peerInfo.uid == request.auth.uid
+                 || request.auth.token.role == "admin";
+      allow delete: if request.auth.token.role == "admin";
+    }
+
+    // === SCHEDULE ===
+    match /schedule/{docId} {
+      allow read: if request.auth.uid != null;
+      allow write: if request.auth.token.role == "admin";
+    }
+
+    // === SCHOOLS ===
+    match /schools/{document=**} {
+      allow read: if request.auth.uid != null;
+      allow write: if request.auth.token.role == "admin";
+      
+      // === CAMPUSES ===
+      match /campus/{docId} {
+        allow read: if true;           
+        allow write: if request.auth.token.role == "admin";
+      }
+      
+      // === MAJORS ===
+      match /majors/{docId} {
+        allow read: if true;           
+        allow write: if request.auth.token.role == "admin";
+      }
+      
+    }
+
+    // === SUBJECTS ===
+    // User documents are keyed by the email prefix (for example, users/student
+    // for student@tec.mx), not by Firebase Auth UID. Roles also live in those
+    // documents rather than custom claims and must match the router roles.
+    match /schools/{schoolId}/subjects/{docId} {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null
+                    && request.auth.token.email != null
+                    && get(/databases/$(database)/documents/users/$(request.auth.token.email.split('@')[0])).data.role in ["admin", "tec"];
+    }
+
+    // === DEFAULT DENY ===
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+  }
+}

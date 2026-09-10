@@ -1,0 +1,110 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return signedIn() && request.auth.token.role is string
+        ? request.auth.token.role
+        : 'user';
+    }
+
+    function hasAnyRole(roles) {
+      return signedIn() && role() in roles;
+    }
+
+    function isAdmin() {
+      return hasAnyRole(['admin']);
+    }
+
+    function isTechAdmin() {
+      return hasAnyRole(['admin', 'tec']);
+    }
+
+    function isCoordi() {
+      return hasAnyRole(['admin', 'tec', 'coordi']);
+    }
+
+    function isContentManager() {
+      return hasAnyRole(['admin', 'tec', 'coordi']);
+    }
+
+    function isOwnEmail(email) {
+      return signedIn()
+        && request.auth.token.email is string
+        && email is string
+        && email.lower() == request.auth.token.email.lower();
+    }
+
+    function isOwnUserDoc() {
+      return isOwnEmail(resource.data.email);
+    }
+
+    function isCreatingOwnUserDoc() {
+      return isOwnEmail(request.resource.data.email)
+        && request.resource.data.role == 'user'
+        && request.resource.data.status == 'estudiante';
+    }
+
+    function doesNotChangeProtectedUserFields() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'role',
+        'status',
+        'points',
+        'totalTime',
+        'badges',
+        'useCoins'
+      ]);
+    }
+
+    match /users/{userId} {
+      allow create: if isCreatingOwnUserDoc() || isTechAdmin();
+      allow read: if signedIn();
+      allow update: if isTechAdmin() || (isOwnUserDoc() && doesNotChangeProtectedUserFields());
+      allow delete: if isAdmin();
+    }
+
+    match /schools/{schoolId}/subjects/{subjectId} {
+      allow read: if true;
+      allow write: if isTechAdmin();
+    }
+
+    match /schools/{document=**} {
+      allow read: if true;
+      allow write: if isTechAdmin();
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if true;
+      allow create, update, delete: if isContentManager();
+    }
+
+    match /attendance/{dateId} {
+      allow read, write: if isCoordi();
+
+      match /report/{reportId} {
+        allow read, write: if isCoordi();
+      }
+    }
+
+    match /asesorias/{asesoriaId} {
+      allow create: if signedIn();
+      allow read: if signedIn();
+      allow update: if isCoordi();
+      allow delete: if isAdmin();
+    }
+
+    match /videos/{videoId} {
+      allow read: if true;
+      allow create, update, delete: if isContentManager();
+    }
+
+    match /{document=**} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

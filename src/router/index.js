@@ -1,6 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
-import { getCurrentUser } from '../firebase/db/users';
 import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { canAccessRoute, getClaimsRole } from '@/auth/roles';
 import AppLayout from '@/layout/AppLayout.vue';
 
 const router = createRouter({
@@ -122,11 +122,11 @@ const router = createRouter({
                 },
                 {
                     path: '/admin/asesorias',
-                    name: 'adminasesorias',
-                    component: () => import('@/views/AdminAsesorias.vue'),
-                    meta: {
-                        roles: ['admin','tec']
-                    }
+                                        name: 'adminasesorias',
+                                        component: () => import('@/views/AdminAsesorias.vue'),
+                                        meta: {
+                                            roles: ['admin']
+                                        }
                 },
                 {
                     path: '/admin/usuarios',
@@ -146,19 +146,19 @@ const router = createRouter({
                 },
                 {
                     path: '/admin/funciones',
-                    name: 'adminfunciones',
-                    component: () => import('@/views/AdminFunciones.vue'),
-                    meta: {
-                        roles: ['admin','tec']
-                    }
+                                        name: 'adminfunciones',
+                                        component: () => import('@/views/AdminFunciones.vue'),
+                                        meta: {
+                                            roles: ['admin']
+                                        }
                 },
                 {
                     path: '/admin/dashboard',
-                    name: 'dashboard',
-                    component: () => import('@/views/Dashboard.vue'),
-                    meta: {
-                        roles: ['admin','tec']
-                    }
+                                        name: 'dashboard',
+                                        component: () => import('@/views/Dashboard.vue'),
+                                        meta: {
+                                            roles: ['admin']
+                                        }
                 },
                 /* Adding path for historial */
                 {
@@ -233,17 +233,12 @@ router.beforeEach((to, from, next) => {
             return next("/auth/login"); 
           }
 
-        const { role } = await getCurrentUser();
+        const role = await getClaimsRole();
 
-        if (!to.meta.roles) {
-            return next();
-        }
-
-        if (to.meta.roles.includes(role)) {
-            return next();
-        } else {
-            return next("/pages/notfound");
-        }
+                if (canAccessRoute(to, role)) {
+                    return next();
+                }
+                return next("/auth/access");
     });
 });
 

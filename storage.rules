@@ -1,0 +1,36 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return signedIn() && request.auth.token.role is string
+        ? request.auth.token.role
+        : 'user';
+    }
+
+    function hasAnyRole(roles) {
+      return signedIn() && role() in roles;
+    }
+
+    match /announcements/{allPaths=**} {
+      allow read: if true;
+      allow write: if hasAnyRole(['admin', 'tec', 'coordi']);
+    }
+
+    match /users/{email}/photo {
+      allow read: if true;
+      allow write: if signedIn()
+        && request.auth.token.email is string
+        && email.lower() == request.auth.token.email.lower();
+    }
+
+    match /{allPaths=**} {
+      allow read: if true;
+      allow write: if hasAnyRole(['admin']);
+    }
+  }
+}

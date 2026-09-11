@@ -1,4 +1,4 @@
-import { getAuth } from 'firebase/auth';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 
 export const ROLES = {
     ADMIN: 'admin',
@@ -18,16 +18,62 @@ export const ROLE_GROUPS = {
     mae: [ROLES.ADMIN, ROLES.TEC, ROLES.COORDI, ROLES.SUBJECT_COORDI, ROLES.MAE, ROLES.PUBLI]
 };
 
-export async function getClaimsRole({ forceRefresh = true } = {}) {
+// Cache en memoria del rol para toda la sesión. Se refresca UNA vez al
+// detectar el login (onAuthStateChanged). Las navegaciones posteriores usan
+// el valor cacheado -> sin petición de token en cada cambio de página.
+let cachedRole = null;
+let cachedUid = null;
+let listenerAttached = false;
+
+function attachListener() {
+    if (listenerAttached) return;
+    listenerAttached = true;
+
+    const auth = getAuth();
+    onAuthStateChanged(auth, async (user) => {
+        if (!user) {
+            cachedRole = null;
+            cachedUid = null;
+            return;
+        }
+        // El login acaba de ocurrir (usuario distinto al cacheado): refrescar
+        // el token UNA sola vez para traer el custom claim fresco.
+        if (user.uid !== cachedUid) {
+            cachedUid = user.uid;
+            cachedRole = null;
+            try {
+                const token = await user.getIdTokenResult(true);
+                cachedRole = token.claims.role || ROLES.USER;
+            } catch (error) {
+                console.warn('Unable to refresh role claim:', error);
+                cachedRole = ROLES.USER;
+            }
+        }
+    });
+}
+
+export async function getClaimsRole() {
     const user = getAuth().currentUser;
     if (!user) return null;
 
-    const token = await user.getIdTokenResult(forceRefresh);
-    if (token.claims.role) return token.claims.role;
+    // Asegurar que el listener esté activo (una sola vez).
+    attachListener();
 
-    // Sin claim: devolver fallback SIN auto-reescribir el claim.
-    // El claim lo setea el flujo admin / la migración, nunca el cliente.
-    return ROLES.USER;
+    // Si ya hay rol cacheado para este usuario, devolverlo sin refrescar.
+    if (cachedUid === user.uid && cachedRole) {
+        return cachedRole;
+    }
+
+    // Primer acceso (listener aún no resolvió): refrescar una vez.
+    try {
+        const token = await user.getIdTokenResult(true);
+        cachedUid = user.uid;
+        cachedRole = token.claims.role || ROLES.USER;
+        return cachedRole;
+    } catch (error) {
+        console.warn('Unable to refresh role claim:', error);
+        return ROLES.USER;
+    }
 }
 
 export function canAccessRoute(route, role) {

@@ -18,7 +18,7 @@ export const ROLE_GROUPS = {
     mae: [ROLES.ADMIN, ROLES.TEC, ROLES.COORDI, ROLES.SUBJECT_COORDI, ROLES.MAE, ROLES.PUBLI]
 };
 
-export async function getClaimsRole({ forceRefresh = false } = {}) {
+export async function getClaimsRole({ forceRefresh = true } = {}) {
     const user = getAuth().currentUser;
     if (!user) return null;
 

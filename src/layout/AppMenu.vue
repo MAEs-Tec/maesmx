@@ -21,7 +21,11 @@ const model = ref([
 ]);
 
 onMounted(async () => {
-    const { role, uid } = await getCurrentUser();
+    const { role: realRole, uid } = await getCurrentUser();
+
+    // Muestra todos los menús únicamente cuando se habilita de forma explícita en desarrollo.
+    const DEV_ALL_ROLES = import.meta.env.DEV && import.meta.env.VITE_DEV_ALL_ROLES === 'true';
+    const role = DEV_ALL_ROLES ? 'admin' : realRole;
 
    
 
@@ -65,6 +69,15 @@ onMounted(async () => {
             items: [
                 { label: 'Asistencia', icon: 'pi pi-fw pi-check-square', to: '/coordi' },
                 { label: 'Gestión de anuncios', icon: 'pi pi-fw pi-cog', to: '/gestionAnuncios' },
+            ]
+        });
+    }
+
+    if (role === 'publi') {
+        model.value.push({
+            label: 'Publicidad',
+            items: [
+                { label: 'Gestión de anuncios', icon: 'pi pi-fw pi-pencil', to: '/gestionAnuncios' }
             ]
         });
     }

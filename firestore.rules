@@ -43,6 +43,10 @@ service cloud.firestore {
       return isOwnEmail(resource.data.email);
     }
 
+    function currentUserKey() {
+      return request.auth.token.email.split('@')[0];
+    }
+
     function isCreatingOwnUserDoc() {
       return isOwnEmail(request.resource.data.email)
         && request.resource.data.role == 'user'
@@ -78,8 +82,32 @@ service cloud.firestore {
     }
 
     match /announcements/{announcementId} {
+      function changedOnly(fields) {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+      }
+
+      // Un estudiante solo puede pre-registrarse/darse de baja a sí mismo.
+      function isOwnPreregisterUpdate() {
+        return signedIn()
+          && request.auth.token.email is string
+          && changedOnly(['preregister', 'asistence'])
+          && request.resource.data.preregister.diff(resource.data.preregister).affectedKeys().hasOnly([currentUserKey()])
+          && request.resource.data.asistence.diff(resource.data.asistence).affectedKeys().hasOnly([currentUserKey()])
+          && request.resource.data.preregister[currentUserKey()].uid == currentUserKey()
+          && request.resource.data.asistence[currentUserKey()] == false;
+      }
+
       allow read: if true;
-      allow create, update, delete: if isContentManager();
+      allow create, delete: if isContentManager() || hasAnyRole(['publi']);
+      allow update: if isContentManager()
+        || hasAnyRole(['publi'])
+        || (hasAnyRole(['mae']) && changedOnly([
+          'asistence',
+          'pointsAwarded',
+          'pointsAwardedAt',
+          'pointsAwardedTo'
+        ]))
+        || isOwnPreregisterUpdate();
     }
 
     match /attendance/{dateId} {
@@ -93,13 +121,53 @@ service cloud.firestore {
     match /asesorias/{asesoriaId} {
       allow create: if signedIn();
       allow read: if signedIn();
-      allow update: if isCoordi();
+      allow update: if isCoordi()
+        || (signedIn() && resource.data.userInfo.uid == request.auth.uid);
       allow delete: if isAdmin();
     }
 
     match /videos/{videoId} {
       allow read: if true;
       allow create, update, delete: if isContentManager();
+    }
+
+    // === BOT_FLAGS / DISCORD (uso interno admin) ===
+    match /bot_flags/{flagId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /discord/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // === GROUP_SESSIONS ===
+    match /group_sessions/{sessionId} {
+      allow create: if signedIn();
+      allow read: if isAdmin()
+        || (signedIn() && (resource.data.userInfo.uid == request.auth.uid
+                        || resource.data.peerInfo.uid == request.auth.uid));
+      allow update: if isAdmin()
+        || (signedIn() && (resource.data.userInfo.uid == request.auth.uid
+                        || resource.data.peerInfo.uid == request.auth.uid));
+      allow delete: if isAdmin();
+    }
+
+    // === REQUESTS ===
+    match /requests/{requestId} {
+      allow create: if signedIn();
+      allow read: if isAdmin()
+        || (signedIn() && (resource.data.userInfo.uid == request.auth.uid
+                        || resource.data.peerInfo.uid == request.auth.uid));
+      allow update: if isAdmin()
+        || (signedIn() && (resource.data.userInfo.uid == request.auth.uid
+                        || resource.data.peerInfo.uid == request.auth.uid));
+      allow delete: if isAdmin();
+    }
+
+    // === SCHEDULE ===
+    match /schedule/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
     }
 
     match /{document=**} {

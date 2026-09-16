@@ -140,5 +140,14 @@ export function buildMenuForRole(role, uid) {
         });
     }
 
+    if (role === ROLES.PUBLI) {
+        model.push({
+            label: 'Publicidad',
+            items: [
+                { label: 'Gestión de anuncios', icon: 'pi pi-fw pi-pencil', to: '/gestionAnuncios' }
+            ]
+        });
+    }
+
     return model;
 }

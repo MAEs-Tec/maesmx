@@ -1,12 +1,12 @@
 <script setup>
 import { onMounted, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { getCurrentUser, getUser, startActiveSession, stopActiveSession,
-  updatePoints } from '../firebase/db/users';
+import { getCurrentUser, startActiveSession, stopActiveSession } from '../firebase/db/users';
 import { useToast } from 'primevue/usetoast';
 import { getSubjects } from '../firebase/db/subjects';
-import { addAsesoria,getAsesoriasByUidAndRating,
-  updateAsesoria} from '../firebase/db/asesorias';
+import { addAsesoria, getAsesoriasByUidAndRating,
+  updateAsesoria,
+  updateRatingBonusForMae } from '../firebase/db/asesorias';
 import { getMaesNames } from '@/firebase/db/users';
 import { getAnnouncements } from '@/firebase/db/annoucement'; 
 import {
@@ -48,6 +48,7 @@ const anuncios = ref([]);
 const currentAnuncio = ref({});
 const currentIndex = ref(-1);
 const isSavingAsesoria = ref(false);
+const isSavingEval = ref(false);
 const evalInfo = ref(null);
 const showDialogEvaluacion = ref(false);
 
@@ -192,23 +193,22 @@ const guardarEvaluacion = async () => {
     toast.add({ severity: 'warn', summary: 'Debes llenar la evaluación', detail: 'Selecciona una asesoría antes de guardar', life: 3000 });
     return;
   }
-  
+
+  isSavingEval.value = true;
+  try {
+    const selectedEvaluation = evalInfo.value?.find(asesoria => asesoria.id === selectedAsesoria.value);
     await updateAsesoria(selectedAsesoria.value, {
       comment: comentarioAsesoria.value,
       rating: ratingAsesoria.value,
     });
-    if(ratingAsesoria.value > 3){
-      if (userInfo.value && userInfo.value.uid) {
-         await updatePoints(userInfo.value.uid, ratingAsesoria.value * 5)
-         if(comentarioAsesoria.value !== ""){
-           await updatePoints(userInfo.value.uid, 25)
-         }
-      }
+    if (selectedEvaluation?.peerInfo?.uid) {
+      await updateRatingBonusForMae(selectedEvaluation.peerInfo.uid);
     }
 
     ratingAsesoria.value = null;
     comentarioAsesoria.value = '';
     selectedAsesoria.value = null;
+    showDialogEvaluacion.value = false;
     evalInfo.value = await getAsesoriasByUidAndRating(userInfo.value.uid);
     toast.add({
       severity: 'success',
@@ -216,7 +216,12 @@ const guardarEvaluacion = async () => {
       detail: 'La evaluación se registró con éxito',
       life: 3000,
     });
-  
+  } catch (error) {
+    console.error("Error al guardar evaluación:", error);
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al guardar la evaluación: ' + error.message, life: 5000 });
+  } finally {
+    isSavingEval.value = false;
+  }
 };
 
 </script>
@@ -456,21 +461,20 @@ const guardarEvaluacion = async () => {
     <div v-else class="text-center p-4">
       <p class="text-gray-600 font-bold">Sin asesorías para evaluar</p>
     </div>
-    <template #footer v-if="evalInfo && evalInfo.length">
-      <div class="flex justify-content-end mt-4">
-        <Button 
-          label="Confirmar" 
-          @click="guardarEvaluacion" 
-           :style="{ background: 'linear-gradient(to right, #44a79b, #69ac51)' }"
-        />
-        <Button 
-          label="Cancelar" 
-          class="p-button-text mr-2" 
-          @click="showDialogEvaluacion = false"
-        />
-       
-      </div>
-    </template>
+    <div v-if="evalInfo && evalInfo.length" class="flex justify-content-end mt-4">
+      <Button
+        label="Confirmar"
+        @click="guardarEvaluacion"
+        :loading="isSavingEval"
+        :disabled="isSavingEval"
+        :style="{ background: 'linear-gradient(to right, #44a79b, #69ac51)' }"
+      />
+      <Button
+        label="Cancelar"
+        class="p-button-text mr-2"
+        @click="showDialogEvaluacion = false"
+      />
+    </div>
   </Dialog>
 
 </template>

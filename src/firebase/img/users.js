@@ -1,16 +1,35 @@
 import { ref, getDownloadURL, getStorage, uploadBytes } from "firebase/storage";
-import { firebaseStorage} from "../../main";
-import { v4 } from "uuid";
 import { initializeApp } from "firebase/app";
+import { firebaseStorage } from "../../main";
+import { invalidateCacheTags, withCache } from "../cache/cache";
+import { CACHE_TAGS, CACHE_TTL_MS, cacheKeys, profilePictureTag } from "../cache/config";
+
+const DEFAULT_PROFILE_PICTURE = 'https://randomuser.me/api/portraits/lego/5.jpg';
+
 export const getUserProfilePicture = async (email) => {
-    try {
-        const url = await getDownloadURL(ref(firebaseStorage, `users/${email}/photo`));
-        return url;
-    } catch (error) {
-        console.error(email, 'Has no profile picture')
-        return 'https://randomuser.me/api/portraits/lego/5.jpg';
+    if (!email) {
+        return DEFAULT_PROFILE_PICTURE;
     }
-}
+
+    const normalizedEmail = email.toLowerCase();
+
+    return await withCache(
+        cacheKeys.profilePicture(normalizedEmail),
+        {
+            ttlMs: CACHE_TTL_MS.PROFILE_PICTURE,
+            persist: true,
+            tags: [CACHE_TAGS.PROFILE_PICTURES, profilePictureTag(normalizedEmail)]
+        },
+        async () => {
+            try {
+                return await getDownloadURL(ref(firebaseStorage, `users/${normalizedEmail}/photo`));
+            } catch (error) {
+                console.error(normalizedEmail, 'Has no profile picture');
+                return DEFAULT_PROFILE_PICTURE;
+            }
+        }
+    );
+};
 
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -25,26 +44,14 @@ const firebaseConfig = {
 
 export const firebaseAppImage = initializeApp(firebaseConfig);
 
-export const storage = getStorage(firebaseAppImage)
+export const storage = getStorage(firebaseAppImage);
 
-/**
- * Subir un archivo a Firebase Storage y obtener su URL de descarga.
- *
- * @param {File} file - El archivo a subir.
- * @param {string} email - El email del usuario que determina la ruta de almacenamiento.
- * @returns {Promise<string>} La URL de descarga del archivo subido.
- */
 export async function uploadFile(file, email) {
     try {
-        // Crear una referencia al archivo en la ruta específica
         const storageRef = ref(storage, `users/${email}/photo`);
-
-        // Subir el archivo
         await uploadBytes(storageRef, file);
-
-        // Obtener la URL de descarga
         const url = await getDownloadURL(storageRef);
-
+        await invalidateUserProfilePictureCache(email);
         return url;
     } catch (error) {
         console.error('Error uploading file:', error);
@@ -52,21 +59,21 @@ export async function uploadFile(file, email) {
     }
 }
 
-/**
- * Subir un archivo a Firebase Storage y obtener su URL de descarga.
- *
- * @param {File} file - El archivo a subir.
- * @param {string} path - La ruta en Storage donde se almacenará el archivo.
- * @returns {Promise<string>} La URL de descarga del archivo subido.
- */
 export async function addAnnoucement(file, path) {
     try {
         const storageRef = ref(storage, path);
         await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(storageRef);
-        return url;
+        return await getDownloadURL(storageRef);
     } catch (error) {
         console.error('Error uploading file:', error);
         throw error;
     }
+}
+
+export async function invalidateUserProfilePictureCache(email) {
+    if (!email) {
+        return;
+    }
+
+    await invalidateCacheTags([profilePictureTag(email.toLowerCase())]);
 }

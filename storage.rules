@@ -17,20 +17,19 @@ service firebase.storage {
     }
 
     match /announcements/{allPaths=**} {
-      allow read: if true;
+      allow read: if signedIn();
       allow write: if hasAnyRole(['admin', 'tec', 'coordi']);
     }
 
     match /users/{email}/photo {
-      allow read: if true;
+      allow read: if signedIn();
       allow write: if signedIn()
         && request.auth.token.email is string
         && email.lower() == request.auth.token.email.lower();
     }
 
     match /{allPaths=**} {
-      allow read: if true;
-      allow write: if hasAnyRole(['admin']);
+      allow read, write: if false;
     }
   }
 }

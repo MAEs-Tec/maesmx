@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { getSubjects  } from '../firebase/db/subjects';
 import { normalize } from '@/utils/HorarioUtils';
 import { saveAnnouncement, getAnnouncementsEdit,processAsistence, deleteAnnouncementById,
@@ -10,7 +10,7 @@ import {
   formatDate,
   formatTime
 } from '@/utils/AnunciosUtils';
-import { getMaes} from '@/firebase/db/users';
+import { getCurrentUser, getMaes } from '@/firebase/db/users';
 import MultiSelect from 'primevue/multiselect';
 
 const selectedType = ref('Asesoría');
@@ -39,21 +39,50 @@ const showDialogAsesoria = ref(false);
 const showDialogDelete = ref(false);
 const maeSelect = ref([])
 const isEdit = ref(false);
-const menuItems = [
-  {
+const currentUserRole = ref(null);
+const announcementManagerRoles = ['admin', 'coordi', 'tec', 'publi'];
+const announcementEditorRoles = announcementManagerRoles;
+const canManageAnnouncements = computed(() => announcementManagerRoles.includes(currentUserRole.value));
+const canEditAnnouncements = computed(() => announcementEditorRoles.includes(currentUserRole.value));
+const menuItems = computed(() => {
+  const items = [{
     label: 'Información',
     command: () => { selectedOption.value = 'informacion'; }
-  },
-  {
-    label: 'Pre-registro',
-    command: () => { selectedOption.value = 'pre-registro'; }
+  }];
+
+  if (canManageAnnouncements.value) {
+    items.push({
+      label: 'Pre-registro',
+      command: () => { selectedOption.value = 'pre-registro'; }
+    });
   }
-];
+
+  return items;
+});
+
+const requireAnnouncementPermission = (hasPermission) => {
+  if (hasPermission) return true;
+
+  toast.add({
+    severity: 'error',
+    summary: 'Sin permiso',
+    detail: 'Tu rol no permite realizar esta acción.',
+    life: 3000
+  });
+  return false;
+};
 
 onMounted(async () => {
-  subjects.value = await getSubjects();
-  anuncios.value = await getAnnouncementsEdit();
-  maeInfo.value = await getMaes()
+  const [loadedSubjects, loadedAnnouncements, loadedMaes, currentUser] = await Promise.all([
+    getSubjects(),
+    getAnnouncementsEdit(),
+    getMaes(),
+    getCurrentUser()
+  ]);
+  subjects.value = loadedSubjects;
+  anuncios.value = loadedAnnouncements;
+  maeInfo.value = loadedMaes;
+  currentUserRole.value = currentUser?.role ?? null;
 });
 
 const loadAsistance = async () => {
@@ -107,7 +136,11 @@ const triggerFileInput = () => {
 };
 
 const removeFile = () => {
+    if (previewUrl.value?.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl.value);
+    }
     selectedFile.value = null;
+    previewUrl.value = isEdit.value ? selectedAnuncio.value?.imageUrl || null : null;
 };
 
 const openDateDialog = () => {
@@ -116,7 +149,11 @@ const openDateDialog = () => {
 
 const openInfoDialog = async (anuncio) => {
   selectedAnuncio.value = anuncio;
-  await loadAsistance();
+  selectedOption.value = 'informacion';
+  processedAsistence.value = null;
+  if (canManageAnnouncements.value && anuncio.type === 'Asesoría') {
+    await loadAsistance();
+  }
   showInfoDialog.value = true;
 };
 
@@ -147,6 +184,8 @@ const saveDateTime = () => {
 };
 
 const handleSubmit = async () => {
+  if (!requireAnnouncementPermission(canManageAnnouncements.value)) return;
+
   if (selectedType.value === 'Asesoría' && typeof subjectInput.value === 'string') {
     toast.add({
       severity: 'error',
@@ -235,6 +274,9 @@ const handleSubmit = async () => {
 };
 
 const reset = () => {
+  if (previewUrl.value?.startsWith('blob:')) {
+    URL.revokeObjectURL(previewUrl.value);
+  }
   subjectInput.value = '';
   locationInput.value = '';
   titleInput.value = '';  
@@ -246,7 +288,6 @@ const reset = () => {
   selectedFile.value = null 
   maeSelect.value = []
   previewUrl.value = null
-  selectedFile.value = null
 }
 
 const openPreviewDialog = () => {
@@ -270,6 +311,8 @@ const formatDateComplete = (date, start, end) => {
 };
 
 const handleVisible = async () => {
+      if (!requireAnnouncementPermission(canManageAnnouncements.value)) return;
+
       try {
         if (selectedAnuncio.value?.id) {
           
@@ -307,6 +350,8 @@ const handleVisible = async () => {
     };
 
 const handleDelete = async () => {
+      if (!requireAnnouncementPermission(canManageAnnouncements.value)) return;
+
       try {
         if (selectedAnuncio.value?.id) {
           await deleteAnnouncementById(selectedAnuncio.value.id); 
@@ -335,25 +380,41 @@ const handleDelete = async () => {
 const isLoading = ref(false);
 
 const handleEdit = async () => {
+    if (!requireAnnouncementPermission(canEditAnnouncements.value)) return;
+
     isLoading.value = true;
     try {
-        maeInfo.value = await getMaes();
+        const announcement = selectedAnuncio.value;
+        selectedType.value = announcement.type;
         isEdit.value = true;
-        subjectInput.value = selectedAnuncio.value.subject;
-        startTime.value = convertTimestampToDate(selectedAnuncio.value.startTime);
-        endTime.value = convertTimestampToDate(selectedAnuncio.value.endTime);
-        dateTime.value = convertTimestampToDate(selectedAnuncio.value.dateTime);
-        locationInput.value = selectedAnuncio.value.location || 'Indefinido';
-        maeSelect.value = selectedAnuncio.value.maesAsignados.map(mae =>
-            maeInfo.value.find(info => info.uid === mae.uid)
-        );
-        isLoading.value = false;
+        selectedFile.value = null;
+        previewUrl.value = announcement.imageUrl || null;
+
+        if (announcement.type === 'Asesoría') {
+          subjectInput.value = announcement.subject;
+          startTime.value = convertTimestampToDate(announcement.startTime);
+          endTime.value = convertTimestampToDate(announcement.endTime);
+          dateTime.value = convertTimestampToDate(announcement.dateTime);
+          locationInput.value = announcement.location || 'Indefinido';
+          maeSelect.value = (announcement.maesAsignados || [])
+            .map(mae => maeInfo.value.find(info => info.uid === mae.uid))
+            .filter(Boolean);
+        } else {
+          titleInput.value = announcement.title || '';
+          descriptionInput.value = announcement.description || '';
+        }
     } catch (error) {
         console.error("Error al cargar los datos:", error);
-    } 
+        isEdit.value = false;
+        toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo preparar el anuncio para editar.', life: 3000 });
+    } finally {
+        isLoading.value = false;
+    }
 };
 
 const handleEditAnn = async () => {
+    if (!requireAnnouncementPermission(canEditAnnouncements.value)) return;
+
     if (selectedType.value === 'Asesoría') {
         if (!subjectInput.value || !dateTime.value || !startTime.value || !endTime.value) {
             toast.add({ severity: 'error', summary: 'Error', detail: 'Por favor completa todos los campos antes de guardar.', life: 3000 });
@@ -379,6 +440,7 @@ const handleEditAnn = async () => {
           }));
 
           const updatedData = {
+              type: selectedType.value,
               subject: subjectInput.value,
               dateTime: dateTime.value,
               startTime: startTime.value,
@@ -387,7 +449,7 @@ const handleEditAnn = async () => {
               maesAsignados: selectedMaes
           };
 
-          await updateAnnouncement(selectedAnuncio.value.id, updatedData);
+          await updateAnnouncement(selectedAnuncio.value.id, updatedData, selectedFile.value);
           anuncios.value = await getAnnouncementsEdit();
           reset();
           showInfoDialog.value = false
@@ -403,11 +465,12 @@ const handleEditAnn = async () => {
         }
         try {
             const updatedData = {
+                type: selectedType.value,
                 title: titleInput.value,
                 description: descriptionInput.value
             };
 
-            await updateAnnouncement(selectedAnuncio.value.id, updatedData);
+            await updateAnnouncement(selectedAnuncio.value.id, updatedData, selectedFile.value);
             anuncios.value = await getAnnouncementsEdit();
             showInfoDialog.value = false
             reset();
@@ -425,7 +488,7 @@ const handleEditAnn = async () => {
 <template>
   <div class="flex md:flex-row flex-column">
     <!-- Primera columna -->
-    <div class="flex flex-column md:w-6">
+    <div v-if="canManageAnnouncements" class="flex flex-column md:w-6">
       <h1 class="text-black text-2xl md:text-3xl font-bold mb-3 text-left">
         Gestión de anuncios
       </h1>
@@ -528,7 +591,7 @@ const handleEditAnn = async () => {
           <span class="flex flex-row items-center text-center justify-content-center mt-3">
             <i class="pi pi-image text-3xl mr-2"></i>
             {{ selectedFile.name }}
-            <button @click="removeFile" class="mr-2 text-red-500">x</button>
+            <button type="button" aria-label="Quitar portada seleccionada" @click.stop="removeFile" class="mr-2 text-red-500">x</button>
           </span>
         </p>
         <input type="file" ref="fileInput" @change="handleFileChange" accept=".jpg, .jpeg, .png" class="hidden" />  
@@ -543,7 +606,15 @@ const handleEditAnn = async () => {
       </span>
     </div>
 
-    <div class="second-column mt-2 pt-3 flex flex-column md:w-6 md:ml-3 border-round-3xl" style="max-height: 500px; overflow-y: auto;">
+    <div
+      class="second-column mt-2 pt-3 flex flex-column border-round-3xl"
+      :class="canManageAnnouncements ? 'md:w-6 md:ml-3' : 'w-full'"
+      style="max-height: 500px; overflow-y: auto;"
+    >
+      <div v-if="!canManageAnnouncements" class="mx-4 mb-2">
+        <h1 class="text-black text-2xl md:text-3xl font-bold mb-2">Gestión de anuncios</h1>
+        <p class="text-gray-700 mt-0">Selecciona un anuncio para consultar o editar su información.</p>
+      </div>
       <div
         v-for="anuncio in anuncios"
         :key="anuncio.id"
@@ -712,9 +783,79 @@ const handleEditAnn = async () => {
             </span>
           </template>
          
-          <div v-if="selectedOption === 'informacion' && selectedAnuncio.type != 'Asesoría'">
-            <p>{{ selectedAnuncio?.title || 'No hay información disponible' }}</p>
-            <p>{{ selectedAnuncio?.description || 'Sin descripción' }}</p>
+          <div v-if="selectedOption === 'informacion' && selectedAnuncio.type != 'Asesoría'" class="flex flex-column md:flex-row gap-4">
+            <div class="flex-1">
+              <template v-if="isEdit">
+                <label for="editAnnouncementTitle" class="block text-black text-xl font-semibold mb-2">Título</label>
+                <InputText id="editAnnouncementTitle" v-model="titleInput" maxlength="80" class="w-full mb-3" />
+                <label for="editAnnouncementDescription" class="block text-black text-xl font-semibold mb-2">Descripción</label>
+                <InputText id="editAnnouncementDescription" v-model="descriptionInput" maxlength="120" class="w-full" />
+                <label class="block text-black text-xl font-semibold mt-3 mb-2">Portada</label>
+                <button
+                  type="button"
+                  class="cover-editor w-full border-2 border-dashed border-round-xl p-3 cursor-pointer"
+                  @click="triggerFileInput"
+                >
+                  <img v-if="previewUrl" :src="previewUrl" alt="Vista previa de la portada del anuncio" class="cover-editor__preview border-round-lg mb-2" />
+                  <span class="flex align-items-center justify-content-center gap-2">
+                    <i class="pi pi-image" aria-hidden="true"></i>
+                    {{ selectedFile ? selectedFile.name : 'Cambiar portada' }}
+                  </span>
+                </button>
+                <Button
+                  v-if="selectedFile"
+                  type="button"
+                  label="Conservar portada actual"
+                  icon="pi pi-times"
+                  class="p-button-text mt-2"
+                  @click="removeFile"
+                />
+              </template>
+              <template v-else>
+                <h3>{{ selectedAnuncio?.title || 'No hay información disponible' }}</h3>
+                <p>{{ selectedAnuncio?.description || 'Sin descripción' }}</p>
+              </template>
+            </div>
+
+            <div class="md:w-4 flex flex-column justify-content-center align-items-center">
+              <Button
+                v-if="canEditAnnouncements && !isEdit"
+                label="Editar"
+                icon="pi pi-pencil"
+                class="p-button-help p-button-lg py-3 w-10 text-white border-round-3xl mb-3 text-xl font-bold"
+                :style="{ background: '#4484A7' }"
+                @click="handleEdit"
+              />
+              <Button
+                v-if="canManageAnnouncements && !isEdit"
+                :label="selectedAnuncio?.visible ? 'Ocultar' : 'Desocultar'"
+                :icon="selectedAnuncio?.visible ? 'pi pi-eye' : 'pi pi-eye-slash'"
+                class="p-button-help p-button-lg py-3 w-10 text-white border-round-3xl mb-3 text-xl font-bold"
+                :style="{ background: '#646464' }"
+                @click="handleVisible"
+              />
+              <Button
+                v-if="canManageAnnouncements && !isEdit"
+                label="Eliminar"
+                icon="pi pi-trash"
+                class="p-button-help p-button-lg py-3 w-10 text-white border-round-3xl mb-3 text-xl font-bold"
+                :style="{ background: '#C55F5F' }"
+                @click="showDialogDelete = true"
+              />
+              <Button
+                v-if="isEdit"
+                label="Guardar"
+                class="p-button-help p-button-lg py-3 w-10 text-white border-round-3xl mb-3 text-xl font-bold"
+                :style="{ background: 'linear-gradient(to right, #44A79b, #69ac51)' }"
+                @click="handleEditAnn"
+              />
+              <Button
+                :label="isEdit ? 'Cancelar' : 'Cerrar'"
+                class="p-button-help p-button-lg py-3 w-10 text-white border-round-3xl text-xl font-bold"
+                :style="{ background: 'linear-gradient(to right, #4466A7, #51A3AC)' }"
+                @click="closeInfoDialog"
+              />
+            </div>
           </div>
           <div v-if="isLoading" class="loading-indicator ">
             <ProgressSpinner style="width: 60px; height: 60px; animation: spin-fast 0.5s linear infinite;" strokeWidth="6" fill="var(--surface-ground)" />
@@ -800,6 +941,26 @@ const handleEditAnn = async () => {
                     <li v-for="mae in maeSelect" :key="mae.uid">{{ mae.name }}</li>
                   </ul>
                 </div>
+                <p class="text-black text-xl font-semibold text-left mt-4">Portada</p>
+                <button
+                  type="button"
+                  class="cover-editor w-full border-2 border-dashed border-round-xl p-3 cursor-pointer"
+                  @click="triggerFileInput"
+                >
+                  <img v-if="previewUrl" :src="previewUrl" alt="Vista previa de la portada del anuncio" class="cover-editor__preview border-round-lg mb-2" />
+                  <span class="flex align-items-center justify-content-center gap-2">
+                    <i class="pi pi-image" aria-hidden="true"></i>
+                    {{ selectedFile ? selectedFile.name : 'Cambiar portada' }}
+                  </span>
+                </button>
+                <Button
+                  v-if="selectedFile"
+                  type="button"
+                  label="Conservar portada actual"
+                  icon="pi pi-times"
+                  class="p-button-text mt-2"
+                  @click="removeFile"
+                />
               </span>
               
               <span v-else>
@@ -817,12 +978,13 @@ const handleEditAnn = async () => {
                 class="p-button-help p-button-lg py-3 w-8 text-white border-round-3xl mb-3 text-xl font-bold flex justify-content-center align-items-center border-none"
                 :style="{ background: '#4484A7' }"
                 @click="handleEdit"
-                v-if="!isEdit"
+                v-if="canEditAnnouncements && !isEdit"
               >
                 Editar
                 <img src="/assets/editAnun.svg" class="ml-4" alt="edit icon" style="width: 2.0rem; height: 2.0rem;" />
               </Button>
               <Button
+                v-if="canManageAnnouncements && !isEdit"
                 class="p-button-help p-button-lg py-3 w-8 text-white border-round-3xl mb-3 text-xl font-bold flex justify-content-center align-items-center border-none"
                 :style="{ background: '#646464' }"
                 @click="handleVisible"
@@ -838,6 +1000,7 @@ const handleEditAnn = async () => {
               </Button>
 
               <Button
+                v-if="canManageAnnouncements && !isEdit"
                 class="p-button-help p-button-lg py-3 w-8 text-white border-round-3xl mb-3 text-xl font-bold flex justify-content-center align-items-center border-none"
                 :style="{ background: '#C55F5F' }"
                 @click="showDialogDelete = true"
@@ -949,6 +1112,7 @@ const handleEditAnn = async () => {
         </Dialog>
         
         <Dialog 
+          v-if="canManageAnnouncements"
           v-model:visible="showDialogAsesoria" 
           modal 
           header="Seleccionar MAEs" 
@@ -988,6 +1152,7 @@ const handleEditAnn = async () => {
         </Dialog>
 
         <Dialog 
+          v-if="canManageAnnouncements"
           v-model:visible="showDialogDelete" 
           modal  
           :header="`¿Deseas eliminar esta asesoria ${selectedAnuncio?.title || selectedAnuncio?.subject.name}?`" 
@@ -1032,6 +1197,20 @@ const handleEditAnn = async () => {
 
 .custom-button:focus {
   box-shadow: none;
+}
+
+.cover-editor {
+  min-height: 44px;
+  background: var(--surface-card);
+  color: var(--text-color);
+  border-color: var(--surface-border) !important;
+}
+
+.cover-editor__preview {
+  display: block;
+  width: 100%;
+  max-height: 12rem;
+  object-fit: cover;
 }
 
 .btn-left {

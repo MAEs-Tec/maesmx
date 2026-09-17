@@ -32,7 +32,7 @@ const newStatus = ref(null);
 const roles = [
     { label: 'MAE', value: 'mae' },
     { label: 'Coordi', value: 'coordi' },
-    { label: 'Publi', value: 'publi' },
+    { label: 'Publicidad', value: 'publi' },
     { label: 'Tecnología', value: 'tec' },
     { label: 'Usuario', value: 'user' }
 ];
@@ -296,14 +296,14 @@ const handleAddUser = async () => {
                     role: newRole.value,
                     status: newStatus.value
                 });
-                toast.add({ severity: 'success', summary: 'Éxito', detail: 'Mae agregado exitosamente.', life: 3000 });
+                toast.add({ severity: 'success', summary: 'Éxito', detail: 'Rol y estatus actualizados correctamente.', life: 3000 });
                 displayAddUserDialog.value = false; 
                 newMatricula.value = '';
                 newRole.value = null;
                 newStatus.value = null;
             } catch (error) {
                 console.error("Error al agregar mae o editar rol:", error);
-                toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al intentar agregar mae o editar el rol.', life: 3000 });
+                toast.add({ severity: 'error', summary: 'Error', detail: error.code ? 'No se pudo guardar el cambio. Revisa tu conexión y tus permisos e intenta de nuevo.' : (error.message || 'No se pudo actualizar el rol.'), life: 3000 });
             }
         },
         reject: () => {

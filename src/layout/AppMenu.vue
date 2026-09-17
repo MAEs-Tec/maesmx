@@ -1,10 +1,10 @@
 <script setup>
-import { ref, onMounted } from 'vue';
-import { getCurrentUser } from '../firebase/db/users'
+import { ref, onMounted, onUnmounted } from 'vue';
+import { subscribeCurrentUserRole } from '../firebase/db/currentUserRole';
 
 import AppMenuItem from './AppMenuItem.vue';
 
-const model = ref([
+const studentMenu = [
     {
         label: 'Estudiante',
         items: [
@@ -18,10 +18,13 @@ const model = ref([
 
         ]
     },
-]);
+];
+const model = ref([...studentMenu]);
 
-onMounted(async () => {
-    const { role: realRole, uid } = await getCurrentUser();
+const updateMenu = (user) => {
+    model.value = [...studentMenu];
+    if (!user) return;
+    const { role: realRole, uid } = user;
 
     // Muestra todos los menús únicamente cuando se habilita de forma explícita en desarrollo.
     const DEV_ALL_ROLES = import.meta.env.DEV && import.meta.env.VITE_DEV_ALL_ROLES === 'true';
@@ -88,7 +91,16 @@ onMounted(async () => {
     //         { label: 'Maeteca', icon: 'pi pi-fw pi-desktop', to: '/biblioteca' },
     //     ]
     // })
-})
+};
+
+let unsubscribe;
+onMounted(() => {
+    unsubscribe = subscribeCurrentUserRole(updateMenu, (error) => {
+        updateMenu(null);
+        console.error('No se pudieron cargar los permisos del menú:', error);
+    });
+});
+onUnmounted(() => unsubscribe?.());
 </script>
 
 <template>

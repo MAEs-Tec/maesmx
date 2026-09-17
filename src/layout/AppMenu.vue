@@ -9,7 +9,11 @@ const model = ref([]);
 
 onMounted(async () => {
     const role = await getClaimsRole();
-    model.value = buildMenuForRole(role, getAuth().currentUser?.uid);
+    // El menú "Mi perfil" necesita la matrícula (parte antes del @), no el UID de Auth,
+    // porque los docs en Firestore usan la matrícula como docId.
+    const email = getAuth().currentUser?.email;
+    const matricula = email ? email.split('@')[0] : getAuth().currentUser?.uid;
+    model.value = buildMenuForRole(role, matricula);
 })
 </script>
 

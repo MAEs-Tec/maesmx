@@ -235,7 +235,15 @@ router.beforeEach((to, from, next) => {
             return next("/auth/login"); 
           }
 
-        const { role } = await getCurrentUser();
+        let currentUser;
+        try {
+            currentUser = await getCurrentUser({ forceRefresh: true });
+        } catch (error) {
+            console.error('No se pudieron comprobar los permisos:', error);
+            return next('/auth/error');
+        }
+        if (!currentUser) return next('/auth/login');
+        const { role } = currentUser;
 
         // Permite el acceso total solo durante una sesión de desarrollo habilitada explícitamente.
         if (DEV_ALL_ROLES) {

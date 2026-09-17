@@ -77,6 +77,12 @@ onMounted(async () => {
  // await addBackgroundUsers();
   userInfo.value = await getCurrentUser();
   maeInfo.value = await getUser(route.params.id);
+
+  if (!maeInfo.value) {
+    console.error('PerfilMAE: no se pudo cargar el perfil de', route.params.id);
+    return;
+  }
+
   asesoriasCount.value = await getAsesoriasCountForUserInCurrentSemester(maeInfo.value.uid);
   selectedSubjects.value = maeInfo.value.subjects;
   subjects.value = await getSubjects();

@@ -53,12 +53,24 @@ const openAddDialog = () => {
   showAddDialog.value = true;
 };
 
+const saving = ref(false);
+
 const saveNewSubject = async () => {
   if (!newSubject.value.id || !newSubject.value.name) {
-    alert('Faltan campos obligatorios');
+    alert('Faltan campos obligatorios: clave y nombre');
     return;
   }
-  
+
+  if (!newSubject.value.area) {
+    alert('Selecciona un área');
+    return;
+  }
+
+  if ([...newSubject.value.id].some(character => '/.#$[]'.includes(character))) {
+    alert('La clave no puede contener / . # $ [ ]');
+    return;
+  }
+
   if (!editing.value) {
     const existing = subjects.value.find(s => s.id === newSubject.value.id);
     if (existing) {
@@ -67,13 +79,21 @@ const saveNewSubject = async () => {
     }
   }
 
-  await addSubject(newSubject.value);
+  saving.value = true;
+  try {
+    await addSubject(newSubject.value);
 
-  showAddDialog.value = false;
-  editing.value = false;
+    showAddDialog.value = false;
+    editing.value = false;
 
-  subjects.value = await getSubjects();
-  await countMaesPerSubject();
+    subjects.value = await getSubjects({ forceRefresh: true });
+    await countMaesPerSubject();
+  } catch (error) {
+    console.error('Error al guardar la materia:', error);
+    alert('No se pudo guardar la materia: ' + (error?.message ?? 'error desconocido'));
+  } finally {
+    saving.value = false;
+  }
 };
 
 const removeSubject = async (subjectId) => {
@@ -270,7 +290,7 @@ onMounted(async () => {
         </div>
 
         <template #footer>
-            <Button label="Guardar" icon="pi pi-check" @click="saveNewSubject" />
+            <Button label="Guardar" icon="pi pi-check" :loading="saving" :disabled="saving" @click="saveNewSubject" />
         </template>
         </Dialog>
 

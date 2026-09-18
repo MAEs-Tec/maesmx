@@ -117,7 +117,7 @@ const router = createRouter({
                     name: 'gestionAnuncios',
                     component: () => import('@/views/GestionAnuncios.vue'),
                     meta: {
-                        roles: ['admin', 'coordi', 'tec']
+                        roles: ['admin', 'coordi', 'tec', 'publi']
                     }
                 },
                 {
@@ -216,6 +216,9 @@ const router = createRouter({
     ]
 });
 
+// Acceso total únicamente cuando se habilita de forma explícita en desarrollo.
+const DEV_ALL_ROLES = import.meta.env.DEV && import.meta.env.VITE_DEV_ALL_ROLES === 'true';
+
 router.beforeEach((to, from, next) => {
     if (!to.matched.some((record) => record.meta.requiresAuth)) {
         return next();
@@ -233,6 +236,11 @@ router.beforeEach((to, from, next) => {
           }
 
         const { role } = await getCurrentUser();
+
+        // Permite el acceso total solo durante una sesión de desarrollo habilitada explícitamente.
+        if (DEV_ALL_ROLES) {
+            return next();
+        }
 
         if (!to.meta.roles) {
             return next();

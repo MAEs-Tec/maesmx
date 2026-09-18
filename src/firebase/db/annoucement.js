@@ -388,12 +388,20 @@ export async function deleteAnnouncementById(id) {
     }
 }
 
-export async function updateAnnouncement(announcementId, updatedData) {
+export async function updateAnnouncement(announcementId, updatedData, selectedFile = null) {
     try {
         const docRef = doc(firestoreDB, 'announcements', announcementId);  
+        let imageUrl;
+
+        if (selectedFile) {
+            const announcementType = updatedData.type || 'Otro';
+            const filePath = `announcements/${announcementType}/${announcementId}-${Date.now()}-${selectedFile.name}`;
+            imageUrl = await addAnnoucement(selectedFile, filePath);
+        }
 
         await updateDoc(docRef, {
             ...updatedData,
+            ...(imageUrl ? { imageUrl } : {})
         });
 
         await invalidateAnnouncementCaches();

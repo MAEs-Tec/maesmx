@@ -15,6 +15,16 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(currentUserKey())).data.role in roles;
     }
 
+    function isOwnUserDocument(userId) {
+      return signedIn()
+        && request.auth.token.email != null
+        && currentUserKey() == userId;
+    }
+
+    function preservesAccessFields() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status']);
+    }
+
     // === MAETECA ===
     match /videos/{videoId} {
       allow read, write, create: if true;
@@ -23,9 +33,14 @@ service cloud.firestore {
     // === USERS ===
     match /users/{userId} {
       allow read: if signedIn();
-      allow update: if signedIn();
-      allow create: if signedIn();
-      allow delete: if request.auth != null && request.auth.token.role == 'admin';
+      allow create: if isOwnUserDocument(userId)
+                    && request.resource.data.role == 'user'
+                    && request.resource.data.status == 'estudiante';
+      // Existing client workflows update service data for other MAEs. Keep
+      // those writes working, but never let them grant roles or alter status.
+      allow update: if hasRole(['admin', 'tec'])
+                    || (signedIn() && preservesAccessFields());
+      allow delete: if hasRole(['admin']);
     }
 
     // === ANNOUNCEMENTS ===

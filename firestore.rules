@@ -80,8 +80,10 @@ service cloud.firestore {
     }
 
     // === ATTENDANCE ===
+    // Solo quien puede entrar a /coordi registra asistencias; los MAEs solo las leen
     match /attendance/{document=**} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow write: if hasRole(['admin', 'coordi', 'tec']);
     }
 
     // === BOT_FLAGS ===

@@ -1,15 +1,19 @@
 <script setup>
-import { useToast } from 'primevue/usetoast';
-import { ref } from 'vue';
-import { getAuth, sendPasswordResetEmail } from "firebase/auth"
-import router from '../../../router';
-// import AppConfig from '@/layout/AppConfig.vue';
-
-const toast = useToast();
+import { onMounted, ref } from 'vue';
+import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
+import { useRoute } from 'vue-router';
 
 const email = ref('');
 const errorMsg = ref('');
-const checked = ref(false);
+const resetSent = ref(false);
+const loading = ref(false);
+const route = useRoute();
+
+onMounted(() => {
+    if (typeof route.query.email === 'string') {
+        email.value = route.query.email.trim().toLowerCase();
+    }
+});
 
 function isValidTecMxEmail(email) {
     // Regular expression to match the pattern of (string of characters)@tec.mx
@@ -17,75 +21,86 @@ function isValidTecMxEmail(email) {
     return regex.test(email);
 }
 
-const onSignIn = () => {
-    
+const onResetPassword = async () => {
     const auth = getAuth();
+    errorMsg.value = '';
+    resetSent.value = false;
+    email.value = email.value.trim().toLowerCase();
 
     if (email.value == '') {
-        errorMsg.value = 'Por favor ingresa todos los campos'
+        errorMsg.value = 'Ingresa tu correo institucional.';
         return;
     }
 
     if (!isValidTecMxEmail(email.value)) {
-        errorMsg.value = 'Por favor inicia sesión con un correo @tec.mx'
+        errorMsg.value = 'Usa un correo institucional que termine en @tec.mx.';
         return;
     }
 
-    sendPasswordResetEmail(auth, email.value)
-        .then(() => {
-            toast.add({ severity: 'success', summary: 'Correo enviado', detail: 'Revisa tu bandeja de entrada y spam', life: 3000 });
-            router.push('/auth/login');
-        })
-        .catch(() => {
-            errorMsg.value = 'Ocurrió un error al tratar de enviar el correo. Contacta un administrador de la página';
-        })
+    loading.value = true;
+    try {
+        await sendPasswordResetEmail(auth, email.value);
+        resetSent.value = true;
+    } catch (error) {
+        switch (error.code) {
+            case 'auth/user-not-found':
+                // Mostrar el mismo resultado evita revelar qué correos están registrados.
+                resetSent.value = true;
+                break;
+            case 'auth/too-many-requests':
+                errorMsg.value = 'Se solicitaron demasiados correos. Espera unos minutos e inténtalo de nuevo.';
+                break;
+            case 'auth/network-request-failed':
+                errorMsg.value = 'No pudimos conectarnos. Revisa tu conexión e inténtalo de nuevo.';
+                break;
+            case 'auth/invalid-email':
+                errorMsg.value = 'El correo no tiene un formato válido.';
+                break;
+            default:
+                errorMsg.value = 'No pudimos enviar el correo en este momento. Inténtalo nuevamente o contacta al administrador.';
+                break;
+        }
+    } finally {
+        loading.value = false;
+    }
+};
 
-}
+const resetForm = () => {
+    resetSent.value = false;
+    errorMsg.value = '';
+    email.value = '';
+};
 </script>
 
 <template>
     <div class="surface-ground flex align-items-center justify-content-center min-h-screen min-w-screen overflow-hidden">
         <div class="flex flex-column align-items-center justify-content-center">
             <img src="../../../../public/layout/images/logo-maes.svg" alt="Sakai logo" class="mb-5 w-16rem flex-shrink-0" />
-            <div
-                style="border-radius: 56px; padding: 0.3rem; background: linear-gradient(180deg, var(--primary-color) 10%, rgba(33, 150, 243, 0) 30%)">
+            <div style="border-radius: 56px; padding: 0.3rem; background: linear-gradient(180deg, var(--primary-color) 10%, rgba(33, 150, 243, 0) 30%)">
                 <div class="w-full surface-card py-8 px-5 sm:px-8" style="border-radius: 53px">
                     <div class="text-center mb-5">
-                        <div class="text-900 text-3xl font-medium mb-3">Ingresa tu correo electrónico</div>
-                        <span class="text-600 font-medium text-overflow-ellipsis">Recibiras un correo para actualizar tu contraseña</span>
-                        <br>
-                        <span class="text-600 font-medium text-overflow-ellipsis">Asegúrate de que tu contraseña sea diferente a la de otros sitios y que incluya:</span>
-                        <ul class="list-none">
-                            <li class="">Mayúsculas y minúsculas</li>
-                            <li class="">Números</li>
-                            <li class="">Caracteres especiales </li>
-                        </ul>
+                        <div class="text-900 text-3xl font-medium mb-3">Restablece tu contraseña</div>
+                        <span class="text-600 font-medium line-height-3">Te enviaremos un enlace a tu correo institucional.</span>
                     </div>
 
-                    <div>
-                        <Toast />
-                        <label for="email" class="block text-900 text-xl font-medium mb-2">Correo</label>
-                        <InputText id="email" type="text" placeholder="Correo electrónico" class="w-full mb-5"
-                            style="padding: 1rem" v-model="email" />
+                    <form @submit.prevent="onResetPassword">
+                        <label for="email" class="block text-900 text-xl font-medium mb-2">Correo institucional</label>
+                        <InputText id="email" type="email" placeholder="usuario@tec.mx" class="w-full" style="padding: 1rem" v-model="email" autocomplete="email" inputmode="email" :disabled="loading || resetSent" />
 
-                        <a href="/#/auth/login">
-                            <p class="text-center text-indigo-800 w-full mt-2 underline cursor-pointer">Regresar a inicio de sesión</p>
-                        </a>
-                        <Message v-if="errorMsg" severity="error" class="mt-2"> {{ errorMsg }} </Message>
+                        <small class="block text-600 mt-2 line-height-3"> Si existe una cuenta con ese correo, recibirás las instrucciones. Revisa spam y la cuarentena de Microsoft 365. </small>
 
-                        <!-- <div class="flex align-items-center justify-content-between mb-5 mt-3 gap-5">
-                            <div class="flex align-items-center">
-                                <Checkbox v-model="checked" id="rememberme1" binary class="mr-2"></Checkbox>
-                                <label for="rememberme1">Recuerdame</label>
-                            </div>
-                            <a class="font-medium no-underline ml-2 text-right cursor-pointer" style="color: var(--primary-color)">Olvidaste tu contraseña?</a>
-                        </div> -->
-                        <Divider />
-                        <Button @click="onSignIn" label="Restablecer contraseña" class="w-full p-3 mb-3 text-xl"></Button>
+                        <Message v-if="resetSent" severity="success" class="mt-3" role="status"> Solicitud enviada. Revisa tu correo, spam y la cuarentena de Microsoft 365. </Message>
+                        <Message v-if="errorMsg" severity="error" class="mt-3" role="alert">{{ errorMsg }}</Message>
+
+                        <Button v-if="!resetSent" type="submit" :loading="loading" :disabled="email == ''" label="Enviar enlace" class="w-full p-3 mt-4 mb-3 text-xl" />
+                        <Button v-else type="button" @click="resetForm" label="Enviar a otro correo" severity="secondary" class="w-full p-3 mt-4 mb-3 text-xl" />
+
+                        <router-link :to="{ path: '/auth/login', query: email ? { email: email } : {} }" class="block text-center text-indigo-800 w-full mt-2 mb-4 underline"> Regresar al inicio de sesión </router-link>
+
                         <a href="https://firebasestorage.googleapis.com/v0/b/peer-teaching.appspot.com/o/documents%2FAvisoPrivacidadMaesMx.pdf?alt=media&token=425380a0-f154-4723-b73a-4505a8a4fae2">
                             <p class="text-center text-indigo-800 w-full mt-4 underline cursor-pointer">Aviso de privacidad</p>
                         </a>
-                    </div>
+                    </form>
                 </div>
             </div>
         </div>
@@ -93,13 +108,4 @@ const onSignIn = () => {
     <!-- <AppConfig simple /> -->
 </template>
 
-<style scoped>
-.pi-eye {
-    transform: scale(1.6);
-    margin-right: 1rem;
-}
-
-.pi-eye-slash {
-    transform: scale(1.6);
-    margin-right: 1rem;
-}</style>
+<style scoped></style>

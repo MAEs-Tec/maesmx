@@ -62,7 +62,7 @@ export const cacheKeys = {
     attendanceToday: (dateString) => `attendance:today:${dateString}`,
     attendanceByDate: (dateString) => `attendance:date:${dateString}`,
     attendanceStudent: (uid, dateString) => `attendance:student:${uid}:${dateString}`,
-    attendanceRange: (startDate, endDate) => `attendance:range:${startDate}:${endDate}`,
+    attendanceRange: (startDate, endDate) => `attendance:range:v2:${startDate}:${endDate}`,
     asesoriasRange: (startDate, endDate) => `asesorias:range:${startDate ?? 'all'}:${endDate ?? 'all'}`,
     asesoriasSemesterByPeer: (uid, semesterKey) => `asesorias:semester:${uid}:${semesterKey}`,
     asesoriasPendingRating: (uidUser, uidPeer = 'all') => `asesorias:pending-rating:${uidUser}:${uidPeer}`,

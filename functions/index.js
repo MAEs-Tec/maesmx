@@ -4,6 +4,13 @@ const admin = require('firebase-admin');
 admin.initializeApp();
 const db = admin.firestore();
 
+// The published role editor writes Firestore directly. Keep Auth claims in sync
+// for that editor and other authorized administrative role changes.
+const { createRoleSynchronizer } = require('./role-sync');
+exports.syncUserRoleClaimOnWrite = functions.runWith({ failurePolicy: true })
+    .firestore.document('users/{userId}')
+    .onWrite(createRoleSynchronizer({ db, auth: admin.auth(), logger: functions.logger }));
+
 
 // Se ejecuta automáticamente el día 1 de cada mes a las 00:00
 exports.cleanupExpiredAnnouncements = functions.pubsub.schedule('0 0 1 * *').timeZone('America/Mexico_City').onRun(async (context) => {

@@ -19,9 +19,28 @@ import * as XLSX from 'xlsx';
 import { writeBatch } from "firebase/firestore";
 import { invalidateCacheTags, withCache } from "../cache/cache";
 import { CACHE_TAGS, CACHE_TTL_MS, cacheKeys, userTag } from "../cache/config";
+import { applyPointsDelta, LEADERBOARD_ROLES, roundPoints } from "../../utils/PointsUtils";
 
 const db = getFirestore();
 const MAE_DIRECTORY_ROLES = ['mae', 'coordi', 'admin', 'subjectCoordi', 'publi', 'tec'];
+
+async function getUserRecordByUid(uid) {
+    if (!uid) return null;
+
+    const directRef = doc(db, 'users', uid);
+    const directSnap = await getDoc(directRef);
+    if (directSnap.exists()) {
+        return { id: directSnap.id, ref: directRef, data: directSnap.data() };
+    }
+
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('uid', '==', uid));
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) return null;
+
+    const userDoc = querySnapshot.docs[0];
+    return { id: userDoc.id, ref: userDoc.ref, data: userDoc.data() };
+}
 
 
 function getEmailUsername(email) {
@@ -269,6 +288,11 @@ export async function updateUserInfo(userId, userInfo) {
     const result = await updateDoc(userRef, userInfo);
     await invalidateUserCaches(userId);
     return result;
+}
+
+export async function updateUserCareer(userId, career, area) {
+    const userRef = doc(firestoreDB, "users", userId);
+    return await updateDoc(userRef, { career, area });
 }
 
 export async function updateUserSubjects(userId, newSubjects) {
@@ -545,7 +569,9 @@ export async function checkAndUpdateUserRole(file = null) {
 }
 
 export async function updateUserToMae(data) {
-    const { role, matricula, status } = data;
+    const role = data.role?.value ?? data.role;
+    const status = data.status?.value ?? data.status;
+    const matricula = typeof data.matricula === 'string' ? data.matricula.trim().toLowerCase() : '';
     const badges = [
         { "id": "1", "name": "Mi primera asesoría", "description": "Da tu primera asesoría", "image_url": "/assets/badges/1.svg", "achieved": false },
         { "id": "2", "name": "MAE aprendiz", "description": "Da 10 asesorías", "image_url": "/assets/badges/2.svg", "achieved": false },
@@ -580,125 +606,81 @@ export async function updateUserToMae(data) {
         { "id": "8", "image_url": "/assets/back/8.svg", "bought": false, "price": 100 },
     ];
 
-    if (!role || !matricula || !status) {
-        throw new Error("role, matricula, and status are required fields.");
+    if (!/^a\d{8}$/.test(matricula)) {
+        throw new Error('Ingresa una matrícula válida: A seguida de 8 dígitos.');
+    }
+    if (!['mae', 'coordi', 'publi', 'tec', 'user'].includes(role) || !['becario', 'voluntario', 'estudiante'].includes(status)) {
+        throw new Error('Selecciona un rol y un estatus válidos.');
     }
 
-    try {
-        const usersRef = collection(firestoreDB, "users");
-        const userQuery = query(usersRef, where("email", "==", `${matricula.toLowerCase()}@tec.mx`));
-        const querySnapshot = await getDocs(userQuery);
-    
-        if (querySnapshot.empty) {
-            console.log("No user found with the given matricula.");
-            return;
+    let record = await getUserRecordByUid(matricula);
+    if (!record) {
+        const snapshot = await getDocs(query(collection(firestoreDB, 'users'), where('email', '==', `${matricula}@tec.mx`)));
+        if (snapshot.size > 1) throw new Error('Hay varias cuentas con esa matrícula. Contacta al equipo de tecnología.');
+        const userDoc = snapshot.docs[0];
+        if (userDoc) record = { ref: userDoc.ref, data: userDoc.data() };
+    }
+    if (!record) throw new Error('No se encontró la cuenta. El usuario debe registrarse primero con su correo institucional.');
+
+    const updates = { role, status };
+    if (role !== 'user') {
+        const defaults = { weekSchedule: {}, subjects: [], totalTime: 0, badges, points: 0, useCoins: 0, background };
+        for (const [field, value] of Object.entries(defaults)) {
+            // Changing a role must preserve previously earned hours and achievements.
+            if (record.data[field] == null) updates[field] = value;
         }
-
-        // Procesar cada usuario encontrado
-        const promises = querySnapshot.docs.map(async (doc) => {
-            const userRef = doc.ref;
-            const userData = doc.data();
-
-            if (userData.role === 'user' || userData.status === 'estudiante') {
-                return updateDoc(userRef, {
-                    role: role.value,
-                    status: status.value,
-                    weekSchedule: {}, 
-                    subjects: [],
-                    totalTime: 0,
-                    badges: badges,
-                    points: 0,
-                     useCoins: 0,
-                     background: background,
-                });
-            } else {
-            
-                return updateDoc(userRef, {
-                    role: role.value,
-                    status: status.value
-                });
-            }
-        });
-
-        await Promise.all(promises);
-        await invalidateUserCaches(null, { includeActive: true, includeLeaderboard: true });
-        console.log("Usuarios actualizados exitosamente.");
-    } catch (error) {
-        console.error("Error al actualizar los usuarios: ", error);
     }
+    await updateDoc(record.ref, updates);
+    await invalidateUserCaches(record.data.uid || matricula, { includeActive: true, includeLeaderboard: true });
+    return { uid: record.data.uid || matricula, role, status };
+
 }
 
 export const saveScheduleSubjectsExperience = async () => {
-    try {
-        const usersRef = collection(db, 'users');
-        const usersSnap = await getDocs(usersRef);
-
-        if (usersSnap.empty) {
-            console.error("No se encontraron usuarios en la tabla 'users'.");
-            return;
-        }
-
-        const rolesPermitidos = ['admin', 'publi', 'mae', 'coordi', 'tec'];
-
-        const updatePromises = []; 
-        usersSnap.forEach(async (userDoc) => {
-            const user = userDoc.data();
-
-            if (!rolesPermitidos.includes(user.role)) {
-                return;
-            }
-
-            let puntos = 0;
-
-            if (user.subjects && user.subjects.length > 0) {
-                puntos += 15;
-            } else {
-                puntos -= 30;
-                await  updateUserAchievementBadge(user.uid, "18");
-            }
-
-            if (user.weekSchedule && Object.keys(user.weekSchedule).length > 0) {
-                puntos += 100;
-            } else {
-                puntos -= 500;
-                await updateUserAchievementBadge(user.uid, "18");
-            }
-
-            const userRef = doc(db, 'users', userDoc.id); 
-            updatePromises.push(
-                updateDoc(userRef, {
-                    points: (user.points || 0) + puntos
-                })
-            );
-        });
-
-        await Promise.all(updatePromises);
-        await invalidateUserCaches(null, { includeActive: true, includeLeaderboard: true });
-    } catch (error) {
-        console.error("Error al guardar la experiencia:", error);
-    }
+    console.warn("saveScheduleSubjectsExperience está desactivada: el nuevo leaderboard no suma puntos por materias/horario configurado.");
+    return { updated: 0 };
 };
 
 
 export async function updatePoints(uid, newPoints) {
-    const userRef = doc(db, 'users', uid);
-    const userSnap = await getDoc(userRef);
+    const user = await getUserRecordByUid(uid);
+    const pointsDelta = Number(newPoints) || 0;
 
-    if (!userSnap.exists()) {
+    if (user) {
+        const updatedPoints = applyPointsDelta(user.data.points, pointsDelta);
+        await updateDoc(user.ref, { points: updatedPoints });
+        await invalidateUserCaches(uid, { includeLeaderboard: true });
+        return [{ id: user.id, ...user.data, points: updatedPoints }];
+    } else {
         console.log(`Usuario con uid ${uid} no encontrado.`);
         return [];
     }
+}
 
-    const user = userSnap.data();
-    const updatedPoints = (user.points || 0) + newPoints;
-
-    await updateDoc(userRef, { points: updatedPoints });
-    if (newPoints < 0) {
-        await updateUserAchievementBadge(uid, "18");
+export async function updateRatingBonusPoints(uid, newBonusPoints) {
+    const user = await getUserRecordByUid(uid);
+    if (!user) {
+        console.log(`Usuario con uid ${uid} no encontrado.`);
+        return null;
     }
 
+    const previousBonus = Number(user.data.ratingBonusPoints) || 0;
+    const nextBonus = roundPoints(newBonusPoints);
+    const delta = roundPoints(nextBonus - previousBonus);
+    const updatedPoints = applyPointsDelta(user.data.points, delta);
+
+    await updateDoc(user.ref, {
+        points: updatedPoints,
+        ratingBonusPoints: nextBonus
+    });
     await invalidateUserCaches(uid, { includeLeaderboard: true });
-    return [{ id: uid, ...user, points: updatedPoints }];
+
+    return {
+        previousBonus,
+        nextBonus,
+        delta,
+        points: updatedPoints
+    };
 }
 
 export async function getExperience(options = {}) {
@@ -712,7 +694,7 @@ export async function getExperience(options = {}) {
         },
         async () => {
             const data = await getMaeDirectory(options);
-            return (data ?? []).slice().sort((a, b) => (b.points || 0) - (a.points || 0));
+            return (data ?? []).slice().sort((a, b) => (Number(b.points) || 0) - (Number(a.points) || 0));
         }
     );
 }
@@ -1029,4 +1011,36 @@ export async function resetAllUsersTotalTimeAndPoints({ dryRun = false, batchSiz
   await invalidateUserCaches(null, { includeActive: true, includeLeaderboard: true });
   console.log(`Reset complete. Se restablecieron totalTime y points para ${updated} usuarios.`);
   return { scanned: docs.length, updated };
+}
+
+export async function resetAllUsersLeaderboardPoints({ dryRun = false, batchSize = 450 } = {}) {
+  const usersSnap = await getDocs(collection(firestoreDB, "users"));
+  if (usersSnap.empty) return { scanned: 0, updated: 0 };
+
+  const docs = usersSnap.docs.filter((d) => LEADERBOARD_ROLES.includes(d.data().role));
+  let updated = 0;
+
+  if (dryRun) {
+    return { scanned: usersSnap.size, updated: docs.length };
+  }
+
+  for (let i = 0; i < docs.length; i += batchSize) {
+    const chunk = docs.slice(i, i + batchSize);
+    const batch = writeBatch(firestoreDB);
+
+    chunk.forEach((d) => {
+      batch.update(d.ref, {
+        points: 0,
+        ratingBonusPoints: 0
+      });
+    });
+
+    await batch.commit();
+    updated += chunk.length;
+    console.log(`Reinicio de leaderboard en progreso: ${updated}/${docs.length}`);
+  }
+
+  await invalidateUserCaches(null, { includeLeaderboard: true });
+  console.log(`Listo. Se reiniciaron los puntos del leaderboard para ${updated} usuarios.`);
+  return { scanned: usersSnap.size, updated };
 }

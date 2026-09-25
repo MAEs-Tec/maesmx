@@ -1,0 +1,158 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function currentUserKey() {
+      return request.auth.token.email.split('@')[0];
+    }
+
+    function hasRole(roles) {
+      return signedIn()
+        && request.auth.token.email != null
+        && get(/databases/$(database)/documents/users/$(currentUserKey())).data.role in roles;
+    }
+
+    function isOwnUserDocument(userId) {
+      return signedIn()
+        && request.auth.token.email != null
+        && currentUserKey() == userId;
+    }
+
+    function preservesAccessFields() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status']);
+    }
+
+    // === MAETECA ===
+    match /videos/{videoId} {
+      allow read, write, create: if true;
+    }
+
+    // === USERS ===
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create: if isOwnUserDocument(userId)
+                    && request.resource.data.role == 'user'
+                    && request.resource.data.status == 'estudiante';
+      // Existing client workflows update service data for other MAEs. Keep
+      // those writes working, but never let them grant roles or alter status.
+      allow update: if hasRole(['admin', 'tec'])
+                    || (signedIn() && preservesAccessFields());
+      allow delete: if hasRole(['admin']);
+    }
+
+    // === ANNOUNCEMENTS ===
+    match /announcements/{announcementId} {
+      function changedOnly(fields) {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+      }
+
+      function isOwnPreregisterUpdate() {
+        return signedIn()
+          && request.auth.token.email != null
+          && changedOnly(['preregister', 'asistence'])
+          && request.resource.data.preregister.diff(resource.data.preregister).affectedKeys().hasOnly([currentUserKey()])
+          && request.resource.data.asistence.diff(resource.data.asistence).affectedKeys().hasOnly([currentUserKey()])
+          && request.resource.data.preregister[currentUserKey()].uid == currentUserKey()
+          && request.resource.data.asistence[currentUserKey()] == false;
+      }
+
+      allow read: if signedIn();
+      allow create, delete: if hasRole(['admin', 'coordi', 'tec', 'publi']);
+      allow update: if hasRole(['admin', 'coordi', 'tec', 'publi'])
+        || (hasRole(['mae']) && changedOnly([
+          'asistence',
+          'pointsAwarded',
+          'pointsAwardedAt',
+          'pointsAwardedTo'
+        ]))
+        || isOwnPreregisterUpdate();
+    }
+
+    // === ASESORIAS ===
+    match /asesorias/{asesoriaId} {
+      allow create, read: if signedIn();
+      allow update: if resource.data.userInfo.uid == request.auth.uid
+                    || request.auth.token.role == 'admin';
+      allow delete: if request.auth.token.role == 'admin';
+    }
+
+    // === ATTENDANCE ===
+    // Solo quien puede entrar a /coordi registra asistencias; los MAEs solo las leen
+    match /attendance/{document=**} {
+      allow read: if signedIn();
+      allow write: if hasRole(['admin', 'coordi', 'tec']);
+    }
+
+    // === BOT_FLAGS ===
+    match /bot_flags/{flagId} {
+      allow read, write: if request.auth.token.role == 'admin';
+    }
+
+    // === DISCORD ===
+    match /discord/{docId} {
+      allow read, write: if request.auth.token.role == 'admin';
+    }
+
+    // === GROUP_SESSIONS ===
+    match /group_sessions/{sessionId} {
+      allow create: if signedIn();
+      allow read: if resource.data.userInfo.uid == request.auth.uid
+                || resource.data.peerInfo.uid == request.auth.uid
+                || request.auth.token.role == 'admin';
+      allow update: if resource.data.userInfo.uid == request.auth.uid
+                 || resource.data.peerInfo.uid == request.auth.uid
+                 || request.auth.token.role == 'admin';
+      allow delete: if request.auth.token.role == 'admin';
+    }
+
+    // === REQUESTS ===
+    match /requests/{requestId} {
+      allow create: if signedIn();
+      allow read: if resource.data.userInfo.uid == request.auth.uid
+                || resource.data.peerInfo.uid == request.auth.uid
+                || request.auth.token.role == 'admin';
+      allow update: if resource.data.userInfo.uid == request.auth.uid
+                 || resource.data.peerInfo.uid == request.auth.uid
+                 || request.auth.token.role == 'admin';
+      allow delete: if request.auth.token.role == 'admin';
+    }
+
+    // === SCHEDULE ===
+    match /schedule/{docId} {
+      allow read: if signedIn();
+      allow write: if request.auth.token.role == 'admin';
+    }
+
+    // === SCHOOLS ===
+    match /schools/{document=**} {
+      allow read: if signedIn();
+      allow write: if request.auth.token.role == 'admin';
+
+      match /campus/{docId} {
+        allow read: if true;
+        allow write: if request.auth.token.role == 'admin';
+      }
+
+      match /majors/{docId} {
+        allow read: if true;
+        allow write: if request.auth.token.role == 'admin';
+      }
+    }
+
+    // === SUBJECTS ===
+    match /schools/{schoolId}/subjects/{docId} {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null
+                    && request.auth.token.email != null
+                    && get(/databases/$(database)/documents/users/$(currentUserKey())).data.role in ['admin', 'tec'];
+    }
+
+    // === DEFAULT DENY ===
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

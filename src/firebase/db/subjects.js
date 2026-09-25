@@ -38,6 +38,17 @@ export async function addSubject(subject) {
     await invalidateCacheTags([CACHE_TAGS.SUBJECTS]);
 }
 
+export async function upsertSubjects(subjects) {
+    const batchSize = 10;
+    for (let start = 0; start < subjects.length; start += batchSize) {
+        const writes = subjects.slice(start, start + batchSize).map((subject) => {
+            const subjectRef = doc(firestoreDB, `schools/tec.mx/subjects/${subject.id}`);
+            return setDoc(subjectRef, subject);
+        });
+        await Promise.all(writes);
+    }
+}
+
 export async function deleteSubject(subjectId) {
     const subjectRef = doc(firestoreDB, `schools/tec.mx/subjects/${subjectId}`);
     await deleteDoc(subjectRef);

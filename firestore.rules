@@ -110,11 +110,14 @@ service cloud.firestore {
         || isOwnPreregisterUpdate();
     }
 
+    // Solo quien puede entrar a /coordi registra asistencias; los MAEs solo las leen
     match /attendance/{dateId} {
-      allow read, write: if isCoordi();
+      allow read: if signedIn();
+      allow write: if isCoordi();
 
       match /report/{reportId} {
-        allow read, write: if isCoordi();
+        allow read: if signedIn();
+        allow write: if isCoordi();
       }
     }
 
@@ -171,8 +174,7 @@ service cloud.firestore {
     }
 
     match /{document=**} {
-      allow read: if signedIn();
-      allow write: if isAdmin();
+      allow read, write: if false;
     }
   }
 }

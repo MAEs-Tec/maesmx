@@ -206,6 +206,7 @@ async function fetchReportByDateRangeFresh(startDate, endDate) {
                     report.push({
                         id: doc.id, // Student matricula
                         report: data.report, // (A, R, F, J)
+                        date, // Para que el Excel pueda mostrar de que dia viene cada registro
                     });
                 });
             } else {

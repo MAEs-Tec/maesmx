@@ -570,7 +570,9 @@ export async function checkAndUpdateUserRole(file = null) {
 }
 
 export async function updateUserToMae(data) {
-    const { role, matricula, status } = data;
+    const role = data.role?.value ?? data.role;
+    const status = data.status?.value ?? data.status;
+    const matricula = typeof data.matricula === 'string' ? data.matricula.trim().toLowerCase() : '';
     const badges = [
         { "id": "1", "name": "Mi primera asesoría", "description": "Da tu primera asesoría", "image_url": "/assets/badges/1.svg", "achieved": false },
         { "id": "2", "name": "MAE aprendiz", "description": "Da 10 asesorías", "image_url": "/assets/badges/2.svg", "achieved": false },
@@ -605,52 +607,34 @@ export async function updateUserToMae(data) {
         { "id": "8", "image_url": "/assets/back/8.svg", "bought": false, "price": 100 },
     ];
 
-    if (!role || !matricula || !status) {
-        throw new Error("role, matricula, and status are required fields.");
+    if (!/^a\d{8}$/.test(matricula)) {
+        throw new Error('Ingresa una matrícula válida: A seguida de 8 dígitos.');
+    }
+    if (!['mae', 'coordi', 'publi', 'tec', 'user'].includes(role) || !['becario', 'voluntario', 'estudiante'].includes(status)) {
+        throw new Error('Selecciona un rol y un estatus válidos.');
     }
 
-    try {
-        const usersRef = collection(firestoreDB, "users");
-        const userQuery = query(usersRef, where("email", "==", `${matricula.toLowerCase()}@tec.mx`));
-        const querySnapshot = await getDocs(userQuery);
-    
-        if (querySnapshot.empty) {
-            console.log("No user found with the given matricula.");
-            return;
+    let record = await getUserRecordByUid(matricula);
+    if (!record) {
+        const snapshot = await getDocs(query(collection(firestoreDB, 'users'), where('email', '==', `${matricula}@tec.mx`)));
+        if (snapshot.size > 1) throw new Error('Hay varias cuentas con esa matrícula. Contacta al equipo de tecnología.');
+        const userDoc = snapshot.docs[0];
+        if (userDoc) record = { ref: userDoc.ref, data: userDoc.data() };
+    }
+    if (!record) throw new Error('No se encontró la cuenta. El usuario debe registrarse primero con su correo institucional.');
+
+    const updates = { role, status };
+    if (role !== 'user') {
+        const defaults = { weekSchedule: {}, subjects: [], totalTime: 0, badges, points: 0, useCoins: 0, background };
+        for (const [field, value] of Object.entries(defaults)) {
+            // Changing a role must preserve previously earned hours and achievements.
+            if (record.data[field] == null) updates[field] = value;
         }
-
-        // Procesar cada usuario encontrado
-        const promises = querySnapshot.docs.map(async (doc) => {
-            const userRef = doc.ref;
-            const userData = doc.data();
-
-            if (userData.role === 'user' || userData.status === 'estudiante') {
-                return updateDoc(userRef, {
-                    role: role.value,
-                    status: status.value,
-                    weekSchedule: {}, 
-                    subjects: [],
-                    totalTime: 0,
-                    badges: badges,
-                    points: 0,
-                     useCoins: 0,
-                     background: background,
-                });
-            } else {
-            
-                return updateDoc(userRef, {
-                    role: role.value,
-                    status: status.value
-                });
-            }
-        });
-
-        await Promise.all(promises);
-        await invalidateUserCaches(null, { includeActive: true, includeLeaderboard: true });
-        console.log("Usuarios actualizados exitosamente.");
-    } catch (error) {
-        console.error("Error al actualizar los usuarios: ", error);
     }
+    await updateDoc(record.ref, updates);
+    await invalidateUserCaches(record.data.uid || matricula, { includeActive: true, includeLeaderboard: true });
+    return { uid: record.data.uid || matricula, role, status };
+
 }
 
 export const saveScheduleSubjectsExperience = async () => {

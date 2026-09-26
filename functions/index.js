@@ -84,6 +84,15 @@ exports.setUserMaeRole = functions.https.onCall(async (data, context) => {
     return { updated: snap.size };
 });
 
+// firestore.rules solo permite escribir el campo `role` de users/{userId} a
+// isTechAdmin(); este trigger es una red de seguridad para mantener el claim
+// sincronizado si un admin edita el rol directamente en Firestore (p.ej. desde
+// una vista admin que aún no usa syncRoleClaim/setUserMaeRole).
+const { createRoleSynchronizer } = require('./role-sync');
+exports.syncUserRoleClaimOnWrite = functions.runWith({ failurePolicy: true })
+    .firestore.document('users/{userId}')
+    .onWrite(createRoleSynchronizer({ db, auth: admin.auth(), logger: functions.logger }));
+
 // Se ejecuta automáticamente el día 1 de cada mes a las 00:00
 exports.cleanupExpiredAnnouncements = functions.pubsub.schedule('0 0 1 * *').timeZone('America/Mexico_City').onRun(async (context) => {
     try {

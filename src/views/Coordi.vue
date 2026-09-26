@@ -263,8 +263,8 @@ onMounted(async () => {
         maes.value.forEach(mae => {
             const scheduleToday = mae.weekSchedule[currentDay];
             if (scheduleToday) {        
-                scheduleToday.forEach(({ start, end }) => {
-                    handleAutoMarkAbsence(start, end, mae.uid).catch((error) => console.error('Error en marca automática: ', error));
+                scheduleToday.forEach(({ start }) => {
+                    handleAutoMarkAbsence(start, mae.uid).catch((error) => console.error('Error en marca automática: ', error));
                 });
             }
         });
@@ -303,26 +303,16 @@ const applyAutoAttendance = async (uid, newValue) => {
     await nextTick();
 };
 
-const handleAutoMarkAbsence = async (startTime, endTime, uid) => {
+// Solo marca Falta si nadie ha registrado nada. Asistencia y Retraso los pone un coordinador
+// a mano: iniciar turno ya no cuenta como asistencia (antes se marcaba 'A'/'R' solo por
+// tener la sesion activa)
+const handleAutoMarkAbsence = async (startTime, uid) => {
     const now = new Date();
     const [startHour, startMinute] = startTime.split(':').map(Number);
-    const [endHour, endMinute] = endTime.split(':').map(Number);
     const startDateTime = new Date();
-    const endDateTime = new Date();
     startDateTime.setHours(startHour, startMinute, 0, 0);
-    endDateTime.setHours(endHour, endMinute, 0, 0);
     const diffInMinutes = (now - startDateTime) / 60000;
-    const activo = activeMAEs.value.some(mae => mae.uid === uid);
 
-    if (activo && diffInMinutes > 45 && now < endDateTime && report.value[uid] === 'F') {
-        await applyAutoAttendance(uid, 'R');
-    }
-    if (activo && diffInMinutes > 20 && diffInMinutes < 40 && report.value[uid] !== 'A' &&
-        report.value[uid] !== 'J' &&
-        report.value[uid] !== 'R' &&
-        report.value[uid] !== 'F') {
-        await applyAutoAttendance(uid, 'A');
-    }
     if (
         diffInMinutes > 40 &&
         report.value[uid] !== 'A' &&

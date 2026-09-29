@@ -20,6 +20,7 @@ import { writeBatch } from "firebase/firestore";
 import { invalidateCacheTags, withCache } from "../cache/cache";
 import { CACHE_TAGS, CACHE_TTL_MS, cacheKeys, userTag } from "../cache/config";
 import { applyPointsDelta, LEADERBOARD_ROLES, roundPoints } from "../../utils/PointsUtils";
+import { createUserError } from "../../utils/FirebaseErrors";
 
 const db = getFirestore();
 const MAE_DIRECTORY_ROLES = ['mae', 'coordi', 'admin', 'subjectCoordi', 'publi', 'tec'];
@@ -366,8 +367,9 @@ export async function startActiveSession(userId, userInfo, location) {
         await invalidateUserCaches(userId, { includeActive: true });
         return result;
     } catch (error) {
-        console.error("Error fetching filtered users: ", error);
-        return [];
+        // Se relanza: antes regresaba [] y la vista mostraba "Inicio de turno exitoso" aunque fallara
+        console.error("Error al iniciar turno: ", error);
+        throw error;
     }
 }
 
@@ -377,7 +379,7 @@ export async function stopActiveSession(userId) {
         const userDoc = await getDoc(userRef);
 
         if (!userDoc.exists()) {
-            throw new Error("User not found");
+            throw createUserError('No se encontró tu perfil en la base de datos. Avisa al equipo técnico.', 'not-found');
         }
 
         // Gets start time from current Active Session
@@ -385,7 +387,7 @@ export async function stopActiveSession(userId) {
         const startTime = userData.activeSession?.startTime?.toDate();
 
         if (!startTime) {
-            throw new Error("Active session start time not found");
+            throw createUserError('No tienes un turno abierto o ya se cerró. Recarga la página para ver tu estado actual.');
         }
 
         // Calculates and adds the duration of the current session to the total time
@@ -411,7 +413,9 @@ export async function stopActiveSession(userId) {
 
         return { totalTime, differenceInMinutes, activeSessionDeleted: true };
     } catch (error) {
-        return { activeSessionDeleted: false };
+        // Se relanza para que la vista muestre la causa real (antes se perdia y solo salia un error generico)
+        console.error('Error al cerrar turno: ', error);
+        throw error;
     }
 }
 

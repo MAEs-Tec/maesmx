@@ -7,6 +7,7 @@ import { addRegister, getTodaysReport, updateReport, updateReportByDate, getRepo
 import { getUsersWithActiveSession, updatePoints } from '@/firebase/db/users';
 import { nextTick } from 'vue';
 import { getAttendancePointsDelta } from '@/utils/PointsUtils';
+import { getErrorDetail } from '@/utils/FirebaseErrors';
 
 const toast = useToast();
 const loading = ref(true);
@@ -164,9 +165,9 @@ const handleAttendanceChange = async (mae, newAttendanceValue) => {
         console.error('Error al actualizar puntos: ', error);
         toast.add({
             severity: 'warn',
-            summary: 'Asistencia guardada',
-            detail: 'La asistencia se guardó, pero no se pudieron actualizar los puntos.',
-            life: 5000
+            summary: 'Asistencia guardada, puntos no',
+            detail: `La asistencia de ${mae.name} sí quedó guardada, pero sus puntos no se actualizaron. ${getErrorDetail(error)}`,
+            life: 8000
         });
     }
 };
@@ -215,15 +216,21 @@ watch([reponerDate, reponerMaeInfo], async ([date, mae]) => {
 const reponerAsistencia = async () => {
     try {
         await updateReportByDate(reponerMaeInfo.value, reponerDate.value, reponerAttendance.value);
-        await handlePointsUpdate(reponerMaeInfo.value.uid, reponerCurrentReport.value, reponerAttendance.value, false);
-        toast.add({ severity: 'success', summary: 'Asistencia repuesta', detail: `Se marcó ${reponerAttendance.value === 'A' ? 'Asistencia' : reponerAttendance.value === 'R' ? 'Retraso' : 'Justificado'} para ${reponerMaeInfo.value.name}`, life: 3000 });
+        try {
+            await handlePointsUpdate(reponerMaeInfo.value.uid, reponerCurrentReport.value, reponerAttendance.value, false);
+            toast.add({ severity: 'success', summary: 'Asistencia repuesta', detail: `Se marcó ${reponerAttendance.value === 'A' ? 'Asistencia' : reponerAttendance.value === 'R' ? 'Retraso' : 'Justificado'} para ${reponerMaeInfo.value.name}`, life: 3000 });
+        } catch (error) {
+            console.error('Error al actualizar puntos: ', error);
+            toast.add({ severity: 'warn', summary: 'Asistencia repuesta, puntos no', detail: `La asistencia de ${reponerMaeInfo.value.name} sí se repuso, pero sus puntos no se actualizaron. ${getErrorDetail(error)}`, life: 8000 });
+        }
         reponerMaeId.value = '';
         reponerMaeInfo.value = null;
         reponerDate.value = null;
         reponerAttendance.value = null;
         reponerCurrentReport.value = null;
     } catch (error) {
-        toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al reponer la asistencia', life: 5000 });
+        console.error('Error al reponer asistencia: ', error);
+        toast.add({ severity: 'error', summary: 'No se pudo reponer la asistencia', detail: getErrorDetail(error), life: 8000 });
     }
     showDialogReponer.value = false;
 };
@@ -236,7 +243,8 @@ const addTime = async () => {
         maeId.value = '';
         hours.value = 0;
     } catch (error) {
-        toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al tratar de guardar los cambios', life: 5000 });
+        console.error('Error al agregar horas: ', error);
+        toast.add({ severity: 'error', summary: 'No se agregaron las horas', detail: getErrorDetail(error), life: 8000 });
     }
 
     showDialogRegister.value = false;
@@ -247,7 +255,8 @@ const addReport = async () => {
         await addRegister(maeInfo.value, date.value);
         toast.add({ severity: 'success', summary: 'Guardado exitoso', detail: 'Se generó el registro del MAE seleccionado', life: 3000 });
     } catch (error) {
-        toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al tratar de guardar los cambios', life: 5000 });
+        console.error('Error al generar registro: ', error);
+        toast.add({ severity: 'error', summary: 'No se generó el registro', detail: getErrorDetail(error), life: 8000 });
     }
     showDialogRegister.value = false;
 };

@@ -3,6 +3,7 @@ import { onMounted, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { getCurrentUser, startActiveSession, stopActiveSession } from '../firebase/db/users';
 import { useToast } from 'primevue/usetoast';
+import { getErrorDetail } from '@/utils/FirebaseErrors';
 import { getSubjects } from '../firebase/db/subjects';
 import { addAsesoria, getAsesoriasByUidAndRating,
   updateAsesoria,
@@ -79,25 +80,21 @@ const startSession = async () => {
     userInfo.value = await getCurrentUser();
     showDialogSession.value = false;
   } catch (error) {
-    toast.add({ severity: 'error', summary: 'Ocurrió un error al tratar de iniciar turno', detail: 'Consulta con un administrador de la página', life: 3000 });
+    toast.add({ severity: 'error', summary: 'No se pudo iniciar tu turno', detail: getErrorDetail(error), life: 8000 });
   }
 };
 
 const stopSession = async () => {
   try {
     const res = await stopActiveSession(userInfo.value.uid);
-    if (!res.activeSessionDeleted) {
-      if (res.timeLimitExceded) {
-        toast.add({ severity: 'error', summary: `Excediste el límite de tiempo de tu turno (${Math.round((res.differenceInMinutes / 60) * 100) / 100} horas)`, detail: 'Consulta a un coordinador para reponer las horas' });
-      } else {
-        throw new Error("Active session was not deleted");
-      }
+    if (res.timeLimitExceded) {
+      toast.add({ severity: 'error', summary: `Excediste el límite de tiempo de tu turno (${Math.round((res.differenceInMinutes / 60) * 100) / 100} horas)`, detail: 'Consulta a un coordinador para reponer las horas' });
     } else {
       toast.add({ severity: 'success', summary: 'Se ha cerrado el turno con éxito', detail: `${res.differenceInMinutes} minutos registrados`, life: 3000 });
     }
     userInfo.value = await getCurrentUser();
   } catch (error) {
-    toast.add({ severity: 'error', summary: 'Ocurrió un error al tratar de cerrar turno', detail: 'Consulta con un administrador de la página', life: 3000 });
+    toast.add({ severity: 'error', summary: 'No se pudo cerrar tu turno', detail: getErrorDetail(error), life: 8000 });
   }
 };
 

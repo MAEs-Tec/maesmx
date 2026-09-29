@@ -16,6 +16,7 @@ import { getStudentReport } from '../firebase/db/attendance';
 import { formatDate } from '@/utils/AnunciosUtils';
 import { FilterMatchMode } from 'primevue/api';
 import { useToast } from 'primevue/usetoast';
+import { getErrorDetail } from '@/utils/FirebaseErrors';
 import { uploadFile } from '../firebase/img/users';
 import { useLayout } from '@/layout/composables/layout';
 import {
@@ -298,7 +299,8 @@ const saveSubjectChanges = async () => {
    maeInfo.value = await getUser(route.params.id);
    toast.add({ severity: 'success', summary: 'Guardado exitoso', detail: 'Los cambios en tus materias se guardaron con éxito', life: 3000 });
   } catch (error) {
-    toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al tratar de guardar los cambios' });
+    console.error('Error al guardar materias: ', error);
+    toast.add({ severity: 'error', summary: 'No se guardaron tus materias', detail: getErrorDetail(error), life: 8000 });
   }
   showDialogMaterias.value = false;    
 }
@@ -372,9 +374,10 @@ const saveScheduleChanges = async () => {
     maeInfo.value = await getUser(route.params.id);
     toast.add({ severity: 'success', summary: 'Guardado exitoso', detail: 'Los cambios en tu horario se guardaron con éxito', life: 3000 });
   } catch (error) {
-    toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al tratar de guardar los cambios' });
+    console.error('Error al guardar horario: ', error);
+    toast.add({ severity: 'error', summary: 'No se guardó tu horario', detail: getErrorDetail(error), life: 8000 });
   }
-  showDialogHorarios.value = false;  
+  showDialogHorarios.value = false;
 };
 
 const showDialogAsesoria = ref(false);
@@ -466,27 +469,22 @@ const startSession = async () => {
     maeInfo.value = await getUser(route.params.id);
     showDialogSession.value = false;
   } catch (error) {
-    toast.add({ severity: 'error', summary: 'Ocurrió un error al tratar de iniciar turno', detail: 'Consulta con un administrador de la página', life: 3000 });
+    toast.add({ severity: 'error', summary: 'No se pudo iniciar tu turno', detail: getErrorDetail(error), life: 8000 });
   }
 }
 
 const stopSession = async () => {
   try {
     const res = await stopActiveSession(userInfo.value.uid);
-    if (!res.activeSessionDeleted) {
-      if (res.timeLimitExceded) {
-        toast.add({ severity: 'error', summary: `Excediste el limite de tiempo de tu turno (${ Math.round((res.differenceInMinutes / 60) * 100) / 100 } horas)`, detail: 'Consulta a un coordi para reponer las horas' });
-      }
-      else {
-        throw new Error("Active session was not deleted");
-      }
+    if (res.timeLimitExceded) {
+      toast.add({ severity: 'error', summary: `Excediste el limite de tiempo de tu turno (${ Math.round((res.differenceInMinutes / 60) * 100) / 100 } horas)`, detail: 'Consulta a un coordi para reponer las horas' });
     } else {
       toast.add({ severity: 'success', summary: 'Se ha cerrado el turno con éxito', detail: `${res.differenceInMinutes} minutos registrados`, life: 3000 });
     }
     userInfo.value = await getCurrentUser();
     maeInfo.value = await getUser(route.params.id);
   } catch (error) {
-    toast.add({ severity: 'error', summary: 'Ocurrió un error al tratar de cerrar turno', detail: 'Consulta con un administrador de la página', life: 3000 });
+    toast.add({ severity: 'error', summary: 'No se pudo cerrar tu turno', detail: getErrorDetail(error), life: 8000 });
   }
 }
 

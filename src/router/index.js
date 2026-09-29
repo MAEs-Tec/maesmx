@@ -1,6 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
-import { getCurrentUser } from '../firebase/db/users';
 import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { canAccessRoute, getClaimsRole } from '@/auth/roles';
 import AppLayout from '@/layout/AppLayout.vue';
 
 const router = createRouter({
@@ -235,30 +235,17 @@ router.beforeEach((to, from, next) => {
             return next("/auth/login"); 
           }
 
-        let currentUser;
-        try {
-            currentUser = await getCurrentUser({ forceRefresh: true });
-        } catch (error) {
-            console.error('No se pudieron comprobar los permisos:', error);
-            return next('/auth/error');
-        }
-        if (!currentUser) return next('/auth/login');
-        const { role } = currentUser;
+        const role = await getClaimsRole();
 
-        // Permite el acceso total solo durante una sesión de desarrollo habilitada explícitamente.
+        // Acceso total únicamente en desarrollo habilitado explícitamente.
         if (DEV_ALL_ROLES) {
             return next();
         }
 
-        if (!to.meta.roles) {
+        if (canAccessRoute(to, role)) {
             return next();
         }
-
-        if (to.meta.roles.includes(role)) {
-            return next();
-        } else {
-            return next("/pages/notfound");
-        }
+        return next("/auth/access");
     });
 });
 

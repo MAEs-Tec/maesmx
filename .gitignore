@@ -24,6 +24,11 @@ coverage
 
 # Enviorment
 .env
+.env.local
+.env.*.local
+
+# Pentest engagements (evidencia, tokens de prueba, scope)
+engagement-*/
 
 # Editor directories and files
 .vscode/*

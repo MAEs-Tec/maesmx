@@ -178,6 +178,7 @@ export async function getCurrentUser(options = {}) {
                 ttlMs: CACHE_TTL_MS.CURRENT_USER,
                 persist: true,
                 forceRefresh: options.forceRefresh ?? false,
+                cacheNull: false,               // no guardar null en cache persistente
                 tags: [CACHE_TAGS.USERS, CACHE_TAGS.CURRENT_USER, userTag(uid)]
             },
             async () => await getUser(uid, options)

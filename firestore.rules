@@ -1,57 +1,119 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() {
       return request.auth != null;
     }
 
+    // El rol viene del custom claim. Si una cuenta aun no tiene claim (migracion
+    // incompleta o usuario nuevo sin sincronizar) se usa el rol de su doc en
+    // Firestore, que solo admin/tec pueden cambiar.
+    function role() {
+      return !signedIn()
+        ? 'user'
+        : request.auth.token.get('role', null) is string
+          ? request.auth.token.role
+          : roleFromUserDoc();
+    }
+
+    function roleFromUserDoc() {
+      let userPath = /databases/$(database)/documents/users/$(currentUserKey());
+      return exists(userPath) ? get(userPath).data.get('role', 'user') : 'user';
+    }
+
+    function hasAnyRole(roles) {
+      return signedIn() && role() in roles;
+    }
+
+    function isAdmin() {
+      return hasAnyRole(['admin']);
+    }
+
+    function isTechAdmin() {
+      return hasAnyRole(['admin', 'tec']);
+    }
+
+    function isCoordi() {
+      return hasAnyRole(['admin', 'tec', 'coordi']);
+    }
+
+    function isContentManager() {
+      return hasAnyRole(['admin', 'tec', 'coordi']);
+    }
+
+    function isOwnEmail(email) {
+      return signedIn()
+        && request.auth.token.email is string
+        && email is string
+        && email.lower() == request.auth.token.email.lower();
+    }
+
+    // El id del doc es la matricula; algunos docs viejos no traen `email`
+    function isOwnUserDoc(userId) {
+      return signedIn()
+        && request.auth.token.email is string
+        && (userId.lower() == currentUserKey().lower()
+            || isOwnEmail(resource.data.get('email', null)));
+    }
+
     function currentUserKey() {
       return request.auth.token.email.split('@')[0];
     }
 
-    function hasRole(roles) {
-      return signedIn()
-        && request.auth.token.email != null
-        && get(/databases/$(database)/documents/users/$(currentUserKey())).data.role in roles;
+    function isCreatingOwnUserDoc() {
+      return isOwnEmail(request.resource.data.email)
+        && request.resource.data.role == 'user'
+        && request.resource.data.status == 'estudiante';
     }
 
-    function isOwnUserDocument(userId) {
-      return signedIn()
-        && request.auth.token.email != null
-        && currentUserKey() == userId;
+    function changedUserFields() {
+      return request.resource.data.diff(resource.data).affectedKeys();
     }
 
+    // Rol y estatus solo los cambia admin/tec (evita escalacion de privilegios)
     function preservesAccessFields() {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status']);
+      return !changedUserFields().hasAny(['role', 'status']);
     }
 
-    // === MAETECA ===
-    match /videos/{videoId} {
-      allow read, write, create: if true;
+    // Flujos de la pagina que escriben en el perfil de OTRO usuario desde el navegador:
+    // un estudiante evalua o registra una asesoria (puntos y bono del MAE) y quien abre
+    // un perfil o el leaderboard desbloquea logros. Hasta que esto pase a Cloud
+    // Functions, a los demas usuarios solo se les permite tocar esos campos.
+    function changesOnlyGamificationFields() {
+      return changedUserFields().hasOnly(['points', 'ratingBonusPoints', 'badges']);
     }
 
-    // === USERS ===
     match /users/{userId} {
+      allow create: if isCreatingOwnUserDoc() || isTechAdmin();
       allow read: if signedIn();
-      allow create: if isOwnUserDocument(userId)
-                    && request.resource.data.role == 'user'
-                    && request.resource.data.status == 'estudiante';
-      // Existing client workflows update service data for other MAEs. Keep
-      // those writes working, but never let them grant roles or alter status.
-      allow update: if hasRole(['admin', 'tec'])
-                    || (signedIn() && preservesAccessFields());
-      allow delete: if hasRole(['admin']);
+      // Dueno: turno (activeSession/totalTime), tienda (useCoins), horario, materias, foto.
+      // Coordi: agregar horas y puntos de asistencia de otros MAEs.
+      allow update: if isTechAdmin()
+        || ((isOwnUserDoc(userId) || isCoordi()) && preservesAccessFields())
+        || (signedIn() && changesOnlyGamificationFields());
+      allow delete: if isAdmin();
     }
 
-    // === ANNOUNCEMENTS ===
+    match /schools/{schoolId}/subjects/{subjectId} {
+      allow read: if true;
+      allow write: if isTechAdmin();
+    }
+
+    match /schools/{document=**} {
+      allow read: if true;
+      allow write: if isTechAdmin();
+    }
+
     match /announcements/{announcementId} {
       function changedOnly(fields) {
         return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
       }
 
+      // Un estudiante solo puede pre-registrarse/darse de baja a sí mismo.
       function isOwnPreregisterUpdate() {
         return signedIn()
-          && request.auth.token.email != null
+          && request.auth.token.email is string
           && changedOnly(['preregister', 'asistence'])
           && request.resource.data.preregister.diff(resource.data.preregister).affectedKeys().hasOnly([currentUserKey()])
           && request.resource.data.asistence.diff(resource.data.asistence).affectedKeys().hasOnly([currentUserKey()])
@@ -59,10 +121,11 @@ service cloud.firestore {
           && request.resource.data.asistence[currentUserKey()] == false;
       }
 
-      allow read: if signedIn();
-      allow create, delete: if hasRole(['admin', 'coordi', 'tec', 'publi']);
-      allow update: if hasRole(['admin', 'coordi', 'tec', 'publi'])
-        || (hasRole(['mae']) && changedOnly([
+      allow read: if true;
+      allow create, delete: if isContentManager() || hasAnyRole(['publi']);
+      allow update: if isContentManager()
+        || hasAnyRole(['publi'])
+        || (hasAnyRole(['mae']) && changedOnly([
           'asistence',
           'pointsAwarded',
           'pointsAwardedAt',
@@ -71,86 +134,69 @@ service cloud.firestore {
         || isOwnPreregisterUpdate();
     }
 
-    // === ASESORIAS ===
-    match /asesorias/{asesoriaId} {
-      allow create, read: if signedIn();
-      allow update: if resource.data.userInfo.uid == request.auth.uid
-                    || request.auth.token.role == 'admin';
-      allow delete: if request.auth.token.role == 'admin';
-    }
-
-    // === ATTENDANCE ===
     // Solo quien puede entrar a /coordi registra asistencias; los MAEs solo las leen
-    match /attendance/{document=**} {
+    match /attendance/{dateId} {
       allow read: if signedIn();
-      allow write: if hasRole(['admin', 'coordi', 'tec']);
+      allow write: if isCoordi();
+
+      match /report/{reportId} {
+        allow read: if signedIn();
+        allow write: if isCoordi();
+      }
     }
 
-    // === BOT_FLAGS ===
+    match /asesorias/{asesoriaId} {
+      allow create: if signedIn();
+      allow read: if signedIn();
+      allow update: if isCoordi()
+        || (signedIn() && resource.data.userInfo.uid == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /videos/{videoId} {
+      allow read: if true;
+      allow create, update, delete: if isContentManager();
+    }
+
+    // === BOT_FLAGS / DISCORD (uso interno admin) ===
     match /bot_flags/{flagId} {
-      allow read, write: if request.auth.token.role == 'admin';
+      allow read, write: if isAdmin();
     }
 
-    // === DISCORD ===
     match /discord/{docId} {
-      allow read, write: if request.auth.token.role == 'admin';
+      allow read, write: if isAdmin();
     }
 
     // === GROUP_SESSIONS ===
     match /group_sessions/{sessionId} {
       allow create: if signedIn();
-      allow read: if resource.data.userInfo.uid == request.auth.uid
-                || resource.data.peerInfo.uid == request.auth.uid
-                || request.auth.token.role == 'admin';
-      allow update: if resource.data.userInfo.uid == request.auth.uid
-                 || resource.data.peerInfo.uid == request.auth.uid
-                 || request.auth.token.role == 'admin';
-      allow delete: if request.auth.token.role == 'admin';
+      allow read: if isAdmin()
+        || (signedIn() && (resource.data.userInfo.uid == request.auth.uid
+                        || resource.data.peerInfo.uid == request.auth.uid));
+      allow update: if isAdmin()
+        || (signedIn() && (resource.data.userInfo.uid == request.auth.uid
+                        || resource.data.peerInfo.uid == request.auth.uid));
+      allow delete: if isAdmin();
     }
 
     // === REQUESTS ===
     match /requests/{requestId} {
       allow create: if signedIn();
-      allow read: if resource.data.userInfo.uid == request.auth.uid
-                || resource.data.peerInfo.uid == request.auth.uid
-                || request.auth.token.role == 'admin';
-      allow update: if resource.data.userInfo.uid == request.auth.uid
-                 || resource.data.peerInfo.uid == request.auth.uid
-                 || request.auth.token.role == 'admin';
-      allow delete: if request.auth.token.role == 'admin';
+      allow read: if isAdmin()
+        || (signedIn() && (resource.data.userInfo.uid == request.auth.uid
+                        || resource.data.peerInfo.uid == request.auth.uid));
+      allow update: if isAdmin()
+        || (signedIn() && (resource.data.userInfo.uid == request.auth.uid
+                        || resource.data.peerInfo.uid == request.auth.uid));
+      allow delete: if isAdmin();
     }
 
     // === SCHEDULE ===
     match /schedule/{docId} {
       allow read: if signedIn();
-      allow write: if request.auth.token.role == 'admin';
+      allow write: if isAdmin();
     }
 
-    // === SCHOOLS ===
-    match /schools/{document=**} {
-      allow read: if signedIn();
-      allow write: if request.auth.token.role == 'admin';
-
-      match /campus/{docId} {
-        allow read: if true;
-        allow write: if request.auth.token.role == 'admin';
-      }
-
-      match /majors/{docId} {
-        allow read: if true;
-        allow write: if request.auth.token.role == 'admin';
-      }
-    }
-
-    // === SUBJECTS ===
-    match /schools/{schoolId}/subjects/{docId} {
-      allow read: if true;
-      allow create, update, delete: if request.auth != null
-                    && request.auth.token.email != null
-                    && get(/databases/$(database)/documents/users/$(currentUserKey())).data.role in ['admin', 'tec'];
-    }
-
-    // === DEFAULT DENY ===
     match /{document=**} {
       allow read, write: if false;
     }

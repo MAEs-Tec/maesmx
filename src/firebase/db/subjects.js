@@ -53,4 +53,4 @@ export async function deleteSubject(subjectId) {
     const subjectRef = doc(firestoreDB, `schools/tec.mx/subjects/${subjectId}`);
     await deleteDoc(subjectRef);
     await invalidateCacheTags([CACHE_TAGS.SUBJECTS]);
-  }
+}

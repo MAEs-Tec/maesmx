@@ -6,7 +6,10 @@
         "build": "vite build",
         "deploy": "vite build && firebase deploy",
         "preview": "vite preview",
-        "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore"
+        "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --ignore-path .gitignore",
+        "lint:fix": "npm run lint -- --fix",
+        "test": "node --test tests/*.test.mjs functions/tests/*.test.cjs",
+        "measure:bundle": "node scripts/measure-bundle.cjs"
     },
     "dependencies": {
         "chart.js": "3.3.2",

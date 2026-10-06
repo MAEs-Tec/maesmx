@@ -1,0 +1,113 @@
+{
+  "billing": {
+    "projectId": "peer-teaching",
+    "billingEnabled": true
+  },
+  "firestore": {
+    "databases": [
+      {
+        "name": "projects/peer-teaching/databases/(default)",
+        "locationId": "nam5",
+        "type": "FIRESTORE_NATIVE",
+        "pointInTimeRecoveryEnablement": "POINT_IN_TIME_RECOVERY_DISABLED",
+        "deleteProtectionState": "DELETE_PROTECTION_DISABLED",
+        "databaseEdition": "STANDARD"
+      }
+    ]
+  },
+  "datasets": {
+    "kind": "bigquery#datasetList",
+    "etag": "28mtbW2JS2LSJj6Eaaloiw==",
+    "datasets": [
+      {
+        "kind": "bigquery#dataset",
+        "id": "peer-teaching:maesmx",
+        "datasetReference": {
+          "datasetId": "maesmx",
+          "projectId": "peer-teaching"
+        },
+        "location": "US",
+        "type": "DEFAULT"
+      },
+      {
+        "kind": "bigquery#dataset",
+        "id": "peer-teaching:maesmx_requests",
+        "datasetReference": {
+          "datasetId": "maesmx_requests",
+          "projectId": "peer-teaching"
+        },
+        "location": "US",
+        "type": "DEFAULT"
+      },
+      {
+        "kind": "bigquery#dataset",
+        "id": "peer-teaching:maesmx_users",
+        "datasetReference": {
+          "datasetId": "maesmx_users",
+          "projectId": "peer-teaching"
+        },
+        "location": "US",
+        "type": "DEFAULT"
+      }
+    ]
+  },
+  "scheduler": [
+    {
+      "name": "projects/peer-teaching/locations/us-central1/jobs/firebase-schedule-cleanupExpiredAnnouncements-us-central1",
+      "schedule": "0 0 1 * *",
+      "state": "ENABLED"
+    }
+  ],
+  "run": {
+    "status": 403,
+    "reason": "Cloud Run Admin API has not been used in project peer-teaching before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/run.googleapis.com/overview?project=peer-teaching then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry."
+  },
+  "buckets": [
+    {
+      "name": "backups.maes.mx",
+      "location": "US",
+      "storageClass": "STANDARD"
+    },
+    {
+      "name": "gcf-sources-217993096156-us-central1",
+      "location": "US-CENTRAL1",
+      "storageClass": "STANDARD"
+    },
+    {
+      "name": "peer-teaching.appspot.com",
+      "location": "US",
+      "storageClass": "STANDARD"
+    },
+    {
+      "name": "staging.peer-teaching.appspot.com",
+      "location": "US",
+      "storageClass": "STANDARD"
+    },
+    {
+      "name": "us.artifacts.peer-teaching.appspot.com",
+      "location": "US",
+      "storageClass": "STANDARD"
+    }
+  ],
+  "artifacts": {
+    "repositories": [
+      {
+        "name": "projects/peer-teaching/locations/us-central1/repositories/gcf-artifacts",
+        "format": "DOCKER",
+        "description": "This repository is created and used by Cloud Functions for storing function docker images.",
+        "labels": {
+          "goog-managed-by": "cloudfunctions"
+        },
+        "createTime": "2026-03-20T22:05:47.792669Z",
+        "updateTime": "2026-09-27T08:19:32.637740Z",
+        "mode": "STANDARD_REPOSITORY",
+        "vulnerabilityScanningConfig": {
+          "lastEnableTime": "2026-03-20T22:05:38.778987961Z",
+          "enablementState": "SCANNING_DISABLED",
+          "enablementStateReason": "API containerscanning.googleapis.com is not enabled."
+        },
+        "satisfiesPzi": true
+      }
+    ]
+  }
+}

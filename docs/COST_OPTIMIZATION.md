@@ -1,4 +1,4 @@
-# Costos y optimización — dev 5decf8a
+# Costos y optimización — base de análisis 5decf8a, integración sobre dev 814d529
 
 Septiembre 2026, USD: Firestore 40.56, Hosting 9.12, Functions 2.40, Storage 0.36, Non-Firebase Services 123.02. Suma 175.86 frente al total reportado 175.46: diferencia 0.40 pendiente de conciliación. No atribuir costos a recursos sin desglose por servicio/SKU, región, unidades y créditos.
 
@@ -29,7 +29,7 @@ Firestore comprobado: edición Standard, multirregión nam5. Pendientes externos
 - PrimeVue importado por consumidor, Excel diferido, portada responsiva WebP, fondos SVG comprimidos sin cambiar rutas y caché de Hosting para archivos versionados.
 - CI incluye lint sin --fix, pruebas, build, medición de bundle y emuladores.
 
-Resultado local final: entrada JS gzip cercana a 196 kB frente a 504 kB (-61 %); portada 1280px de 47,810 bytes frente a 3,474,840 (-98.6 %). Son tamaños de artefactos, no porcentajes de ahorro económico. Hay 37 pruebas unitarias y una prueba de integración que comprueba migración repetible, doble envío simultáneo, correcciones, eliminaciones, 73 registros con la misma fecha sin pérdidas al paginar, roles y límites de Storage. Revisión en navegador de portada móvil/escritorio, perfil en ambos temas, leaderboard, dashboard y tablas con datos demo. No equivale a una revisión visual completa de todas las pantallas.
+Resultado local final: entrada JS gzip de 198,456 bytes frente a 503,980 (-60.62 %); portada 1280px de 47,810 bytes frente a 3,474,840 (-98.6 %). Son tamaños de artefactos, no porcentajes de ahorro económico. Hay 37 pruebas unitarias y una prueba de integración que comprueba migración repetible, doble envío simultáneo, correcciones, eliminaciones, 73 registros con la misma fecha sin pérdidas al paginar, roles y límites de Storage. Revisión en navegador de portada móvil/escritorio, perfil en ambos temas, leaderboard, dashboard y tablas con datos demo. No equivale a una revisión visual completa de todas las pantallas.
 
 Los resúmenes agregan escrituras y lecturas por operación. Una asesoría con área/campus puede actualizar aproximadamente 15 documentos; la sincronización de insignias añade invocaciones/lecturas. Medir este costo antes de afirmar ahorro neto. Los contadores locales son estimaciones; no reemplazan Cloud Billing. Las colecciones pequeñas de configuración/directorio/anuncios aún tienen consultas completas; la paginación aplicada cubre asesorías y asistencia histórica.
 
@@ -45,3 +45,5 @@ Los resúmenes agregan escrituras y lecturas por operación. Una asesoría con �
 App Check requiere la clave de sitio real mediante VITE_APP_CHECK_SITE_KEY, observación en consola y verificación de usuarios públicos antes de enforcement. El presupuesto mensual requiere la factura conciliada y permisos de Billing; estos datos no están disponibles en el repositorio. No se borraron recursos externos ni se migró/desplegó producción.
 
 Para preparar las alertas de presupuesto sin modificar Billing: `node scripts/budget-alerts.cjs --project=peer-teaching --amount=IMPORTE_CONCILIADO`. Tras revisar la salida, `--apply` crea o actualiza únicamente ese presupuesto y conserva destinatarios existentes. No incluye apagado automático. No se ejecutó porque el importe/ajuste de USD 0.40 sigue sin conciliación.
+
+Las PRs son acumulativas sobre dev y se revisan por fase. El despliegue requiere el conjunto final validado (backend, reglas, índices, migración y cliente); no publicar el cliente de una fase intermedia aislada. Se conservaron las correcciones de mensajes y acceso a documentos antiguos de dev remoto 814d529.

@@ -1,7 +1,8 @@
 // Convierte errores de Firebase en mensajes que un MAE o coordi pueda entender y reportar.
 // Antes todo salia como "Consulta con un administrador" y no se podia saber que habia fallado.
 export const getErrorDetail = (error, fallback = 'Intenta de nuevo en unos minutos.') => {
-    switch (error?.code) {
+    const code = error?.code?.replace(/^functions\//, '');
+    switch (code) {
         case 'permission-denied':
             return 'Firebase rechazó el cambio por falta de permisos. Avisa al equipo técnico (error: permission-denied).';
         case 'unavailable':
@@ -12,7 +13,7 @@ export const getErrorDetail = (error, fallback = 'Intenta de nuevo en unos minut
         case 'not-found':
             return 'No se encontró el perfil del MAE en la base de datos. Avisa al equipo técnico.';
         default:
-            return error?.userMessage ?? fallback;
+            return error?.userMessage ?? (error?.code?.startsWith('functions/') ? error.message : fallback);
     }
 };
 

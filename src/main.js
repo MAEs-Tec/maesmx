@@ -30,5 +30,4 @@ app.directive('styleclass', StyleClass);
 
 
 export { firebaseApp, firestoreDB, firebaseStorage, auth } from './firebase/client';
-
 app.mount('#app');

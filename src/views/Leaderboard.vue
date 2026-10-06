@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { getExperience } from '@/firebase/db/users';
-import { getAsesoriasCountForUserInCurrentSemester } from '@/firebase/db/asesorias';
+import { getLeaderboardCounts } from '@/firebase/db/statistics';
 
 const users = ref([]);
 const userGold = ref(null);
@@ -13,13 +13,7 @@ onMounted(async () => {
     userGold.value = users.value[0]; // Usar .value para reasignar
 
 
-    // Cargar conteo de asesorías de cada usuario en paralelo
-    const counts = await Promise.all(
-        users.value.map(u => getAsesoriasCountForUserInCurrentSemester(u.uid))
-    );
-    const map = {};
-    users.value.forEach((u, i) => { map[u.uid] = counts[i]; });
-    asesoriasCountMap.value = map;
+    asesoriasCountMap.value = await getLeaderboardCounts();
 });
 
 const formatHours = (totalMinutes) => {

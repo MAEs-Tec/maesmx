@@ -102,14 +102,8 @@ const checkLocationAndAttendance = () => {
   });
 };
 
-const handlePointsUpdate = async (uid, previousAttendance, newAttendance, showToast = true) => {
-    const pointsDelta = getAttendancePointsDelta(previousAttendance, newAttendance);
-    if (pointsDelta !== 0) {
-        await updatePoints(uid, pointsDelta);
-    }
-    if (showToast) {
-        toast.add({ severity: 'success', summary: 'Se ha actualizado su asistencia ', detail: 'Se ha actualizo de forma correcta', life: 3000 });
-    }
+const handlePointsUpdate = async (_uid, _previousAttendance, _newAttendance, showToast = true) => {
+    if (showToast) toast.add({ severity: 'success', summary: 'Asistencia y puntos guardados', life: 3000 });
 };
 
 const showDialogRegister = ref(false);

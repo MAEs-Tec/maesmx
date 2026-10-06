@@ -54,3 +54,6 @@ CLAUDE.md
 TODO.md
 BITACORA.md
 PROPUESTA_LEADERBOARD.md
+backups.local/
+.tools/
+scripts/*-edit.local.py

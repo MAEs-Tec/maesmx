@@ -1,3 +1,4 @@
+import { callCostFunction, operationIdFor, completeOperation } from '../costApi';
 import { firestoreDB } from "../client";
 import { getAuth } from 'firebase/auth';
 import {
@@ -372,57 +373,13 @@ export async function startActiveSession(userId, userInfo, location) {
 }
 
 export async function stopActiveSession(userId) {
-    try {
-        const userRef = doc(firestoreDB, "users", userId);
-        const userDoc = await getDoc(userRef);
-
-        if (!userDoc.exists()) {
-            throw createUserError('No se encontró tu perfil en la base de datos. Avisa al equipo técnico.', 'not-found');
-        }
-
-        // Gets start time from current Active Session
-        const userData = userDoc.data();
-        const startTime = userData.activeSession?.startTime?.toDate();
-
-        if (!startTime) {
-            throw createUserError('No tienes un turno abierto o ya se cerró. Recarga la página para ver tu estado actual.');
-        }
-
-        // Calculates and adds the duration of the current session to the total time
-        const currentTime = new Date();
-        const differenceInMinutes = Math.floor((currentTime - startTime) / (1000 * 60));
-
-        if (differenceInMinutes > 310) {
-            await updateDoc(userRef, {
-                activeSession: deleteField()
-            });
-            await invalidateUserCaches(userId, { includeActive: true });
-            return { timeLimitExceded: true, activeSessionDeleted: false, differenceInMinutes }
-        }
-
-        const totalTime = (userData.totalTime || 0) + differenceInMinutes;
-
-        // Updates the total time and stops current session
-        await updateDoc(userRef, {
-            totalTime: totalTime,
-            activeSession: deleteField()
-        });
-        await invalidateUserCaches(userId, { includeActive: true, includeLeaderboard: true });
-
-        return { totalTime, differenceInMinutes, activeSessionDeleted: true };
-    } catch (error) {
-        // Se relanza para que la vista muestre la causa real (antes se perdia y solo salia un error generico)
-        console.error('Error al cerrar turno: ', error);
-        throw error;
-    }
+    const result = await callCostFunction('endActiveSession', { uid: userId });
+    await invalidateUserCaches(userId, { includeActive: true, includeLeaderboard: true });
+    return result;
 }
 
 export async function incrementTotalTime(userId, time) {
-    const userRef = doc(firestoreDB, "users", userId);
-
-    await updateDoc(userRef, {
-        totalTime: increment(time*60)
-    });
+    await callCostFunction('addServiceTime', { uid: userId, minutes: Number(time) * 60 });
     await invalidateUserCaches(userId, { includeLeaderboard: true });
 }
 
@@ -646,18 +603,11 @@ export const saveScheduleSubjectsExperience = async () => {
 
 
 export async function updatePoints(uid, newPoints) {
-    const user = await getUserRecordByUid(uid);
-    const pointsDelta = Number(newPoints) || 0;
-
-    if (user) {
-        const updatedPoints = applyPointsDelta(user.data.points, pointsDelta);
-        await updateDoc(user.ref, { points: updatedPoints });
-        await invalidateUserCaches(uid, { includeLeaderboard: true });
-        return [{ id: user.id, ...user.data, points: updatedPoints }];
-    } else {
-        console.log(`Usuario con uid ${uid} no encontrado.`);
-        return [];
-    }
+    const key = `points:${uid}:${newPoints}`;
+    const result = await callCostFunction('adjustUserPoints', { uid, delta: Number(newPoints), operationId: operationIdFor(key) });
+    completeOperation(key);
+    await invalidateUserCaches(uid, { includeLeaderboard: true });
+    return result;
 }
 
 export async function updateRatingBonusPoints(uid, newBonusPoints) {

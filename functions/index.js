@@ -89,9 +89,20 @@ exports.setUserMaeRole = functions.https.onCall(async (data, context) => {
 // sincronizado si un admin edita el rol directamente en Firestore (p.ej. desde
 // una vista admin que aún no usa syncRoleClaim/setUserMaeRole).
 const { createRoleSynchronizer } = require('./role-sync');
+const costApi = require('./cost-api').createCostApi({ db, admin, functions });
+const synchronizeRole = createRoleSynchronizer({ db, auth: admin.auth(), logger: functions.logger });
+for (const name of ['registerAdvisory', 'updateAdvisory', 'deleteAdvisory', 'setAttendance', 'adjustUserPoints', 'setGroupAttendance', 'endActiveSession', 'addServiceTime']) {
+    exports[name] = costApi[name];
+}
 exports.syncUserRoleClaimOnWrite = functions.runWith({ failurePolicy: true })
     .firestore.document('users/{userId}')
-    .onWrite(createRoleSynchronizer({ db, auth: admin.auth(), logger: functions.logger }));
+    .onWrite(async (change, context) => {
+        await synchronizeRole(change, context);
+        const before = change.before.data() || {}; const after = change.after.data();
+        if (!after) return;
+        if (['role', 'photoURL', 'totalTime', 'points'].some(key => before[key] !== after[key])) await costApi.awardBadges(context.params.userId);
+        if (before.points !== after.points) await costApi.awardLeaderBadge();
+    });
 
 // Se ejecuta automáticamente el día 1 de cada mes a las 00:00
 exports.cleanupExpiredAnnouncements = functions.pubsub.schedule('0 0 1 * *').timeZone('America/Mexico_City').onRun(async (context) => {

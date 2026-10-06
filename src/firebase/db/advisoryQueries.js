@@ -27,11 +27,9 @@ export async function getAsesoriasPage({ peerUid, startDate, endDate, subjectId,
     const constraints = dateConstraints(startDate, endDate);
     if (peerUid) constraints.push(where('peerInfo.uid', '==', peerUid));
     if (subjectId) constraints.push(where('subject.id', '==', subjectId));
-    if (evaluated !== null) constraints.push(where('rating', evaluated ? '!=' : '==', null));
-    // Firestore requires inequality-field ordering first for rated queries.
-    if (evaluated === true) constraints.push(orderBy('rating'));
+    if (evaluated !== null) constraints.push(where('hasRating', '==', evaluated));
     constraints.push(orderBy('date', 'desc'), orderBy(documentId(), 'desc'));
-    if (cursor) constraints.push(startAfter(...(evaluated === true ? [cursor.rating] : []), cursor.date, cursor.id));
+    if (cursor) constraints.push(startAfter(cursor.date, cursor.id));
     constraints.push(limit(Math.min(50, Math.max(1, pageSize))));
     const snapshot = await measuredRead('firestore:advisory-page', () => getDocs(query(collection(firestoreDB, 'asesorias'), ...constraints)));
     const last = snapshot.docs.at(-1);

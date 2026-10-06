@@ -1,3 +1,4 @@
+import { callCostFunction } from '../costApi';
 import { firestoreDB } from "../client";
 import {
     addDoc,
@@ -223,54 +224,11 @@ export async function processAsistence(announcementId) {
 
 
 export async function updateUserAsistence(announcementId, userId) {
-    try {
-        const announcementRef = doc(firestoreDB, 'announcements', announcementId);
-
-        const announcementSnapshot = await getDoc(announcementRef);
-        if (!announcementSnapshot.exists()) {
-            throw new Error(`El anuncio con ID ${announcementId} no existe.`);
-        }
-
-        const announcementData = announcementSnapshot.data();
-        const currentAsistence = announcementData.asistence || {};
-        const maesAsignados = announcementData.maesAsignados || [];
-
-        const newAsistenceStatus = !currentAsistence[userId];
-        const updatedAsistence = {
-            ...currentAsistence,
-            [userId]: newAsistenceStatus,
-        };
-
-        const awardableMaes = maesAsignados.filter(mae => mae?.uid && mae.assigned !== false);
-        const shouldAwardGroupPoints = newAsistenceStatus && announcementData.pointsAwarded !== true;
-        const pointsUpdate = {};
-
-        if (shouldAwardGroupPoints) {
-            if (awardableMaes.length > 0) {
-                for (const mae of awardableMaes) {
-                    await updatePoints(mae.uid, POINTS_RULES.groupAdvisory);
-                    console.log(`Puntos de asesoría grupal para ${mae.name}: +${POINTS_RULES.groupAdvisory}`);
-                }
-
-                pointsUpdate.pointsAwarded = true;
-                pointsUpdate.pointsAwardedAt = serverTimestamp();
-                pointsUpdate.pointsAwardedTo = awardableMaes.map(mae => mae.uid);
-            } else {
-                console.log('No hay MAEs asignados para asignar puntos.');
-            }
-        }
-
-        await updateDoc(announcementRef, {
-            asistence: updatedAsistence,
-            ...pointsUpdate
-        });
-
-        await invalidateAnnouncementCaches();
-        console.log(`Asistencia para el usuario ${userId} actualizada exitosamente a ${newAsistenceStatus}.`);
-    } catch (error) {
-        console.error('Error actualizando la asistencia del usuario:', error);
-        throw error;
-    }
+    const snap = await getDoc(doc(firestoreDB, 'announcements', announcementId));
+    const result = await callCostFunction('setGroupAttendance', { id: announcementId, uid: userId, present: !snap.data()?.asistence?.[userId] });
+    await invalidateAnnouncementCaches();
+    await invalidateCacheTags([CACHE_TAGS.LEADERBOARD, CACHE_TAGS.MAES]);
+    return result;
 }
 
 

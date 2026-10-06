@@ -1,3 +1,4 @@
+import { callCostFunction } from '../costApi';
 import { firestoreDB } from "../client";
 import {
     doc,
@@ -30,7 +31,7 @@ function resolveAttendanceTtl(dateString) {
 }
 
 async function invalidateAttendanceForDate(dateString) {
-    await invalidateCacheTags([CACHE_TAGS.ATTENDANCE, attendanceDateTag(dateString)]);
+    await invalidateCacheTags([attendanceDateTag(dateString), `attendance-range:${dateString.slice(0, 7)}`]);
 }
 
 async function fetchTodaysReportFresh() {
@@ -71,16 +72,10 @@ function buildAttendancePayload(userInfo, report) {
 }
 
 async function writeAttendance(userInfo, dateString, report) {
-    const { uid, payload } = buildAttendancePayload(userInfo, report);
-
-    // El doc raiz de la fecha debe existir para que la fecha aparezca en los listados
-    const dateDocRef = doc(firestoreDB, "attendance", dateString);
-    await setDoc(dateDocRef, { initialized: true }, { merge: true });
-
-    const reportRef = doc(firestoreDB, "attendance", dateString, "report", uid);
-    await setDoc(reportRef, payload, { merge: true }); // merge para conservar otros campos
-
+    const uid = userInfo?.uid ?? userInfo?.id;
+    await callCostFunction('setAttendance', { uid, date: dateString, report });
     await invalidateAttendanceForDate(dateString);
+    await invalidateCacheTags([`user:${uid}`, CACHE_TAGS.LEADERBOARD, CACHE_TAGS.MAES]);
 }
 
 // Update the MAE attendance report w corresponding value

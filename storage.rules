@@ -18,14 +18,20 @@ service firebase.storage {
 
     match /announcements/{allPaths=**} {
       allow read: if signedIn();
-      // publi tambien crea anuncios y reemplaza portadas (igual que en firestore.rules)
-      allow write: if hasAnyRole(['admin', 'tec', 'coordi', 'publi']);
+      allow create, update: if hasAnyRole(['admin', 'tec', 'coordi', 'publi'])
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow delete: if hasAnyRole(['admin', 'tec', 'coordi', 'publi']);
     }
 
     match /users/{email}/photo {
       allow read: if signedIn();
-      allow write: if signedIn()
+      allow create, update: if signedIn()
         && request.auth.token.email is string
+        && email.lower() == request.auth.token.email.lower()
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow delete: if signedIn() && request.auth.token.email is string
         && email.lower() == request.auth.token.email.lower();
     }
 

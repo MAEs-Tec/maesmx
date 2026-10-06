@@ -63,14 +63,14 @@ const selectedFile = ref(null);
 const showDialogLogros = ref(false);
 const dataAttendance = ref();
 
-const statusLabel = ref({
+ref({
   A: 'Asistencia',
   R: 'Retraso',
   J: 'Justificado',
   F: 'Falta'
 });
 
-const statusSeverity = ref({
+ref({
   A: 'success',
   R: 'warning',
   J: 'info',
@@ -421,7 +421,7 @@ const location = ref('Biblioteca Piso 3')
 
 const startSession = async () => {
   try {
-    const res = await startActiveSession(userInfo.value.uid, userInfo.value, location.value);
+    await startActiveSession(userInfo.value.uid, userInfo.value, location.value);
     toast.add({ severity: 'success', summary: 'Inicio de turno exitoso', life: 3000 });
     userInfo.value = await getCurrentUser();
     maeInfo.value = await getUser(route.params.id);
@@ -779,7 +779,7 @@ const guardarEvaluacion = async () => {
         <h2 class="font-bold text-center sm:text-left mt-2"> Horario </h2>
         <div>
           <div class="grid">
-            <div v-for="day in daysArray" class="md:col col-12">
+            <div v-for="day in daysArray" :key="day.en" class="md:col col-12">
               <div class="text-center p-3 border-round-sm bg-gray-200 text-xl font-bold">{{ day['es'] }}</div>
                 <template v-if="maeInfo.weekSchedule[day.en]?.length">
                   <div v-for="(slot, index) in maeInfo.weekSchedule[day.en]" :key="`${day.en}-${index}`"
@@ -797,7 +797,7 @@ const guardarEvaluacion = async () => {
   
   <Dialog v-model:visible="showDialogHorarios" modal header="Editar horario" class="w-9">
     <div class="grid">
-      <div v-for="day in daysArray" class="md:col-4 col-12">
+      <div v-for="day in daysArray" :key="day.en" class="md:col-4 col-12">
         <div class="text-center p-3 border-round-sm bg-gray-200 text-xl font-bold mb-2">{{day['es']}} <Button @click="addTimeSlot(day['en'], '09:00', '10:00')" icon="pi pi-plus" class="text-sm h-1rem w-1rem ml-2"  severity="secondary" text rounded/></div>
         <span v-for="(slot, index) in newSchedule[day['en']]" :key="`editor-${day['en']}-${index}`" class="flex justify-content-around flex-wrap">
           <Dropdown v-model="newSchedule[day['en']][index]['start']" optionValue="code" :options="timeSlots" optionLabel="name" placeholder="Entrada" checkmark :highlightOnSelect="false" class="md:w-5 w-4 mb-2" />

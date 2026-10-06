@@ -1,6 +1,6 @@
 <script setup>
   // Props para recibir del padre
-  const props = defineProps(['tema', 'datos']);
+  defineProps(['tema', 'datos']);
 </script>
 
 <template>

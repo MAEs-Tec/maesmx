@@ -33,6 +33,11 @@ export async function configureCacheSession(project = 'unknown', uid = null, bro
     inFlightRequests.clear();
     if (!uid && broadcast) channel?.postMessage({ type: 'logout', scope: previous, project });
     await enqueuePersistent(async () => {
+        if (typeof window !== 'undefined' && window.indexedDB) {
+            // v1 had no account namespace. Remove its old private values on upgrade.
+            const old = window.indexedDB.deleteDatabase('maesmx-cache');
+            old.onerror = () => console.warn('Legacy cache cleanup failed');
+        }
         const records = await getAllPersistentEntries();
         await Promise.all(records.filter(entry => entry.key.startsWith(`${previous}:`)).map(entry => deletePersistentEntry(entry.key)));
     }).catch(error => console.warn('Cache session cleanup failed', error));
@@ -171,7 +176,7 @@ async function openDb() {
             }
         };
 
-        request.onsuccess = () => resolve(request.result);
+        request.onsuccess = () => { request.result.onversionchange = () => request.result.close(); resolve(request.result); };
         request.onerror = () => reject(request.error);
     });
 }
@@ -187,6 +192,7 @@ async function readPersistentEntry(key) {
         const store = transaction.objectStore(STORE_NAME);
         const request = store.get(key);
 
+        transaction.oncomplete = () => db.close();
         request.onsuccess = () => resolve(request.result ?? null);
         request.onerror = () => reject(request.error);
     });
@@ -209,8 +215,9 @@ async function writePersistentEntry(entry) {
         const store = transaction.objectStore(STORE_NAME);
         const request = store.put(record);
 
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
+        transaction.oncomplete = () => { db.close(); resolve(); };
+        transaction.onabort = () => { db.close(); reject(transaction.error); };
+        request.onerror = () => { db.close(); reject(request.error); };
     });
 }
 
@@ -225,8 +232,9 @@ async function deletePersistentEntry(key) {
         const store = transaction.objectStore(STORE_NAME);
         const request = store.delete(key);
 
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
+        transaction.oncomplete = () => { db.close(); resolve(); };
+        transaction.onabort = () => { db.close(); reject(transaction.error); };
+        request.onerror = () => { db.close(); reject(request.error); };
     });
 }
 
@@ -241,12 +249,13 @@ async function getAllPersistentEntries() {
         const store = transaction.objectStore(STORE_NAME);
         const request = store.getAll();
 
+        transaction.oncomplete = () => db.close();
         request.onsuccess = () => resolve(request.result ?? []);
         request.onerror = () => reject(request.error);
     });
 }
 
-async function hydratePersistentEntry(key) {
+async function hydratePersistentEntry(key, requestGeneration) {
     const entry = await readPersistentEntry(key);
     if (!entry) {
         return null;
@@ -263,6 +272,7 @@ async function hydratePersistentEntry(key) {
         return null;
     }
 
+    if (generation !== requestGeneration) return null;
     setMemoryEntry(key, hydratedEntry);
     return hydratedEntry;
 }
@@ -301,7 +311,7 @@ export async function withCache(
         if (persist) {
             try {
                 await persistentQueue;
-                const persistentEntry = await hydratePersistentEntry(key);
+                const persistentEntry = await hydratePersistentEntry(key, requestGeneration);
                 if (persistentEntry && generation === requestGeneration) {
                     recordCostOperation('cache:persistent-hit');
                     return cloneValue(persistentEntry.value);
@@ -320,6 +330,7 @@ export async function withCache(
     const request = (async () => {
         recordCostOperation('cache:miss');
         const freshValue = await loader();
+        if (scopedKey(originalKey) !== key) throw new Error('La cuenta cambió durante la consulta');
         if ((freshValue !== null || cacheNull) && generation === requestGeneration) {
             // Serialize invalidation and writes. A late response cannot repopulate
             // persistent storage after a mutation or an account change.

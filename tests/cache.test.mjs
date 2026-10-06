@@ -25,6 +25,11 @@ test('session change isolates cached values and pending requests', async () => {
     await c.withCache('private', { ttlMs: 500 }, async () => 'alice');
     await c.configureCacheSession('p', 'bob');
     assert.equal(await c.withCache('private', {}, async () => 'bob'), 'bob');
+    let release;
+    const pending = c.withCache('late', {}, () => new Promise(resolve => release = resolve));
+    await c.configureCacheSession('p', null);
+    release('bob-private');
+    await assert.rejects(pending, /cuenta cambió/);
 });
 test('rejected reads are never cached as an empty result', async () => {
     const c = cache();

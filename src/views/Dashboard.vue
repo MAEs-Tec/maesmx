@@ -11,8 +11,10 @@ const totalUsers = ref(0);
 const totalUsersArea = ref([]);
 const totalAsesoriasCampus = ref([]);
 const loading = ref(true);
+const loadError = ref('');
 
 onMounted(async () => {
+    try {
     const [asesorias, maes, users, usersArea, asesoriasCampus] = await Promise.all([
         getTotalAsesorias(),
         getTotalMaes(),
@@ -62,7 +64,7 @@ onMounted(async () => {
         ]
     };
 
-    loading.value = false;  // Cambia el estado a falso una vez que los datos están listos
+    } catch (error) { loadError.value = error.message; } finally { loading.value = false; }
 });
 
 
@@ -158,6 +160,7 @@ const barChartOptions2 = {
 </script>
 
 <template>
+    <p v-if="loadError" role="alert">{{ loadError }}</p>
     <div>
         <h1 class="text-black text-6xl font-bold mb-2 text-center sm:text-left">Estadísticas</h1>
     </div>

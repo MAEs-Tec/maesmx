@@ -1,5 +1,6 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { Timestamp } = require('firebase-admin/firestore');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -91,7 +92,7 @@ exports.setUserMaeRole = functions.https.onCall(async (data, context) => {
 const { createRoleSynchronizer } = require('./role-sync');
 const costApi = require('./cost-api').createCostApi({ db, admin, functions });
 const synchronizeRole = createRoleSynchronizer({ db, auth: admin.auth(), logger: functions.logger });
-for (const name of ['registerAdvisory', 'updateAdvisory', 'deleteAdvisory', 'setAttendance', 'adjustUserPoints', 'setGroupAttendance', 'endActiveSession', 'addServiceTime']) {
+for (const name of ['registerAdvisory', 'updateAdvisory', 'deleteAdvisory', 'setAttendance', 'adjustUserPoints', 'setGroupAttendance', 'endActiveSession', 'addServiceTime', 'purchaseBackground']) {
     exports[name] = costApi[name];
 }
 exports.syncUserRoleClaimOnWrite = functions.runWith({ failurePolicy: true })
@@ -105,39 +106,75 @@ exports.syncUserRoleClaimOnWrite = functions.runWith({ failurePolicy: true })
     });
 
 // Se ejecuta automáticamente el día 1 de cada mes a las 00:00
-exports.cleanupExpiredAnnouncements = functions.pubsub.schedule('0 0 1 * *').timeZone('America/Mexico_City').onRun(async (context) => {
+exports.cleanupExpiredAnnouncements = functions.pubsub.schedule('0 0 1 * *').timeZone('America/Mexico_City').onRun(async () => {
     try {
-      const now = new Date();
+      const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      const now = new Date(`${day}T00:00:00-06:00`);
       const announcementsRef = db.collection('announcements');
 
       // Buscar anuncios vencidos que aún están visibles
       // Filtramos por visible=true Y dateTime < ahora
       const query = announcementsRef
         .where('visible', '==', true)
-        .where('dateTime', '<', admin.firestore.Timestamp.fromDate(now));
+        .where('dateTime', '<', Timestamp.fromDate(now));
 
-      const snapshot = await query.get();
+      let count = 0;
+      while (true) {
+      const snapshot = await query.limit(450).get();
 
       if (snapshot.empty) {
         console.log('No announcements to delete');
-        return null;
+        break;
       }
       //El batch es una escritura por lotes. Asi no son una por una
       const batch = db.batch();
-      let count = 0;
 
       snapshot.docs.forEach(doc => {
-        batch.delete(doc.ref);
+        // Archive instead of destroying historical group attendance.
+        batch.update(doc.ref, { visible: false });
         count++;
       });
 
       await batch.commit();
+      }
 
-      console.log(`Successfully deleted ${count} expired announcements`);
+      console.log(`Archived ${count} expired announcements`);
       return null;
 
     } catch (error) {
       console.error('Error cleaning up announcements:', error);
-      return null;
+      throw error;
+    }
+});
+
+const { cleanupImage } = require('./media-cleanup');
+exports.cleanupAnnouncementImage = functions.https.onCall(async (data, context) => {
+    assertRole(context, ['admin', 'tec', 'coordi', 'publi']);
+    return cleanupImage({ db, bucket: admin.storage().bucket(), path: data.path });
+});
+exports.cleanupAnnouncementImageOnDelete = functions.runWith({ failurePolicy: true }).firestore.document('announcements/{id}').onDelete(snapshot =>
+    cleanupImage({ db, bucket: admin.storage().bucket(), path: snapshot.data().imagePath }));
+
+// Bonuses belong to the current semester. No advisory history is downloaded.
+exports.rollSemesterBonuses = functions.pubsub.schedule('5 0 1 1,7 *').timeZone('America/Mexico_City').onRun(async () => {
+    const D = require('./advisory-domain');
+    const { FieldPath } = require('firebase-admin/firestore');
+    let cursor;
+    while (true) {
+        let query = db.collection('users').where('role', 'in', D.MAE_ROLES).orderBy(FieldPath.documentId()).limit(100);
+        if (cursor) query = query.startAfter(cursor);
+        const page = await query.get(); if (page.empty) break;
+        for (const user of page.docs) {
+            await db.runTransaction(async tx => {
+                const state = await tx.get(db.doc('settings/analytics'));
+                if (!state.data()?.ready || state.data().maintenance) throw new Error('Analytics in maintenance');
+                const current = await tx.get(user.ref);
+                const stats = await tx.get(db.doc(`analytics/${state.data().activeVersion}/peers/${D.semester(new Date())}~${user.id}`));
+                const next = D.bonus(stats.data()?.ratingSum || 0, stats.data()?.ratingCount || 0);
+                const old = Number(current.data().ratingBonusPoints || 0);
+                if (next !== old) tx.update(user.ref, { ratingBonusPoints: next, points: Math.max(0, D.round(Number(current.data().points || 0) + next - old)) });
+            });
+        }
+        cursor = page.docs.at(-1);
     }
 });

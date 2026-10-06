@@ -17,7 +17,7 @@ const {
 } = require('firebase/auth');
 const {
     getFirestore, connectFirestoreEmulator,
-    doc, getDoc, setDoc, updateDoc, deleteDoc
+    doc, setDoc, updateDoc, deleteDoc
 } = require('firebase/firestore');
 
 const firebaseConfig = {
@@ -58,7 +58,7 @@ async function main() {
 
     // ---- 1. Un usuario 'user' NO debe poder escalar su propio rol ----
     const userCred = await login('user@tec.mx', 'password123');
-    const userUid = userCred.user.uid;
+    const _userUid = userCred.user.uid;
     const userDocId = 'user'; // doc claveado por prefijo de email
 
     results.push(await attempt(

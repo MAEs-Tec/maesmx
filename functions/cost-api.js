@@ -1,6 +1,7 @@
 const D = require('./advisory-domain');
 const { createAdvisoryService } = require('./advisory-service');
 function createCostApi({ db, admin, functions }) {
+    const { Timestamp, FieldValue } = require('firebase-admin/firestore');
     const service = createAdvisoryService({ db, admin, HttpsError: functions.https.HttpsError });
     const callable = functions.runWith({ enforceAppCheck: process.env.MAES_ENFORCE_APP_CHECK === 'true' }).https;
     const coordinator = context => {
@@ -65,7 +66,7 @@ function createCostApi({ db, admin, functions }) {
                 const ref = db.doc(`users/${data.uid}`); const user = await tx.get(ref);
                 if (!user.exists) throw new functions.https.HttpsError('not-found', 'Usuario no encontrado');
                 tx.update(ref, { points: Math.max(0, D.round(Number(user.data().points || 0) + data.delta)) });
-                tx.create(receipt, { fingerprint, createdAt: admin.firestore.Timestamp.now() });
+                tx.create(receipt, { fingerprint, createdAt: Timestamp.now() });
                 return { replay: false };
             });
         }),
@@ -89,7 +90,7 @@ function createCostApi({ db, admin, functions }) {
                 }
                 for (const user of users) tx.update(user.ref, { points: D.round(Number(user.data().points || 0) + 20) });
                 tx.update(ref, { asistence: { ...(record.asistence || {}), [data.uid]: data.present },
-                    ...(award && peers.length ? { pointsAwarded: true, pointsAwardedTo: peers, pointsAwardedAt: admin.firestore.Timestamp.now() } : {}) });
+                    ...(award && peers.length ? { pointsAwarded: true, pointsAwardedTo: peers, pointsAwardedAt: Timestamp.now() } : {}) });
                 return { present: data.present };
             });
         }),
@@ -100,16 +101,33 @@ function createCostApi({ db, admin, functions }) {
                 const ref = db.doc(`users/${who.uid}`); const snap = await tx.get(ref); const user = snap.data();
                 if (!user?.activeSession) return { activeSessionDeleted: true, differenceInMinutes: 0, totalTime: user?.totalTime || 0 };
                 const minutes = Math.max(0, Math.floor((Date.now() - user.activeSession.startTime.toMillis()) / 60000));
-                const totalTime = Number(user.totalTime || 0) + (minutes <= 300 ? minutes : 0);
-                tx.update(ref, { totalTime, activeSession: admin.firestore.FieldValue.delete() });
-                return { activeSessionDeleted: true, timeLimitExceded: minutes > 300, differenceInMinutes: minutes <= 300 ? minutes : 0, totalTime };
+                const totalTime = Number(user.totalTime || 0) + (minutes <= 310 ? minutes : 0);
+                tx.update(ref, { totalTime, activeSession: FieldValue.delete() });
+                return { activeSessionDeleted: true, timeLimitExceded: minutes > 310, differenceInMinutes: minutes, totalTime };
             });
         }),
         addServiceTime: callable.onCall(async (data, context) => {
             coordinator(context);
             if (!/^[a-z0-9._-]+$/i.test(data.uid || '') || !Number.isFinite(data.minutes) || data.minutes < 0 || data.minutes > 18000) throw new functions.https.HttpsError('invalid-argument', 'Tiempo inválido');
-            await db.doc(`users/${data.uid}`).update({ totalTime: admin.firestore.FieldValue.increment(data.minutes) });
+            await db.doc(`users/${data.uid}`).update({ totalTime: FieldValue.increment(data.minutes) });
             return { updated: true };
+        }),
+        purchaseBackground: callable.onCall(async (data, context) => {
+            const who = service.actor(context);
+            if (data.uid !== who.uid || !/^[1-8]$/.test(String(data.backgroundId))) throw new functions.https.HttpsError('permission-denied', 'Fondo inválido');
+            return db.runTransaction(async tx => {
+                const ref = db.doc(`users/${who.uid}`); const snap = await tx.get(ref);
+                if (!snap.exists) throw new functions.https.HttpsError('not-found', 'Usuario no encontrado');
+                const user = snap.data(); const background = user.background || [];
+                const target = background.find(item => String(item.id) === String(data.backgroundId));
+                if (!target) throw new functions.https.HttpsError('not-found', 'Fondo no disponible');
+                if (target.bought) return { replay: true };
+                const prices = [0, 25, 25, 25, 50, 50, 75, 100];
+                const price = prices[Number(data.backgroundId)-1];
+                if (Number(user.points || 0) - Number(user.useCoins || 0) < price) throw new functions.https.HttpsError('failed-precondition', 'Monedas insuficientes');
+                tx.update(ref, { useCoins: Number(user.useCoins || 0) + price, background: background.map(item => String(item.id) === String(data.backgroundId) ? { ...item, bought: true } : item) });
+                return { replay: false };
+            });
         }),
         awardBadges, awardLeaderBadge
     };

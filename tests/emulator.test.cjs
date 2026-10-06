@@ -1,0 +1,84 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
+const PROJECT = 'demo-maes-costs';
+test('emulators: migration, callable transactions, cursors, roles and Storage rules', { skip: !process.env.FIRESTORE_EMULATOR_HOST, timeout: 240000 }, async () => {
+    const admin = require('../functions/node_modules/firebase-admin');
+    const { initializeApp, deleteApp } = require('firebase/app');
+    const { getAuth, connectAuthEmulator, signInWithEmailAndPassword } = require('firebase/auth');
+    const F = require('firebase/firestore');
+    const { getFunctions, connectFunctionsEmulator, httpsCallable } = require('firebase/functions');
+    const S = require('firebase/storage');
+    const app = admin.initializeApp({ projectId: PROJECT, storageBucket: `${PROJECT}.appspot.com` }, 'integration');
+    const db = app.firestore();
+    assert.ok(PROJECT.startsWith('demo-'));
+    for (const collection of await db.listCollections()) await db.recursiveDelete(collection);
+    const users = {};
+    for (const role of ['user', 'mae', 'coordi', 'tec', 'admin']) {
+        const email = `${role}@tec.mx`;
+        let user;
+        try { user = await app.auth().getUserByEmail(email); } catch { user = await app.auth().createUser({ email, password: 'testpassword123' }); }
+        await db.doc(`users/${role}`).set({ uid: role, email, name: role, role, points: 0, totalTime: 0, badges: [{ id: '1', achieved: false }, { id: '11', achieved: false }], weekSchedule: {}, subjects: [] });
+        users[role] = user;
+    }
+    await db.doc('schools/tec.mx/subjects/math').set({ id: 'math', name: 'Matemáticas', area: 'Science' });
+    const stamp = admin.firestore.Timestamp.fromDate(new Date());
+    const batch = db.batch();
+    for (let i = 0; i < 73; i++) batch.set(db.doc(`asesorias/legacy_${String(i).padStart(3, '0')}`), { date: stamp, peerInfo: { uid: 'mae' }, userInfo: { uid: 'user' }, subject: { id: 'math', area: 'Science' }, rating: null, duplicate: false });
+    batch.set(db.doc('asesorias/config'), { _type: 'reveal_config', evaluationsRevealedAt: stamp });
+    batch.set(db.doc('attendance/2026-09-01/report/mae'), { report: 'A' });
+    batch.set(db.doc('announcements/timeless'), { visible: true, title: 'Sin vencimiento' });
+    await batch.commit();
+    const result = spawnSync(process.execPath, ['scripts/migrate-cost-data.cjs', '--project=demo-maes-costs', '--apply', '--resume=integration'], { encoding: 'utf8', env: process.env });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal((await db.doc('analytics/integration/summaries/all').get()).data().totalAsesorias, 73);
+    const repeated = spawnSync(process.execPath, ['scripts/migrate-cost-data.cjs', '--project=demo-maes-costs', '--apply', '--resume=integration'], { encoding: 'utf8', env: process.env });
+    assert.equal(repeated.status, 0, repeated.stderr);
+    assert.equal((await db.doc('analytics/integration/summaries/all').get()).data().totalAsesorias, 73);
+    // Wait for create-trigger initialization, then explicitly assign test claims.
+    for (const [role, user] of Object.entries(users)) await app.auth().setCustomUserClaims(user.uid, { role });
+    const clients = [];
+    async function client(role) {
+        const app = initializeApp({ projectId: PROJECT, apiKey: 'fake-api-key', appId: 'demo-app', storageBucket: `${PROJECT}.appspot.com` }, `integration-${role}`);
+        clients.push(app);
+        const auth = getAuth(app); connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+        const db = F.getFirestore(app); F.connectFirestoreEmulator(db, '127.0.0.1', 8080);
+        const functions = getFunctions(app); connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+        const storage = S.getStorage(app); S.connectStorageEmulator(storage, '127.0.0.1', 9199);
+        await signInWithEmailAndPassword(auth, `${role}@tec.mx`, 'testpassword123');
+        await auth.currentUser.getIdToken(true);
+        return { db, auth, storage, call: (name, data) => httpsCallable(functions, name)(data) };
+    }
+    const student = await client('user');
+    await assert.rejects(F.updateDoc(F.doc(student.db, 'users', 'mae'), { points: 500 }));
+    await assert.rejects(F.addDoc(F.collection(student.db, 'asesorias'), { pointsAwarded: 100 }));
+    const first = await F.getDocs(F.query(F.collection(student.db, 'asesorias'), F.where('peerInfo.uid', '==', 'mae'), F.orderBy('date', 'desc'), F.orderBy(F.documentId(), 'desc'), F.limit(50)));
+    const second = await F.getDocs(F.query(F.collection(student.db, 'asesorias'), F.where('peerInfo.uid', '==', 'mae'), F.orderBy('date', 'desc'), F.orderBy(F.documentId(), 'desc'), F.startAfter(first.docs.at(-1)), F.limit(50)));
+    assert.equal(first.size, 50); assert.equal(second.size, 23);
+    assert.equal(new Set([...first.docs, ...second.docs].map(doc => doc.id)).size, 73);
+    const payload = { operationId: 'integration_operation_1234', peerUid: 'mae', subjectId: 'math', rating: 5, comment: '' };
+    const [registered] = await Promise.all([student.call('registerAdvisory', payload), student.call('registerAdvisory', payload)]);
+    assert.equal((await db.doc('analytics/integration/summaries/all').get()).data().totalAsesorias, 74);
+    await student.call('updateAdvisory', { id: registered.data.id, operationId: 'integration_rating_12345', patch: { rating: 1 } });
+    const coordinator = await client('coordi');
+    await coordinator.call('setAttendance', { uid: 'mae', date: '2026-09-01', report: 'R' });
+    await coordinator.call('setAttendance', { uid: 'mae', date: '2026-09-01', report: 'R' });
+    const attendance = await F.getDocs(F.query(F.collectionGroup(student.db, 'report'), F.where('recordType', '==', 'attendance'), F.where('date', '>=', '2026-09-01'), F.where('date', '<=', '2026-09-30')));
+    assert.equal(attendance.size, 1);
+    await assert.rejects(coordinator.call('setAttendance', { uid: 'coordi', date: '2026-09-01', report: 'A' }));
+    await assert.rejects(F.getDocs(F.collection(student.db, 'analytics/integration/peers')));
+    const tech = await client('tec'); const administrator = await client('admin'); const mae = await client('mae');
+    const validAnnouncements = await F.getDocs(F.query(F.collection(student.db, 'announcements'), F.and(F.where('visible', '==', true), F.or(F.where('dateTime', '>=', F.Timestamp.fromDate(stamp.toDate())), F.where('dateTime', '==', null)))));
+    assert.equal(validAnnouncements.size, 1);
+    await administrator.call('updateAdvisory', { id: registered.data.id, operationId: 'integration_correction_123', patch: { _test: true } });
+    assert.equal((await db.doc('analytics/integration/summaries/all').get()).data().totalAsesorias, 73);
+    await administrator.call('deleteAdvisory', { id: registered.data.id, operationId: 'integration_delete_12345' });
+    await F.getDoc(F.doc(tech.db, 'analytics/integration/summaries/all'));
+    await F.getDoc(F.doc(administrator.db, 'analytics/integration/summaries/all'));
+    await F.getDoc(F.doc(mae.db, 'analytics/integration/counts', '2026-02~mae'));
+    await assert.rejects(F.getDoc(F.doc(student.db, 'analytics/integration/summaries/all')));
+    await assert.rejects(S.uploadBytes(S.ref(student.storage, 'users/user@tec.mx/photo'), new Uint8Array(5 * 1024 * 1024 + 1), { contentType: 'image/png' }));
+    await assert.rejects(S.uploadBytes(S.ref(student.storage, 'users/user@tec.mx/photo'), new Uint8Array(1), { contentType: 'text/plain' }));
+    await S.uploadBytes(S.ref(student.storage, 'users/user@tec.mx/photo'), new Uint8Array([1, 2, 3]), { contentType: 'image/png' });
+    await Promise.all(clients.map(deleteApp)); await app.delete();
+});

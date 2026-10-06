@@ -73,7 +73,334 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "asesorias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "peerInfo.uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "asesorias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userInfo.uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "asesorias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "hasRating",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "asesorias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "peerInfo.uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "hasRating",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "asesorias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userInfo.uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "hasRating",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "asesorias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userInfo.uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "peerInfo.uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "hasRating",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "asesorias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "subject.id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "asesorias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "peerInfo.uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "subject.id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "asesorias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "subject.id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "hasRating",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "asesorias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "peerInfo.uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "subject.id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "hasRating",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "report",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "recordType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "role",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "points",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "asesorias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "peerInfo.uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "userInfo.uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isReal",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "asesorias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "peerInfo.uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "userInfo.uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isReal",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "role",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "name",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "role",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "name",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "users",
+      "fieldPath": "badges",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "users",
+      "fieldPath": "background",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "users",
+      "fieldPath": "weekSchedule",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "users",
+      "fieldPath": "activeSession.peerInfo",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "announcements",
+      "fieldPath": "preregister",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "announcements",
+      "fieldPath": "asistence",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "asesorias",
+      "fieldPath": "comment",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "asesorias",
+      "fieldPath": "peerInfo.profilePictureUrl",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "asesorias",
+      "fieldPath": "userInfo.profilePictureUrl",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "members",
+      "fieldPath": "count",
+      "indexes": []
+    }
+  ]
 }

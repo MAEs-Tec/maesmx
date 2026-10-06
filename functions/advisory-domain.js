@@ -36,6 +36,7 @@ function badgeUpdates(user, count) {
 }
 // Return staged writes so the caller can finish *all* reads before committing.
 async function projectChange(tx, db, version, before, after, updatedAt) {
+    if (JSON.stringify(contribution(before)) === JSON.stringify(contribution(after))) return { writes: [], peers: new Map() };
     const summaries = new Map(); const memberships = new Map(); const peers = new Map();
     for (const [record, sign] of [[before, -1], [after, 1]]) {
         const c = contribution(record); if (!c) continue;
@@ -66,6 +67,8 @@ async function projectChange(tx, db, version, before, after, updatedAt) {
     const base = db.collection('analytics').doc(version);
     const writes = [];
     for (const [scope, delta] of summaries) {
+        if (delta.total === 0 && ![...delta.groups.values()].some(group => group.total !== 0)
+            && ![...memberships.values()].some(member => member.scope === scope && member.count !== 0)) continue;
         const ref = base.collection('summaries').doc(scope); const snap = await tx.get(ref);
         const value = snap.exists ? snap.data() : { totalAsesorias: 0, totalUniqueUsers: 0, areas: {}, campuses: {} };
         value.totalAsesorias += delta.total; value.updatedAt = updatedAt;
@@ -78,6 +81,7 @@ async function projectChange(tx, db, version, before, after, updatedAt) {
         delta.value = value; writes.push([ref, value]);
     }
     for (const [id, delta] of memberships) {
+        if (delta.count === 0) continue;
         const ref = base.collection('members').doc(id); const snap = await tx.get(ref);
         const previous = snap.exists ? snap.data().count : 0; const next = previous + delta.count;
         if (next < 0) throw new Error('Statistics out of sync; rebuild before writing');
@@ -95,7 +99,7 @@ async function projectChange(tx, db, version, before, after, updatedAt) {
             ratingCount: old.ratingCount + delta.ratingCount, ratingSum: round(old.ratingSum + delta.ratingSum), updatedAt };
         if (value.count < 0 || value.ratingCount < 0) throw new Error('Peer statistics out of sync');
         delta.value = value; writes.push([ref, value]);
-        writes.push([base.collection('counts').doc(id), { uid: delta.uid, semester: delta.semester, count: value.count, updatedAt }]);
+        if (delta.count !== 0) writes.push([base.collection('counts').doc(id), { uid: delta.uid, semester: delta.semester, count: value.count, updatedAt }]);
     }
     return { writes, peers };
 }

@@ -1,24 +1,23 @@
+import { measuredRead } from '../diagnostics';
+const getDocs = (...args) => measuredRead('firestore:annoucement:query', () => getDocsRaw(...args));
+const getDoc = (...args) => measuredRead('firestore:annoucement:document', () => getDocRaw(...args));
+function mexicoDayStart() {
+    const key = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    return Timestamp.fromDate(new Date(`${key}T00:00:00-06:00`));
+}
+function announcementDate(value) {
+    if (!value) return null;
+    if (value?.toDate) return value;
+    return Timestamp.fromDate(new Date(value));
+}
 import { callCostFunction } from '../costApi';
 import { firestoreDB } from "../client";
-import {
-    addDoc,
-    collection,
-    query,
-    getDocs,
-    where,
-    updateDoc,
-    doc, 
-    getDoc,
-    deleteDoc,
-    serverTimestamp
-} from 'firebase/firestore';
+import { addDoc, collection, query, getDocs as getDocsRaw, where, and, or, Timestamp, updateDoc, doc, getDoc as getDocRaw, deleteDoc } from "firebase/firestore";
 import { addAnnoucement } from "../img/users";
-import { 
-    updatePoints
-} from './users'; 
+ 
 import { invalidateCacheTags, withCache } from '../cache/cache';
 import { CACHE_TAGS, CACHE_TTL_MS, cacheKeys } from '../cache/config';
-import { POINTS_RULES } from "../../utils/PointsUtils";
+
 
 async function invalidateAnnouncementCaches() {
     await invalidateCacheTags([CACHE_TAGS.ANNOUNCEMENTS, CACHE_TAGS.GROUP_ANNOUNCEMENTS]);
@@ -28,14 +27,16 @@ export async function saveAnnouncement(announcementData, selectedFile) {
     try {
         console.log(announcementData.maesAsignados)
         let imageUrl = '';
+        let imagePath = null;
 
         if (selectedFile) {
-            const filePath = `announcements/${announcementData.type}/${selectedFile.name}`;
+            const filePath = `announcements/${crypto.randomUUID()}/image.webp`;
+            imagePath = filePath;
             imageUrl = await addAnnoucement(selectedFile, filePath);
         }
         const docRef = await addDoc(collection(firestoreDB, 'announcements'), {
             ...announcementData,
-            imageUrl, 
+            imageUrl, imagePath, dateTime: announcementDate(announcementData.dateTime), 
             preregister: {},
             asistence: {},
             createdAt: new Date(),
@@ -75,7 +76,7 @@ async function fetchAnnouncementsEditFresh() {
 async function fetchAnnouncementsFresh() {
     try {
         const announcementsCollection = collection(firestoreDB, 'announcements');
-        const q = query(announcementsCollection, where('visible', '==', true));
+        const q = query(announcementsCollection, and(where('visible', '==', true), or(where('dateTime', '>=', mexicoDayStart()), where('dateTime', '==', null))));
         const querySnapshot = await getDocs(q);
         const now = new Date();
         console.log(querySnapshot.docs)
@@ -123,7 +124,8 @@ async function fetchAnnouncementsGrupalesFresh() {
         const q = query(
             announcementsCollection,
             where('type', '==', 'Asesoría'),
-            where('visible', '==', true)
+            where('visible', '==', true),
+            where('dateTime', '>=', mexicoDayStart())
         );
 
         const querySnapshot = await getDocs(q);
@@ -349,18 +351,27 @@ export async function deleteAnnouncementById(id) {
 export async function updateAnnouncement(announcementId, updatedData, selectedFile = null) {
     try {
         const docRef = doc(firestoreDB, 'announcements', announcementId);  
-        let imageUrl;
+        let imageUrl; let imagePath;
+        const previous = (await getDoc(docRef)).data();
 
         if (selectedFile) {
-            const announcementType = updatedData.type || 'Otro';
-            const filePath = `announcements/${announcementType}/${announcementId}-${Date.now()}-${selectedFile.name}`;
+            
+            const filePath = `announcements/${announcementId}/${crypto.randomUUID()}.webp`;
+            imagePath = filePath;
             imageUrl = await addAnnoucement(selectedFile, filePath);
         }
 
         await updateDoc(docRef, {
             ...updatedData,
-            ...(imageUrl ? { imageUrl } : {})
+            ...(imageUrl ? { imageUrl, imagePath } : {}),
+            ...(updatedData.dateTime !== undefined ? { dateTime: announcementDate(updatedData.dateTime) } : {})
         });
+
+        if (imagePath && previous?.imagePath && previous.imagePath !== imagePath) {
+            await callCostFunction('cleanupAnnouncementImage', { path: previous.imagePath }).catch(error => {
+                console.warn('La imagen sustituida queda pendiente de limpieza:', error.message);
+            });
+        }
 
         await invalidateAnnouncementCaches();
         return docRef.id;  

@@ -1,4 +1,6 @@
 <script setup>
+import Calendar from 'primevue/calendar';
+import Button from 'primevue/button';
 import ProgressSpinner from 'primevue/progressspinner';
 import Rating from 'primevue/rating';
 import { ref, onMounted } from 'vue';
@@ -12,6 +14,10 @@ const asesorias = ref([]);
 const isLoading = ref(true);
 const revealedAt = ref(null);
 const clearedAt = ref(null);
+const cursor = ref(null);
+const loadError = ref('');
+const startDate = ref(new Date(new Date().getFullYear(), new Date().getMonth() < 6 ? 0 : 6, 1));
+const endDate = ref(new Date());
 
 const emojiList = [
   "Astonished Face.svg",
@@ -46,21 +52,29 @@ const getEmoji = (id) => {
   return `/assets/emojis/${emojiList[Math.abs(hash) % emojiList.length]}`;
 };
 
-const recargar = async () => {
+const recargar = async (more = false) => {
+  try {
+  loadError.value = '';
   clearedAt.value = await getEvaluationsClearedAt();
-  asesorias.value = await getEvaluacionesRecibidas(userInfo.value.uid, revealedAt.value, clearedAt.value);
+  const page = await getEvaluacionesRecibidas(userInfo.value.uid, revealedAt.value, clearedAt.value, { page: true, startDate: startDate.value, endDate: endDate.value, cursor: more ? cursor.value : null });
+  asesorias.value = more ? [...asesorias.value, ...page.items] : page.items; cursor.value = page.cursor;
+  } catch (error) { loadError.value = error.message; }
 };
 
 onMounted(async () => {
+  try {
   userInfo.value = await getCurrentUser();
   revealedAt.value = await getEvaluationsRevealedAt();
   clearedAt.value = await getEvaluationsClearedAt();
   await recargar();
-  isLoading.value = false;
+  } catch (error) { loadError.value = error.message; } finally { isLoading.value = false; }
 });
 </script>
 
 <template>
+  <div class="flex gap-2"><Calendar v-model="startDate" /><Calendar v-model="endDate" /><Button label="Consultar período" @click="recargar()" /></div>
+  <p v-if="loadError" role="alert">{{ loadError }}</p>
+  <Button v-if="cursor" label="Cargar 50 más" @click="recargar(true)" />
   <div>
     <div class="mb-5 flex flex-column sm:flex-row sm:align-items-center sm:justify-content-between gap-3">
       <h1 class="text-6xl font-bold text-center sm:text-left m-0">Mis evaluaciones</h1>

@@ -14,9 +14,8 @@ import { ref, onMounted, watch } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import { getTodaysMae, getUser, incrementTotalTime, getCurrentUser } from '@/firebase/db/users';
 import { addRegister, getTodaysReport, updateReport, updateReportByDate, getReportByDate } from '../firebase/db/attendance';
-import { getUsersWithActiveSession, updatePoints } from '@/firebase/db/users';
+import { getUsersWithActiveSession } from "@/firebase/db/users";
 import { nextTick } from 'vue';
-import { getAttendancePointsDelta } from '@/utils/PointsUtils';
 import { getErrorDetail } from '@/utils/FirebaseErrors';
 
 const toast = useToast();
@@ -56,7 +55,7 @@ const checkLocationAndAttendance = () => {
   const fixedLat = 25.650472; 
   const fixedLon = -100.289667;
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     if (userInfo.value.role == 'admin' || userInfo.value.role == 'coordi' ) {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition((position) => {
@@ -384,7 +383,7 @@ const handleAutoMarkAbsence = async (startTime, uid) => {
             <Column header="Horario" style="min-width: 6rem">
                 <template #body="{ data }">
                     <div class="flex flex-wrap justify-content-evenly column-gap-2 row-gap-2">
-                        <Tag v-for="(value, key) in data.weekSchedule[currentDay]" class="text-md mx-auto py-2 "
+                        <Tag v-for="(value, key) in data.weekSchedule[currentDay]" :key="key" class="text-md mx-auto py-2 "
                             :value="`${value.start} - ${value.end} `"
                             rounded style="min-width: 6rem"/>
                     </div>

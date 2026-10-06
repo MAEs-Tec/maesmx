@@ -1,6 +1,6 @@
 <script setup>
 import AutoComplete from 'primevue/autocomplete';
-import Button from 'primevue/button';
+
 import InputText from 'primevue/inputtext';
 import Skeleton from 'primevue/skeleton';
 import Tag from 'primevue/tag';
@@ -93,7 +93,7 @@ const filteredMAEs = computed(() => {
 });
 
 const sortedMAEs = computed(() => {
-    return filteredMAEs.value.sort((a, b) => {
+    return [...filteredMAEs.value].sort((a, b) => {
         var maeA = isMAEActive(a);
         var maeB = isMAEActive(b);
         if (maeA && !maeB) {

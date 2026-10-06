@@ -4,7 +4,7 @@ import { computed } from 'vue';
 
 const { layoutConfig } = useLayout();
 
-const logoUrl = computed(() => {
+computed(() => {
     return `layout/images/${layoutConfig.darkTheme.value ? 'logo-white' : 'logo-dark'}.svg`;
 });
 </script>

@@ -1,28 +1,16 @@
+import { measuredRead } from '../diagnostics';
+const getDocs = (...args) => measuredRead('firestore:users:query', () => getDocsRaw(...args));
+const getDoc = (...args) => measuredRead('firestore:users:document', () => getDocRaw(...args));
 import { callCostFunction, operationIdFor, completeOperation } from '../costApi';
 import { firestoreDB } from "../client";
 import { getAuth } from 'firebase/auth';
-import {
-    doc,
-    collection,
-    query,
-    where,
-    setDoc,
-    getDoc,
-    getDocs,
-    updateDoc,
-    serverTimestamp,
-    deleteField,
-    increment,
-    getFirestore,
-    Timestamp,
-} from 'firebase/firestore';
+import { doc, collection, query, where, setDoc, getDoc as getDocRaw, getDocs as getDocsRaw, updateDoc, serverTimestamp, getFirestore, Timestamp, getCountFromServer } from "firebase/firestore";
 import { getUserProfilePicture } from "../img/users";
 
 import { writeBatch } from "firebase/firestore";
 import { invalidateCacheTags, withCache } from "../cache/cache";
 import { CACHE_TAGS, CACHE_TTL_MS, cacheKeys, userTag } from "../cache/config";
 import { applyPointsDelta, LEADERBOARD_ROLES, roundPoints } from "../../utils/PointsUtils";
-import { createUserError } from "../../utils/FirebaseErrors";
 
 const db = getFirestore();
 const MAE_DIRECTORY_ROLES = ['mae', 'coordi', 'admin', 'subjectCoordi', 'publi', 'tec'];
@@ -156,7 +144,7 @@ export async function getUser(uid, options = {}) {
 
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                const profilePictureUrl = await getUserProfilePicture(data.email);
+                const profilePictureUrl = data.photoURL || await getUserProfilePicture(data.email);
                 return { ...data, profilePictureUrl };
             }
 
@@ -272,7 +260,7 @@ export async function getUsersWithActiveSession(getProfilePicture = false, optio
 
                 return await Promise.all(filteredDocs.map(async (doc) => {
                     const data = doc.data();
-                    const profilePictureUrl = getProfilePicture ? await getUserProfilePicture(data.email) : null;
+                    const profilePictureUrl = getProfilePicture ? data.photoURL || await getUserProfilePicture(data.email) : null;
                     return { ...data, ...(profilePictureUrl ? { profilePictureUrl } : {}) };
                 }));
             }
@@ -348,7 +336,7 @@ export async function getTodaysMae(options = {}) {
         );
     } catch (error) {
         console.error("Error fetching filtered users: ", error);
-        return [];
+        throw error;
     }
 }
 
@@ -357,7 +345,7 @@ export async function startActiveSession(userId, userInfo, location) {
         const userRef = doc(firestoreDB, "users", userId);
         const result = await updateDoc(userRef, {
             activeSession: {
-                peerInfo: userInfo,
+                peerInfo: { uid: userInfo.uid, name: userInfo.name },
                 location,
                 status: 'PENDING',
                 startTime: serverTimestamp(),
@@ -813,37 +801,9 @@ export async function addBackgroundUsers() {
 
 
 // actualizar le achieved del usuario 
-export async function updateUserBackground(uid, backId, coins, userCoins) {
-    try {
-        const userRef = doc(firestoreDB, "users", uid);
-        const userDoc = await getDoc(userRef);
-
-        if (!userDoc.exists()) {
-            console.error("Usuario no encontrado");
-            return;
-        }
-
-        const userData = userDoc.data();
-        const background = userData.background || [];
-
-        const updatedBackground = background.map((back) => {
-            if (back.id === backId) {
-                return { ...back, bought: true };
-            }
-            return back;
-        });
-       
-        await updateDoc(userRef, {
-            background: updatedBackground,  
-            useCoins: userCoins + coins
-        });
-        await invalidateUserCaches(uid, { includeLeaderboard: true });
-
-        console.log(`El fondo con id ${backId} se ha actualizado correctamente para el usuario ${uid}.`);
-    } catch (error) {
-        console.error("Error al actualizar el fondo del usuario:", error);
-        throw error;
-    }
+export async function updateUserBackground(uid, backId, _coins, _userCoins) {
+    await callCostFunction('purchaseBackground', { uid, backgroundId: String(backId) });
+    await invalidateUserCaches(uid);
 }
 
 // Actualizar fondo
@@ -863,13 +823,14 @@ export async function updateUserBackgroundImage(uid, backgroundUrl) {
 
 
 export async function getTotalMaes(options = {}) {
-    try {
-        const maes = await getMaeDirectory(options);
-        return (maes ?? []).filter((user) => user.uid !== 'jackpot').length;
-    } catch (error) {
-        console.error("Error al obtener el total de MAEs: ", error);
-        throw error;
-    }
+    return withCache('maes:count', { ttlMs: CACHE_TTL_MS.MAE_DIRECTORY, persist: true, forceRefresh: options.forceRefresh, tags: [CACHE_TAGS.MAES] }, async () => {
+        const base = [where('role', 'in', MAE_DIRECTORY_ROLES), where('name', '>', '')];
+        const [all, excluded] = await Promise.all([
+            getCountFromServer(query(collection(firestoreDB, 'users'), ...base)),
+            getCountFromServer(query(collection(firestoreDB, 'users'), ...base, where('uid', '==', 'jackpot')))
+        ]);
+        return all.data().count - excluded.data().count;
+    });
 }
 
 

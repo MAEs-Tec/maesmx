@@ -23,6 +23,8 @@ async function main() {
         const response = await fetch(url, { headers: { Authorization: `Bearer ${token.access_token}` } });
         const data = await response.json();
         inventory[service] = response.ok ? data : { status: response.status, reason: data.error?.message };
+        if (service === 'billing' && response.ok) inventory[service] = { projectId: data.projectId, billingEnabled: data.billingEnabled };
+        if (service === 'firestore' && data.databases) inventory[service] = { databases: data.databases.map(({name,locationId,type,databaseEdition,pointInTimeRecoveryEnablement,deleteProtectionState}) => ({name,locationId,type,databaseEdition,pointInTimeRecoveryEnablement,deleteProtectionState})) };
         if (service === 'scheduler' && data.jobs) inventory[service] = data.jobs.map(({ name, schedule, state }) => ({ name, schedule, state }));
         if (service === 'run' && data.services) inventory[service] = data.services.map(({ name, uri }) => ({ name, uri }));
         if (service === 'buckets' && data.items) inventory[service] = data.items.map(({ name, location, storageClass }) => ({ name, location, storageClass }));

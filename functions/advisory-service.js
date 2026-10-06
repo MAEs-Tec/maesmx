@@ -1,6 +1,7 @@
 const D = require('./advisory-domain');
 
 function createAdvisoryService({ db, admin, HttpsError }) {
+    const Timestamp = admin.firestore.Timestamp || require('firebase-admin/firestore').Timestamp;
     const error = (code, message) => new HttpsError(code, message);
     function actor(context) {
         const email = context.auth?.token?.email?.toLowerCase();
@@ -36,6 +37,23 @@ function createAdvisoryService({ db, admin, HttpsError }) {
         }
         return [...changes.values()];
     }
+    async function stagePairs(tx, version, id, before, after) {
+        const keys = new Map();
+        for (const record of [before, after]) {
+            if (record?.peerInfo?.uid && record?.userInfo?.uid) keys.set(`${record.peerInfo.uid}:${record.userInfo.uid}`, record);
+        }
+        const changes = [];
+        for (const [key, record] of keys) {
+            const base = db.collection('asesorias').where('peerInfo.uid', '==', record.peerInfo.uid)
+                .where('userInfo.uid', '==', record.userInfo.uid).where('isReal', '==', true);
+            const [first, last] = await Promise.all([tx.get(base.orderBy('date', 'asc').limit(2)), tx.get(base.orderBy('date', 'desc').limit(2))]);
+            const dates = [...first.docs, ...last.docs].filter(row => row.id !== id).map(row => row.data().date).filter(date => date?.toMillis);
+            if (after && D.real(after) && `${after.peerInfo.uid}:${after.userInfo.uid}` === key) dates.push(after.date);
+            dates.sort((a,b) => a.toMillis() - b.toMillis());
+            changes.push([db.doc(`analytics/${version}/pairs/${D.hash(key)}`), dates.length ? { firstAt: dates[0], lastAt: dates.at(-1) } : null]);
+        }
+        return changes;
+    }
     async function register(data, context) {
         const who = actor(context); const op = operationId(data.operationId); const evalData = evaluation(data);
         if (!/^[a-z0-9._-]+$/i.test(data.peerUid || '') || typeof data.subjectId !== 'string' || data.subjectId.includes('/')) throw error('invalid-argument', 'MAE o materia inválidos');
@@ -55,7 +73,7 @@ function createAdvisoryService({ db, admin, HttpsError }) {
             if (!D.MAE_ROLES.includes(peer.data().role)) throw error('failed-precondition', 'El asesor no es un MAE activo');
             const pairRef = db.doc(`analytics/${version}/pairs/${D.hash(`${data.peerUid}:${who.uid}`)}`);
             const pair = await tx.get(pairRef); const previous = pair.exists ? pair.data() : null;
-            const date = admin.firestore.Timestamp.now();
+            const date = Timestamp.now();
             const recent = previous && date.toMillis() - previous.lastAt.toMillis() < 10800000;
             const points = D.individualPoints(!previous, Boolean(recent));
             const record = { peerInfo: { ...D.snapshotUser(peer.data()), uid: data.peerUid },
@@ -94,7 +112,7 @@ function createAdvisoryService({ db, admin, HttpsError }) {
                 const patch = data.patch || {}; const allowed = adminRole ? ['rating', 'comment', 'duplicate', '_test', 'subject', 'date', 'peerInfo', 'userInfo'] : ['rating', 'comment'];
                 if (Object.keys(patch).some(key => !allowed.includes(key))) throw error('invalid-argument', 'Campo protegido');
                 after = { ...before, ...patch, ...evaluation({ rating: patch.rating === undefined ? before.rating : patch.rating, comment: patch.comment === undefined ? before.comment : patch.comment }) };
-                if (patch.date) { const date = new Date(patch.date); if (Number.isNaN(date.getTime())) throw error('invalid-argument', 'Fecha inválida'); after.date = admin.firestore.Timestamp.fromDate(date); }
+                if (patch.date) { const date = new Date(patch.date); if (Number.isNaN(date.getTime())) throw error('invalid-argument', 'Fecha inválida'); after.date = Timestamp.fromDate(date); }
                 for (const key of ['peerInfo', 'userInfo']) if (!/^[a-z0-9._-]+$/i.test(after[key]?.uid || '')) throw error('invalid-argument', 'Usuario inválido');
                 if (patch.duplicate !== undefined && typeof patch.duplicate !== 'boolean') throw error('invalid-argument', 'Duplicada inválida');
                 if (patch._test !== undefined && typeof patch._test !== 'boolean') throw error('invalid-argument', 'Prueba inválida');
@@ -104,15 +122,19 @@ function createAdvisoryService({ db, admin, HttpsError }) {
                 after.awardPeerUid = before.awardPeerUid || before.peerInfo.uid;
                 after.pointsAwarded = after.isReal && !after.duplicate && after.peerInfo.uid === after.awardPeerUid ? after.originalPointsAwarded : 0;
             }
-            const projection = await D.projectChange(tx, db, version, before, after, admin.firestore.Timestamp.now());
+            const projection = await D.projectChange(tx, db, version, before, after, Timestamp.now());
             const delta = {};
             if (before.peerInfo?.uid) delta[before.peerInfo.uid] = -(Number(before.pointsAwarded) || 0);
             if (after?.peerInfo?.uid) delta[after.peerInfo.uid] = (delta[after.peerInfo.uid] || 0) + (Number(after.pointsAwarded) || 0);
+            for (const uid of Object.keys(delta)) if (delta[uid] === 0) delete delta[uid];
             const users = await stageUsers(tx, projection, delta);
+            const pairChanged = remove || before.isReal !== after.isReal || before.peerInfo.uid !== after.peerInfo.uid || before.userInfo.uid !== after.userInfo.uid || before.date?.toMillis() !== after.date?.toMillis();
+            const pairs = pairChanged ? await stagePairs(tx, version, data.id, before, after) : [];
             for (const [path, value] of projection.writes) tx.set(path, value);
             for (const [path, value] of users) tx.update(path, value);
+            for (const [path, value] of pairs) { if (value) tx.set(path, value); else tx.delete(path); }
             if (after) tx.set(ref, after); else tx.delete(ref);
-            tx.create(receipt, { fingerprint, createdAt: admin.firestore.Timestamp.now() });
+            tx.create(receipt, { fingerprint, createdAt: Timestamp.now() });
             return { id: data.id, replay: false };
         });
     }

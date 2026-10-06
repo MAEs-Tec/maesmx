@@ -5,8 +5,8 @@ import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import InputText from 'primevue/inputtext';
 import { ref, onMounted } from 'vue';
-import { getReportByDate } from '@/firebase/db/attendance';
-import { getReportByDateRange } from '@/firebase/db/attendance';
+
+import { getReportByDateRange, getAttendancePage } from '@/firebase/db/attendance';
 import { computed } from 'vue'; // To get number of mae attendances 
  // To export to excel 
 import Dialog from 'primevue/dialog'; // To use dialog modal
@@ -26,18 +26,26 @@ const formatYesterday = `${year}-${month}-${day}`;
 
 // One day
 const loading = ref(true);
-const selectedDate = ref(formatYesterday); // Loads previous day
+ref(formatYesterday); // Loads previous day
 
 // Date range 
 const rangeLoading = ref(true); // Separates loading state for range data
 
 // Temp default for semester
-const startDate = ref('2026-02-09'); 
+const startDate = ref(formatDate(new Date(today.getFullYear(), today.getMonth(), 1))); 
 const endDate = ref(formatDate(today)); // Current date of semester, use aux funct
 
 // Arrays for reports
-const reports = ref([]);
-const reportRange = ref([]); 
+ref([]);
+const reportRange = ref([]);
+const nextCursor = ref(null);
+const exportProgress = ref('');
+const loadError = ref('');
+const loadMore = async () => {
+  rangeLoading.value = true;
+  try { const page = await getAttendancePage(loadedRange.value.start, loadedRange.value.end, nextCursor.value); reportRange.value.push(...page.items); nextCursor.value = page.cursor; }
+  catch (error) { loadError.value = error.message; } finally { rangeLoading.value = false; }
+}; 
 
 // To work w Excel exporting
 const isFiltered = ref(false);
@@ -110,7 +118,7 @@ onMounted(async () => {
     loadedRange.value = { start: startDate.value, end: endDate.value };
     isFiltered.value = true; // Did filter og info using dates
   } catch (error) {
-    console.error('Error loading day report:', error);
+    loadError.value = error.message;
     isFiltered.value = false; 
   } finally {
     loading.value = false; 
@@ -121,33 +129,19 @@ onMounted(async () => {
 });
 
 // Function to load reports for a specific date
-const loadDayReport = async (singleDate) => {
-  try {
-    const reportObject = await getReportByDate(singleDate); // Fetches attendance from that date from firebase 
 
-    return Object.entries(reportObject).map(([id, data]) => ({
-      id,
-      ...data
-    })); // Converts obj to array to facilitate iteration
-  } catch (error) {
-    console.error('Error loading report:', error);
-    return {};
-  }
-};
 
 // Function to load reports for a date range
 const loadRangeReport = async (start, end) => {
-  try {
     // Fetches attendance from that date from firebase
-    const result = await getReportByDateRange(start, end); 
+    const page = await getAttendancePage(start, end);
+    nextCursor.value = page.cursor;
+    const result = page.items; 
     //console.log("Raw range data:", result);
     //reportRange.value = result; 
     return result; 
 
-  } catch (error) {
-    console.error('Error loading report:', error);
-    return [];
-  }
+
 };
 
 // Function to load reports within range when Filtrar button is pressed 
@@ -206,6 +200,10 @@ const exportToExcel = async () => {
 
 // The info that gets exported from maeStats
 const exportData = async () => {
+  exportProgress.value = 'Preparando todas las páginas del período…';
+  try {
+    const complete = await getReportByDateRange(loadedRange.value.start, loadedRange.value.end);
+    reportRange.value = complete; nextCursor.value = null;
     const XLSX = await import('xlsx');
   const formattedData = maeStats.value.map(mae => ({
     'Matrícula': mae.id,
@@ -235,6 +233,7 @@ const exportData = async () => {
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(formattedData), "Asistencias");
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(detailData), "Detalle");
   XLSX.writeFile(workbook, `historial_asistencias_${start}_a_${end}.xlsx`);
+  } catch (error) { loadError.value = error.message; } finally { exportProgress.value = ''; }
 };
 
 const confirmExportAction = () => {
@@ -244,6 +243,10 @@ const confirmExportAction = () => {
 </script>
 
 <template>
+  <p v-if="loadError" role="alert">{{ loadError }}</p>
+  <p v-if="exportProgress">{{ exportProgress }}</p>
+  <p v-if="nextCursor">Resumen de los registros cargados. Carga las siguientes páginas o exporta el período completo.</p>
+  <Button v-if="nextCursor" label="Cargar 50 más" :disabled="rangeLoading" @click="loadMore" />
   <div class="sm:flex sm:justify-content-between mb-2 sm:mb-5">
     <h1 class="text-black text-6xl font-bold text-center m-0 sm:text-left">Historial de asistencia</h1>
   </div>

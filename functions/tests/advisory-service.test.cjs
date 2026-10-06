@@ -18,8 +18,18 @@ function clone(value) {
 function memoryDb() {
     const rows = new Map(); let queue = Promise.resolve();
     const doc = path => ({ path, collection: name => collection(`${path}/${name}`) });
-    const collection = path => ({ doc: id => doc(`${path}/${id}`) });
-    const get = async ref => ({ ref, exists: rows.has(ref.path), data: () => clone(rows.get(ref.path)) });
+    const collection = (path, filters = [], order = null, maximum = Infinity) => ({ path, filters, order, maximum,
+        doc: id => doc(`${path}/${id}`), where: (field, op, value) => collection(path, [...filters, [field, op, value]], order, maximum),
+        orderBy: (field, direction) => collection(path, filters, [field, direction], maximum), limit: n => collection(path, filters, order, n) });
+    const get = async ref => {
+        if (ref.filters) {
+            const field = (row, key) => key.split('.').reduce((value, part) => value?.[part], row);
+            let matches = [...rows].filter(([path, row]) => path.startsWith(`${ref.path}/`) && !path.slice(ref.path.length + 1).includes('/') && ref.filters.every(([key, op, value]) => { assert.equal(op, '=='); return field(row, key) === value; }));
+            if (ref.order) matches.sort((a,b) => (field(a[1],ref.order[0]).toMillis()-field(b[1],ref.order[0]).toMillis()) * (ref.order[1] === 'desc' ? -1 : 1));
+            return { docs: matches.slice(0,ref.maximum).map(([path,row]) => ({ id: path.split('/').at(-1), ref: doc(path), data: () => clone(row) })) };
+        }
+        return { ref, exists: rows.has(ref.path), data: () => clone(rows.get(ref.path)) };
+    };
     return { rows, doc, collection, runTransaction: fn => {
         const run = queue.then(async () => {
             const writes = [];
@@ -83,6 +93,8 @@ test('deletion decrements memberships only when last advisory is removed', async
     assert.equal(h.summary().totalUniqueUsers, 1);
     await h.service.mutate({ id: b.id, operationId: 'delete_second_1234' }, h.user('admin'), true);
     assert.equal(h.summary().totalUniqueUsers, 0); assert.equal(h.summary().totalAsesorias, 0);
+    const replacement = await h.register('delete_replacement_1234');
+    assert.equal(replacement.pointsAwarded, 10);
 });
 test('student cannot edit another record or change protected award fields', async () => {
     const h = setup(); const { id } = await h.register('protected_case_123');

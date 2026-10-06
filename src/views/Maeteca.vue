@@ -10,45 +10,28 @@ import MultiSelect from 'primevue/multiselect';
 import { useToast } from 'primevue/usetoast';
 import { normalize } from '@/utils/HorarioUtils';
 import { getSubjects } from '../firebase/db/subjects';
-import {
-    createSampleVideos,
-    addVideoToMaeteca,
-    loadMaetecaVideos,
-    canUserManageVideos,
-    getVideoThumbnail,
-    getVideoById,
-    getVideoEmbedUrl,
-    AVAILABLE_TAG_OPTIONS,
-    VIDEO_CAREERS,
-    SEMESTERS,
-    TYPES,
-    // TAGS is the dropdown of simple {name,code}
-    TAGS,
-    openVideo,
-    handleThumbnailKey,
-    filterVideosByText
-} from '../firebase/db/maeteca';
+import { addVideoToMaeteca, loadMaetecaVideos, canUserManageVideos, getVideoThumbnail, getVideoById, getVideoEmbedUrl, AVAILABLE_TAG_OPTIONS, VIDEO_CAREERS, SEMESTERS, TYPES, TAGS, filterVideosByText } from "../firebase/db/maeteca";
 import { getCurrentUser } from '../firebase/db/users';
 
 // Datos de ejemplo para los dropdowns (importados desde la capa de datos)
-const selectedTag = ref();
-const tags = TAGS;
+ref();
+TAGS;
 
-const selectedCareer = ref();
-const careers = VIDEO_CAREERS;
+ref();
+VIDEO_CAREERS;
 
-const selectedSemester = ref();
-const semesters = SEMESTERS;
+ref();
+SEMESTERS;
 
-const selectedType = ref();
-const types = TYPES;
+ref();
+TYPES;
 
 // Colores alternos para bandas de cartas
 const bandColors = ['band--red', 'band--purple', 'band--green'];
 
 // Acción: crear videos de ejemplo en Firestore
 const toast = useToast();
-const loadingSamples = ref(false);
+ref(false);
 const testingRead = ref(false);
 const currentUserRole = ref(null);
 const canManageVideos = computed(() => canUserManageVideos(currentUserRole.value));
@@ -210,27 +193,9 @@ onMounted(async () => {
     await loadVideos();
 });
 
-const onCreateSamples = async () => {
-    if (!canManageVideos.value) {
-        toast.add({ severity: 'warn', summary: 'Permiso requerido', detail: 'Tu rol no permite cargar videos en la Maeteca.', life: 4000 });
-        return;
-    }
-    try {
-        loadingSamples.value = true;
-        await createSampleVideos();
-        toast.add({ severity: 'success', summary: 'Éxito', detail: 'Videos de ejemplo creados', life: 3000 });
-        await loadVideos();
-    } catch (e) {
-        const msg = e?.message || 'No se pudieron crear los videos de ejemplo';
-        toast.add({ severity: 'error', summary: 'Error', detail: msg, life: 4000 });
-    } finally {
-        loadingSamples.value = false;
-    }
-};
 
-const onTestRead = async () => {
-    await loadVideos({ showToast: true });
-};
+
+
 
 function youtubeLink(url){
     const youtRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/;

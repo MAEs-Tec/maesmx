@@ -4,6 +4,7 @@ import { getStorage, connectStorageEmulator } from 'firebase/storage';
 import { getAuth, connectAuthEmulator, onAuthStateChanged } from 'firebase/auth';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { configureCacheSession } from './cache/cache';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 
 export const firebaseApp = initializeApp({
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -17,6 +18,10 @@ export const firestoreDB = getFirestore(firebaseApp);
 export const firebaseStorage = getStorage(firebaseApp);
 export const auth = getAuth(firebaseApp);
 export const functions = getFunctions(firebaseApp, 'us-central1');
+// Observe only initially; enforcement is separately controlled in the console.
+if (import.meta.env.VITE_APP_CHECK_SITE_KEY && import.meta.env.VITE_USE_EMULATOR !== 'true') {
+    initializeAppCheck(firebaseApp, { provider: new ReCaptchaV3Provider(import.meta.env.VITE_APP_CHECK_SITE_KEY), isTokenAutoRefreshEnabled: true });
+}
 // Connect synchronously before any component or auth guard can issue a request.
 if (import.meta.env.VITE_USE_EMULATOR === 'true') {
     connectFirestoreEmulator(firestoreDB, 'localhost', 8080);

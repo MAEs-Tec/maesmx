@@ -1,12 +1,9 @@
+import { measuredRead } from '../diagnostics';
+const getDocs = (...args) => measuredRead('firestore:attendance:query', () => getDocsRaw(...args));
+const getDoc = (...args) => measuredRead('firestore:attendance:document', () => getDocRaw(...args));
 import { callCostFunction } from '../costApi';
 import { firestoreDB } from "../client";
-import {
-    doc,
-    getDoc,
-    getDocs,
-    setDoc,
-    collection,
-} from 'firebase/firestore';
+import { doc, getDoc as getDocRaw, getDocs as getDocsRaw, collection, collectionGroup, query, where, orderBy, limit, startAfter, documentId } from "firebase/firestore";
 import { attendanceDateTag, CACHE_TAGS, CACHE_TTL_MS, cacheKeys } from '../cache/config';
 import { invalidateCacheTags, withCache } from '../cache/cache';
 
@@ -50,26 +47,12 @@ async function fetchTodaysReportFresh() {
         return report;
     } catch (error) {
         console.error("Error fetching filtered users: ", error);
-        return [];
+        throw error;
     }
 }
 
 // Quita los campos undefined: Firestore rechaza el documento completo si recibe uno
-function buildAttendancePayload(userInfo, report) {
-    const uid = userInfo?.uid ?? userInfo?.id;
 
-    if (!uid) {
-        throw new Error('No se pudo identificar al MAE (uid faltante)');
-    }
-
-    const payload = { id: uid, report };
-
-    if (userInfo.email !== undefined) payload.email = userInfo.email;
-    if (userInfo.name !== undefined) payload.name = userInfo.name;
-    if (userInfo.totalTime !== undefined) payload.totalTime = userInfo.totalTime;
-
-    return { uid, payload };
-}
 
 async function writeAttendance(userInfo, dateString, report) {
     const uid = userInfo?.uid ?? userInfo?.id;
@@ -144,7 +127,7 @@ async function fetchReportByDateFresh(dateString) {
     // Error debug
     } catch (error) {
         console.error("Error fetching report: ", error);
-        return {};
+        throw error;
     }
 }
 
@@ -179,40 +162,19 @@ function getDateStringsBetween(startDate, endDate) {
 
 // Gets the attendance reports for every day
 async function fetchReportByDateRangeFresh(startDate, endDate) {
-    const dateStrings = getDateStringsBetween(startDate, endDate);
-    const report = [];
-
-    // Checks each document date w the reports
-    for (const date of dateStrings) {
-        const reportRef = collection(firestoreDB, "attendance", date, "report");
-        try {
-            const reportSnap = await getDocs(reportRef);
-            // Makes sure not empty date w no attendance
-            if (!reportSnap.empty) {
-                //console.log(`Found ${reportSnap.size} reports for ${date}`);
-                reportSnap.forEach((doc) => {
-                    /*report.push({
-                        id: doc.id,
-                        ...doc.data(),
-                        date,
-                    });*/
-                    const data = doc.data(); 
-                    // Only keeps id and report, modify if want other fields (like name or email)
-                    report.push({
-                        id: doc.id, // Student matricula
-                        report: data.report, // (A, R, F, J)
-                        date, // Para que el Excel pueda mostrar de que dia viene cada registro
-                    });
-                });
-            } else {
-                console.log(`No reports ${date}`);
-            }
-        } catch (error) {
-            console.warn(`Skipping ${date}:`, error.message);
-        }
-    }
-
+    const report = []; let cursor;
+    do {
+        const page = await getAttendancePage(startDate, endDate, cursor);
+        report.push(...page.items); cursor = page.cursor;
+    } while (cursor);
     return report;
+}
+export async function getAttendancePage(startDate, endDate, cursor = null) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate) || startDate > endDate) throw new Error('Rango inválido');
+    const constraints = [where('recordType', '==', 'attendance'), where('date', '>=', startDate), where('date', '<=', endDate), orderBy('date'), orderBy(documentId()), limit(50)];
+    if (cursor) constraints.push(startAfter(cursor));
+    const page = await getDocs(query(collectionGroup(firestoreDB, 'report'), ...constraints));
+    return { items: page.docs.map(doc => ({ id: doc.id, ...doc.data() })), cursor: page.size === 50 ? page.docs.at(-1) : null };
 }
 
 export async function getTodaysReport(options = {}) {
@@ -265,7 +227,7 @@ export async function getReportByDateRange(startDate, endDate, options = {}) {
             ttlMs: CACHE_TTL_MS.ATTENDANCE_RANGE,
             persist: true,
             forceRefresh: options.forceRefresh ?? false,
-            tags: [CACHE_TAGS.ATTENDANCE]
+            tags: getDateStringsBetween(startDate, endDate).map(date => `attendance-range:${date.slice(0, 7)}`)
         },
         async () => await fetchReportByDateRangeFresh(startDate, endDate)
     );

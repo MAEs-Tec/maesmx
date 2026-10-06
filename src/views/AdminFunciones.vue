@@ -7,15 +7,7 @@ import Dialog from 'primevue/dialog';
 import Button from 'primevue/button';
 import Dropdown from 'primevue/dropdown';
 import ConfirmDialog from 'primevue/confirmdialog';
-import { 
-    clearAllUsersWeekSchedule, 
-    checkAndUpdateUserRole,  
-    updateUserToMae,
-    updatePoints,
-    clearUsersData,
-    resetAllUsersTotalTimeAndPoints,
-    resetAllUsersLeaderboardPoints
-} from '../firebase/db/users';
+import { clearAllUsersWeekSchedule, checkAndUpdateUserRole, updateUserToMae, updatePoints, resetAllUsersTotalTimeAndPoints, resetAllUsersLeaderboardPoints } from "../firebase/db/users";
 import { deleteOldAsesorias, borrarTodasEvaluaciones } from '../firebase/db/asesorias.js'
 import { revelarEvaluaciones, borrarEvaluaciones } from '../firebase/db/settings'
 
@@ -67,28 +59,7 @@ const confirmDelete = () => {
 };
 
 
-const restartMaes = () => {
-    confirm.require({
-        message: '¿Estás seguro de restablecer los datos de los maes?',
-        header: 'Confirmación ',
-        icon: 'pi pi-exclamation-triangle',
-        acceptLabel: 'Sí, restablecer',
-        rejectLabel: 'Cancelar',
-        acceptClass: 'p-button-danger',
-        accept: async () => {
-            try {
-                await clearUsersData();
-                toast.add({ severity: 'success', summary: 'Éxito', detail: 'Se han restablecido los valores de los maes.', life: 3000 });
-            } catch (error) {
-                console.error("Error al restablecer valores:", error);
-                toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al restablecer los valores de los maes.', life: 3000 });
-            }
-        },
-        reject: () => {
-            toast.add({ severity: 'info', summary: 'Cancelado', detail: 'No se han realizado cambios.', life: 3000 });
-        }
-    });
-};
+
 
 const confirmRevealEvaluaciones = () => {
     confirm.require({

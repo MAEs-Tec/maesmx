@@ -6,9 +6,6 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // El rol viene del custom claim. Si una cuenta aun no tiene claim (migracion
-    // incompleta o usuario nuevo sin sincronizar) se usa el rol de su doc en
-    // Firestore, que solo admin/tec pueden cambiar.
     function role() {
       return !signedIn()
         ? 'user'
@@ -49,12 +46,9 @@ service cloud.firestore {
         && email.lower() == request.auth.token.email.lower();
     }
 
-    // El id del doc es la matricula; algunos docs viejos no traen `email`
     function isOwnUserDoc(userId) {
-      return signedIn()
-        && request.auth.token.email is string
-        && (userId.lower() == currentUserKey().lower()
-            || isOwnEmail(resource.data.get('email', null)));
+      return signedIn() && request.auth.token.email is string
+        && (userId.lower() == currentUserKey().lower() || isOwnEmail(resource.data.get('email', null)));
     }
 
     function currentUserKey() {
@@ -64,34 +58,30 @@ service cloud.firestore {
     function isCreatingOwnUserDoc() {
       return isOwnEmail(request.resource.data.email)
         && request.resource.data.role == 'user'
-        && request.resource.data.status == 'estudiante';
+        && request.resource.data.status == 'estudiante'
+        && request.resource.data.get('points', 0) == 0
+        && request.resource.data.get('totalTime', 0) == 0
+        && request.resource.data.get('ratingBonusPoints', 0) == 0
+        && request.resource.data.get('useCoins', 0) == 0
+        && request.resource.data.get('badges', []).size() == 0
+        && request.resource.data.get('background', []).size() == 0;
     }
 
-    function changedUserFields() {
-      return request.resource.data.diff(resource.data).affectedKeys();
-    }
-
-    // Rol y estatus solo los cambia admin/tec (evita escalacion de privilegios)
-    function preservesAccessFields() {
-      return !changedUserFields().hasAny(['role', 'status']);
-    }
-
-    // Flujos de la pagina que escriben en el perfil de OTRO usuario desde el navegador:
-    // un estudiante evalua o registra una asesoria (puntos y bono del MAE) y quien abre
-    // un perfil o el leaderboard desbloquea logros. Hasta que esto pase a Cloud
-    // Functions, a los demas usuarios solo se les permite tocar esos campos.
-    function changesOnlyGamificationFields() {
-      return changedUserFields().hasOnly(['points', 'ratingBonusPoints', 'badges']);
+    function doesNotChangeProtectedUserFields() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'role',
+        'status',
+        'points',
+        'totalTime',
+        'badges',
+        'useCoins', 'email', 'uid', 'id', 'ratingBonusPoints', 'background'
+      ]);
     }
 
     match /users/{userId} {
-      allow create: if isCreatingOwnUserDoc() || isTechAdmin();
+      allow create: if (userId == currentUserKey() && request.resource.data.get('uid', userId) == userId && request.resource.data.get('id', userId) == userId && isCreatingOwnUserDoc()) || isTechAdmin();
       allow read: if signedIn();
-      // Dueno: turno (activeSession/totalTime), tienda (useCoins), horario, materias, foto.
-      // Coordi: agregar horas y puntos de asistencia de otros MAEs.
-      allow update: if isTechAdmin()
-        || ((isOwnUserDoc(userId) || isCoordi()) && preservesAccessFields())
-        || (signedIn() && changesOnlyGamificationFields());
+      allow update: if isTechAdmin() || (isOwnUserDoc(userId) && doesNotChangeProtectedUserFields());
       allow delete: if isAdmin();
     }
 
@@ -125,32 +115,46 @@ service cloud.firestore {
       allow create, delete: if isContentManager() || hasAnyRole(['publi']);
       allow update: if isContentManager()
         || hasAnyRole(['publi'])
-        || (hasAnyRole(['mae']) && changedOnly([
-          'asistence',
-          'pointsAwarded',
-          'pointsAwardedAt',
-          'pointsAwardedTo'
-        ]))
         || isOwnPreregisterUpdate();
     }
 
     // Solo quien puede entrar a /coordi registra asistencias; los MAEs solo las leen
     match /attendance/{dateId} {
       allow read: if signedIn();
-      allow write: if isCoordi();
+      allow write: if false;
 
       match /report/{reportId} {
         allow read: if signedIn();
-        allow write: if isCoordi();
+        allow write: if false;
       }
     }
 
     match /asesorias/{asesoriaId} {
-      allow create: if signedIn();
+      allow create: if false;
       allow read: if signedIn();
-      allow update: if isCoordi()
-        || (signedIn() && resource.data.userInfo.uid == request.auth.uid);
-      allow delete: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // collectionGroup queries must include recordType == 'attendance'.
+    match /{path=**}/report/{reportId} {
+      allow read: if signedIn() && resource.data.recordType == 'attendance';
+      allow write: if false;
+    }
+    match /settings/analytics {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+    match /settings/evaluations {
+      allow read: if signedIn();
+      allow write: if isTechAdmin();
+    }
+    match /analytics/{version}/counts/{counterId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+    match /analytics/{version}/summaries/{summaryId} {
+      allow read: if isTechAdmin();
+      allow write: if false;
     }
 
     match /videos/{videoId} {

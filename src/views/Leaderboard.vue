@@ -4,16 +4,19 @@ import { getExperience } from '@/firebase/db/users';
 import { getLeaderboardCounts } from '@/firebase/db/statistics';
 
 const users = ref([]);
+const loadError = ref('');
 const userGold = ref(null);
 const asesoriasCountMap = ref({});
 
 onMounted(async () => {
+    try {
     const fetchedUsers = await getExperience();
     users.value = assignRanks(fetchedUsers);
     userGold.value = users.value[0]; // Usar .value para reasignar
 
 
     asesoriasCountMap.value = await getLeaderboardCounts();
+    } catch (error) { loadError.value = error.message; }
 });
 
 const formatHours = (totalMinutes) => {
@@ -49,6 +52,7 @@ const formatName = (name) => {
 </script>
 
 <template>
+    <p v-if="loadError" role="alert">{{ loadError }}</p>
     <div class="flex md:flex-row flex-column  md:mb-2">
         <div class="flex flex-column align-items-start">
             <h1 class="text-black text-5xl font-bold text-center m-0 sm:text-left mb-3">Leaderboard</h1>
@@ -158,7 +162,7 @@ const formatName = (name) => {
     <div class="bg-white border-round-3xl p-3">
         <ul class="list-none p-0">
             <li 
-                v-for="(user, index) in users.slice(3)" 
+                v-for="user in users.slice(3)" 
                 :key="user.uid" 
                 :class="[ 
                     'flex justify-between items-center p-2 py-4',  

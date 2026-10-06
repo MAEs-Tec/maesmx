@@ -29,7 +29,7 @@
 
     <div>
       <div class="grid">
-        <div v-for="day in daysArray" class="md:col col-12">
+        <div v-for="day in daysArray" :key="day.en" class="md:col col-12">
           <div class="text-center p-3 border-round-sm bg-gray-200 text-xl font-bold">{{ day['es'] }}</div>
             <div class="text-center p-3 border-round-sm bg-gray-100 text-black text-xl font-bold mt-2"> N/A </div>
         </div>

@@ -1,5 +1,5 @@
 <script setup>
-import { getTotalAsesorias, getAsesoriasCountByUser, getAsesoriasCountByArea, getAsesoriasCountByCampus } from '../firebase/db/asesorias';
+import { getTotalAsesorias, getAsesoriasCountByUser, getAsesoriasCountByArea, getAsesoriasCountByCampus, getCurrentSemesterRange } from '../firebase/db/asesorias';
 import { getTotalMaes } from '../firebase/db/users';
 import { ref, onMounted } from 'vue';
 
@@ -11,12 +11,14 @@ const totalAsesoriasCampus = ref([]);
 const loading = ref(true);
 
 onMounted(async () => {
+    // Solo cuenta asesorías del semestre en curso, igual que el Excel filtrado por fechas
+    const { start, end } = getCurrentSemesterRange();
     const [asesorias, maes, users, usersArea, asesoriasCampus] = await Promise.all([
-        getTotalAsesorias(),
+        getTotalAsesorias(start, end),
         getTotalMaes(),
-        getAsesoriasCountByUser(),
-        getAsesoriasCountByArea(),
-        getAsesoriasCountByCampus()
+        getAsesoriasCountByUser(start, end),
+        getAsesoriasCountByArea(start, end),
+        getAsesoriasCountByCampus(start, end)
     ]);
     
     totalAsesorias.value = asesorias;

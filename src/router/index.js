@@ -1,6 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
-import { getCurrentUser } from '../firebase/db/users';
 import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { canAccessRoute, getClaimsRole } from '@/auth/roles';
 import AppLayout from '@/layout/AppLayout.vue';
 
 const router = createRouter({
@@ -109,7 +109,7 @@ const router = createRouter({
                     name: 'coordi',
                     component: () => import('@/views/Coordi.vue'),
                     meta: {
-                        roles: ['admin', 'coordi','tec']
+                        roles: ['admin', 'coordi', 'tec']
                     }
                 },
                 {
@@ -117,7 +117,7 @@ const router = createRouter({
                     name: 'gestionAnuncios',
                     component: () => import('@/views/GestionAnuncios.vue'),
                     meta: {
-                        roles: ['admin', 'coordi','tec']
+                        roles: ['admin', 'coordi', 'tec', 'publi']
                     }
                 },
                 {
@@ -125,7 +125,7 @@ const router = createRouter({
                     name: 'adminasesorias',
                     component: () => import('@/views/AdminAsesorias.vue'),
                     meta: {
-                        roles: ['admin','tec']
+                        roles: ['admin', 'tec']
                     }
                 },
                 {
@@ -133,7 +133,7 @@ const router = createRouter({
                     name: 'adminusuarios',
                     component: () => import('@/views/AdminUsers.vue'),
                     meta: {
-                        roles: ['admin' ,'tec']
+                        roles: ['admin', 'tec']
                     }
                 },
                 {
@@ -141,7 +141,7 @@ const router = createRouter({
                     name: 'adminmaterias',
                     component: () => import('@/views/AdminSubjects.vue'),
                     meta: {
-                        roles: ['admin','tec']
+                        roles: ['admin', 'tec']
                     }
                 },
                 {
@@ -149,7 +149,7 @@ const router = createRouter({
                     name: 'adminfunciones',
                     component: () => import('@/views/AdminFunciones.vue'),
                     meta: {
-                        roles: ['admin','tec']
+                        roles: ['admin', 'tec']
                     }
                 },
                 {
@@ -157,10 +157,9 @@ const router = createRouter({
                     name: 'dashboard',
                     component: () => import('@/views/Dashboard.vue'),
                     meta: {
-                        roles: ['admin','tec']
+                        roles: ['admin', 'tec']
                     }
                 },
-                /* Adding path for historial */
                 {
                     path: '/admin/historialAsistencia',
                     name: 'asistencia',
@@ -217,6 +216,9 @@ const router = createRouter({
     ]
 });
 
+// Acceso total únicamente cuando se habilita de forma explícita en desarrollo.
+const DEV_ALL_ROLES = import.meta.env.DEV && import.meta.env.VITE_DEV_ALL_ROLES === 'true';
+
 router.beforeEach((to, from, next) => {
     if (!to.matched.some((record) => record.meta.requiresAuth)) {
         return next();
@@ -233,17 +235,17 @@ router.beforeEach((to, from, next) => {
             return next("/auth/login"); 
           }
 
-        const { role } = await getCurrentUser();
+        const role = await getClaimsRole();
 
-        if (!to.meta.roles) {
+        // Acceso total únicamente en desarrollo habilitado explícitamente.
+        if (DEV_ALL_ROLES) {
             return next();
         }
 
-        if (to.meta.roles.includes(role)) {
+        if (canAccessRoute(to, role)) {
             return next();
-        } else {
-            return next("/pages/notfound");
         }
+        return next("/auth/access");
     });
 });
 

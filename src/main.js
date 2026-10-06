@@ -214,6 +214,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from 'firebase/storage';
 import { getAuth } from "firebase/auth";
+import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -230,5 +231,24 @@ export const firebaseApp = initializeApp(firebaseConfig);
 export const firestoreDB = getFirestore(firebaseApp);
 export const firebaseStorage = getStorage(firebaseApp);
 export const auth = getAuth(firebaseApp);
+
+// --- Emuladores de Firebase (solo desarrollo local) ---
+// Para probar contra los emuladores (Firestore/Auth/Functions/Storage) en vez
+// del proyecto real, crea un archivo `.env.local` con VITE_USE_EMULATOR=true y
+// lanza `firebase emulators:start`. Los puertos son los de `firebase.json`.
+if (import.meta.env.VITE_USE_EMULATOR === 'true') {
+    (async () => {
+        const { connectFirestoreEmulator } = await import('firebase/firestore');
+        const { connectAuthEmulator } = await import('firebase/auth');
+        const { connectFunctionsEmulator } = await import('firebase/functions');
+        const { connectStorageEmulator } = await import('firebase/storage');
+
+        connectFirestoreEmulator(firestoreDB, 'localhost', 8080);
+        connectAuthEmulator(auth, 'http://localhost:9099');
+        connectFunctionsEmulator(getFunctions(firebaseApp), 'localhost', 5001);
+        connectStorageEmulator(firebaseStorage, 'localhost', 9199);
+        console.log('[emulators] conectado a Firestore:8080, Auth:9099, Functions:5001, Storage:9199');
+    })();
+}
 
 app.mount('#app');

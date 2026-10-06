@@ -1,3 +1,257 @@
+<script setup>
+import { ref, computed, onMounted, reactive } from 'vue';
+import MultiSelect from 'primevue/multiselect';
+import { useToast } from 'primevue/usetoast';
+import { normalize } from '@/utils/HorarioUtils';
+import { getSubjects } from '../firebase/db/subjects';
+import {
+    createSampleVideos,
+    addVideoToMaeteca,
+    loadMaetecaVideos,
+    canUserManageVideos,
+    getVideoThumbnail,
+    getVideoById,
+    getVideoEmbedUrl,
+    AVAILABLE_TAG_OPTIONS,
+    VIDEO_CAREERS,
+    SEMESTERS,
+    TYPES,
+    // TAGS is the dropdown of simple {name,code}
+    TAGS,
+    openVideo,
+    handleThumbnailKey,
+    filterVideosByText
+} from '../firebase/db/maeteca';
+import { getCurrentUser } from '../firebase/db/users';
+
+// Datos de ejemplo para los dropdowns (importados desde la capa de datos)
+const selectedTag = ref();
+const tags = TAGS;
+
+const selectedCareer = ref();
+const careers = VIDEO_CAREERS;
+
+const selectedSemester = ref();
+const semesters = SEMESTERS;
+
+const selectedType = ref();
+const types = TYPES;
+
+// Colores alternos para bandas de cartas
+const bandColors = ['band--red', 'band--purple', 'band--green'];
+
+// Acción: crear videos de ejemplo en Firestore
+const toast = useToast();
+const loadingSamples = ref(false);
+const testingRead = ref(false);
+const currentUserRole = ref(null);
+const canManageVideos = computed(() => canUserManageVideos(currentUserRole.value));
+const videos = ref([]);
+// Materias para el AutoComplete del popup
+const subjects = ref([]);
+const filteredSubjects = ref([]);
+// Buscador global movible
+const searchQuery = ref('');
+
+// Filtrado tipo MaesActivos: busca en título y descripción, normalizado
+const displayedVideos = computed(() => filterVideosByText(videos.value, searchQuery.value));
+
+// Video principal (intro) cargado desde documento 'intro-maeteca'
+const mainVideo = ref(null);
+const mainVideoEmbedUrl = computed(() => getVideoEmbedUrl(mainVideo.value) || null);
+
+const showAddVideoDialog = ref(false);
+const savingVideo = ref(false);
+const availableTagOptions = AVAILABLE_TAG_OPTIONS;
+
+const tagLabelMap = computed(() =>
+    (availableTagOptions || []).reduce((acc, option) => {
+        acc[option.value] = option.label;
+        return acc;
+    }, {})
+);
+
+const videoForm = reactive({
+    link: '',
+    title: '',
+    subject: { name: 'General', code: 'general' },
+    career: { name: 'Todas', code: 'all' },
+    tags: []
+});
+const videoCareers = VIDEO_CAREERS;
+
+const isSubmitDisabled = computed(() => !videoForm.link.trim() || !videoForm.title.trim() || savingVideo.value);
+
+const resetVideoForm = () => {
+    videoForm.link = '';
+    videoForm.title = '';
+    videoForm.subject = { name: 'General', code: 'general' };
+    videoForm.career = { name: 'Todas', code: 'all' };
+    videoForm.tags = [];
+};
+
+const handleOpenAddVideo = () => {
+    resetVideoForm();
+    showAddVideoDialog.value = true;
+};
+
+const removeTag = (tag) => {
+    videoForm.tags = videoForm.tags.filter((item) => item !== tag);
+};
+
+// Sugerencias de materias para el AutoComplete
+const filterSubjects = (event) => {
+    const raw = event?.query ?? (typeof videoForm.subject === 'string' ? videoForm.subject : videoForm.subject?.name ?? '');
+    const query = normalize(raw || '');
+    filteredSubjects.value = subjects.value.filter((subject) => normalize(subject.name).includes(query));
+};
+
+// Selecciona un video para mostrarlo en el reproductor principal
+const selectMainVideo = (video) => {
+    if (!video) return;
+    mainVideo.value = video;
+    // Llevar el viewport al reproductor principal
+    try {
+        const el = document.querySelector('.video-wrapper');
+        if (el && typeof el.scrollIntoView === 'function') {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    } catch (e) {
+        // no bloquear si falla el scroll
+        console.warn('scroll to video failed', e);
+    }
+};
+
+const onSubmitVideo = async () => {
+    if (isSubmitDisabled.value) {
+        toast.add({ severity: 'warn', summary: 'Formulario incompleto', detail: 'Completa la información obligatoria.', life: 3000 });
+        return;
+    }
+
+    try {
+        savingVideo.value = true;
+        await addVideoToMaeteca({
+            Video: videoForm.link.trim(),
+            Titulo: videoForm.title.trim(),
+            Materia: videoForm.subject?.code ?? null,
+            Carrera: videoForm.career?.code ?? null,
+            Relacionado: [...videoForm.tags],
+            Informacion: ''
+        });
+        toast.add({ severity: 'success', summary: 'Video agregado', detail: 'El video se agregó correctamente.', life: 3000 });
+        showAddVideoDialog.value = false;
+        resetVideoForm();
+        await loadVideos();
+    } catch (error) {
+        const msg = error?.message || 'No se pudo agregar el video';
+        toast.add({ severity: 'error', summary: 'Error', detail: msg, life: 4000 });
+    } finally {
+        savingVideo.value = false;
+    }
+};
+
+const loadVideos = async ({ showToast = false } = {}) => {
+    try {
+        testingRead.value = true;
+    videos.value = await loadMaetecaVideos();
+        if (showToast) {
+            const count = videos.value.length;
+            toast.add({
+                severity: 'info',
+                summary: 'Lectura completada',
+                detail: `Se encontraron ${count} videos en la Maeteca.`,
+                life: 4000
+            });
+        }
+        console.log('Videos obtenidos:', videos.value);
+    } catch (error) {
+        const msg = error?.message || 'No se pudieron leer los videos';
+        if (showToast) {
+            toast.add({ severity: 'error', summary: 'Error', detail: msg, life: 4000 });
+        }
+        console.error('Error cargando videos de la Maeteca:', error);
+    } finally {
+        testingRead.value = false;
+    }
+};
+
+onMounted(async () => {
+    try {
+        const user = await getCurrentUser();
+        currentUserRole.value = user?.role ?? null;
+    } catch (error) {
+        console.error('Error fetching current user for Maeteca:', error);
+        currentUserRole.value = null;
+    }
+    // Cargar materias para el AutoComplete del popup
+    try {
+        subjects.value = await getSubjects();
+    } catch (e) {
+        console.error('Error cargando materias para AutoComplete:', e);
+        subjects.value = [];
+    }
+    // Cargar video intro desde Firestore
+    const loadIntroVideo = async () => {
+        try {
+            const intro = await getVideoById('intro-maeteca');
+            if (intro) mainVideo.value = intro;
+        } catch (e) {
+            console.error('Error cargando video intro:', e);
+        }
+    };
+
+    await loadIntroVideo();
+    await loadVideos();
+});
+
+const onCreateSamples = async () => {
+    if (!canManageVideos.value) {
+        toast.add({ severity: 'warn', summary: 'Permiso requerido', detail: 'Tu rol no permite cargar videos en la Maeteca.', life: 4000 });
+        return;
+    }
+    try {
+        loadingSamples.value = true;
+        await createSampleVideos();
+        toast.add({ severity: 'success', summary: 'Éxito', detail: 'Videos de ejemplo creados', life: 3000 });
+        await loadVideos();
+    } catch (e) {
+        const msg = e?.message || 'No se pudieron crear los videos de ejemplo';
+        toast.add({ severity: 'error', summary: 'Error', detail: msg, life: 4000 });
+    } finally {
+        loadingSamples.value = false;
+    }
+};
+
+const onTestRead = async () => {
+    await loadVideos({ showToast: true });
+};
+
+function youtubeLink(url){
+    const youtRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/;
+    return youtRegex.test(url);
+}
+
+//Para el preview del video al agregar el link
+function lookPreview(){
+    const url = document.getElementById('video-link').value;
+    if (youtubeLink(url)){
+        //Show preview del video
+        //Mas regex, nunca pense que serviría de algo
+        const videoIdMatch = url.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/);
+        if(videoIdMatch){
+            const videoid = videoIdMatch[1];
+            document.getElementById('preview').innerHTML = `<iframe width="560" height="315" src="https://www.youtube.com/embed/${videoid}" 
+            frameborder="0" allowfullscreen></iframe>`;
+        }else{
+            document.getElementById('preview').innerText = "No se pudo extraer el ID del video.";
+        }
+    }else{
+        document.getElementById('preview').innerText = "¡Solo se permiten links de YouTube!";
+    }
+}
+
+</script>
+
 <template>
     <div class="grid">
         <div class="col-12">
@@ -276,260 +530,6 @@
         </div>
     </div>
 </template>
-
-<script setup>
-import { ref, computed, onMounted, reactive } from 'vue';
-import MultiSelect from 'primevue/multiselect';
-import { useToast } from 'primevue/usetoast';
-import { normalize } from '@/utils/HorarioUtils';
-import { getSubjects } from '../firebase/db/subjects';
-import {
-    createSampleVideos,
-    addVideoToMaeteca,
-    loadMaetecaVideos,
-    canUserManageVideos,
-    getVideoThumbnail,
-    getVideoById,
-    getVideoEmbedUrl,
-    AVAILABLE_TAG_OPTIONS,
-    VIDEO_CAREERS,
-    SEMESTERS,
-    TYPES,
-    // TAGS is the dropdown of simple {name,code}
-    TAGS,
-    openVideo,
-    handleThumbnailKey,
-    filterVideosByText
-} from '../firebase/db/maeteca';
-import { getCurrentUser } from '../firebase/db/users';
-
-// Datos de ejemplo para los dropdowns (importados desde la capa de datos)
-const selectedTag = ref();
-const tags = TAGS;
-
-const selectedCareer = ref();
-const careers = VIDEO_CAREERS;
-
-const selectedSemester = ref();
-const semesters = SEMESTERS;
-
-const selectedType = ref();
-const types = TYPES;
-
-// Colores alternos para bandas de cartas
-const bandColors = ['band--red', 'band--purple', 'band--green'];
-
-// Acción: crear videos de ejemplo en Firestore
-const toast = useToast();
-const loadingSamples = ref(false);
-const testingRead = ref(false);
-const currentUserRole = ref(null);
-const canManageVideos = computed(() => canUserManageVideos(currentUserRole.value));
-const videos = ref([]);
-// Materias para el AutoComplete del popup
-const subjects = ref([]);
-const filteredSubjects = ref([]);
-// Buscador global movible
-const searchQuery = ref('');
-
-// Filtrado tipo MaesActivos: busca en título y descripción, normalizado
-const displayedVideos = computed(() => filterVideosByText(videos.value, searchQuery.value));
-
-// Video principal (intro) cargado desde documento 'intro-maeteca'
-const mainVideo = ref(null);
-const mainVideoEmbedUrl = computed(() => getVideoEmbedUrl(mainVideo.value) || null);
-
-const showAddVideoDialog = ref(false);
-const savingVideo = ref(false);
-const availableTagOptions = AVAILABLE_TAG_OPTIONS;
-
-const tagLabelMap = computed(() =>
-    (availableTagOptions || []).reduce((acc, option) => {
-        acc[option.value] = option.label;
-        return acc;
-    }, {})
-);
-
-const videoForm = reactive({
-    link: '',
-    title: '',
-    subject: { name: 'General', code: 'general' },
-    career: { name: 'Todas', code: 'all' },
-    tags: []
-});
-const videoCareers = VIDEO_CAREERS;
-
-const isSubmitDisabled = computed(() => !videoForm.link.trim() || !videoForm.title.trim() || savingVideo.value);
-
-const resetVideoForm = () => {
-    videoForm.link = '';
-    videoForm.title = '';
-    videoForm.subject = { name: 'General', code: 'general' };
-    videoForm.career = { name: 'Todas', code: 'all' };
-    videoForm.tags = [];
-};
-
-const handleOpenAddVideo = () => {
-    resetVideoForm();
-    showAddVideoDialog.value = true;
-};
-
-const removeTag = (tag) => {
-    videoForm.tags = videoForm.tags.filter((item) => item !== tag);
-};
-
-// Sugerencias de materias para el AutoComplete
-const filterSubjects = (event) => {
-    const raw = event?.query ?? (typeof videoForm.subject === 'string' ? videoForm.subject : videoForm.subject?.name ?? '');
-    const query = normalize(raw || '');
-    filteredSubjects.value = subjects.value.filter((subject) => normalize(subject.name).includes(query));
-};
-
-// Selecciona un video para mostrarlo en el reproductor principal
-const selectMainVideo = (video) => {
-    if (!video) return;
-    mainVideo.value = video;
-    // Llevar el viewport al reproductor principal
-    try {
-        const el = document.querySelector('.video-wrapper');
-        if (el && typeof el.scrollIntoView === 'function') {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-    } catch (e) {
-        // no bloquear si falla el scroll
-        console.warn('scroll to video failed', e);
-    }
-};
-
-const onSubmitVideo = async () => {
-    if (isSubmitDisabled.value) {
-        toast.add({ severity: 'warn', summary: 'Formulario incompleto', detail: 'Completa la información obligatoria.', life: 3000 });
-        return;
-    }
-
-    try {
-        savingVideo.value = true;
-        await addVideoToMaeteca({
-            Video: videoForm.link.trim(),
-            Titulo: videoForm.title.trim(),
-            Materia: videoForm.subject?.code ?? null,
-            Carrera: videoForm.career?.code ?? null,
-            Relacionado: [...videoForm.tags],
-            Informacion: ''
-        });
-        toast.add({ severity: 'success', summary: 'Video agregado', detail: 'El video se agregó correctamente.', life: 3000 });
-        showAddVideoDialog.value = false;
-        resetVideoForm();
-        await loadVideos();
-    } catch (error) {
-        const msg = error?.message || 'No se pudo agregar el video';
-        toast.add({ severity: 'error', summary: 'Error', detail: msg, life: 4000 });
-    } finally {
-        savingVideo.value = false;
-    }
-};
-
-const loadVideos = async ({ showToast = false } = {}) => {
-    try {
-        testingRead.value = true;
-    videos.value = await loadMaetecaVideos();
-        if (showToast) {
-            const count = videos.value.length;
-            toast.add({
-                severity: 'info',
-                summary: 'Lectura completada',
-                detail: `Se encontraron ${count} videos en la Maeteca.`,
-                life: 4000
-            });
-        }
-        console.log('Videos obtenidos:', videos.value);
-    } catch (error) {
-        const msg = error?.message || 'No se pudieron leer los videos';
-        if (showToast) {
-            toast.add({ severity: 'error', summary: 'Error', detail: msg, life: 4000 });
-        }
-        console.error('Error cargando videos de la Maeteca:', error);
-    } finally {
-        testingRead.value = false;
-    }
-};
-
-onMounted(async () => {
-    try {
-        const user = await getCurrentUser();
-        currentUserRole.value = user?.role ?? null;
-    } catch (error) {
-        console.error('Error fetching current user for Maeteca:', error);
-        currentUserRole.value = null;
-    }
-    // Cargar materias para el AutoComplete del popup
-    try {
-        subjects.value = await getSubjects();
-    } catch (e) {
-        console.error('Error cargando materias para AutoComplete:', e);
-        subjects.value = [];
-    }
-    // Cargar video intro desde Firestore
-    const loadIntroVideo = async () => {
-        try {
-            const intro = await getVideoById('intro-maeteca');
-            if (intro) mainVideo.value = intro;
-        } catch (e) {
-            console.error('Error cargando video intro:', e);
-        }
-    };
-
-    await loadIntroVideo();
-    await loadVideos();
-});
-
-const onCreateSamples = async () => {
-    if (!canManageVideos.value) {
-        toast.add({ severity: 'warn', summary: 'Permiso requerido', detail: 'Tu rol no permite cargar videos en la Maeteca.', life: 4000 });
-        return;
-    }
-    try {
-        loadingSamples.value = true;
-        await createSampleVideos();
-        toast.add({ severity: 'success', summary: 'Éxito', detail: 'Videos de ejemplo creados', life: 3000 });
-        await loadVideos();
-    } catch (e) {
-        const msg = e?.message || 'No se pudieron crear los videos de ejemplo';
-        toast.add({ severity: 'error', summary: 'Error', detail: msg, life: 4000 });
-    } finally {
-        loadingSamples.value = false;
-    }
-};
-
-const onTestRead = async () => {
-    await loadVideos({ showToast: true });
-};
-
-function youtubeLink(url){
-    const youtRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/;
-    return youtRegex.test(url);
-}
-
-//Para el preview del video al agregar el link
-function lookPreview(){
-    const url = document.getElementById('video-link').value;
-    if (youtubeLink(url)){
-        //Show preview del video
-        //Mas regex, nunca pense que serviría de algo
-        const videoIdMatch = url.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/);
-        if(videoIdMatch){
-            const videoid = videoIdMatch[1];
-            document.getElementById('preview').innerHTML = `<iframe width="560" height="315" src="https://www.youtube.com/embed/${videoid}" 
-            frameborder="0" allowfullscreen></iframe>`;
-        }else{
-            document.getElementById('preview').innerText = "No se pudo extraer el ID del video.";
-        }
-    }else{
-        document.getElementById('preview').innerText = "¡Solo se permiten links de YouTube!";
-    }
-}
-
-</script>
 
 <style scoped>
 /* Título y Buscador con margin-right solo en pantalla completa */

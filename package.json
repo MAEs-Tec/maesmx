@@ -13,7 +13,7 @@
         "file-saver": "^2.0.5",
         "firebase": "^10.14.1",
         "primeflex": "^3.3.1",
-        "primeicons": "^6.0.1",
+        "primeicons": "^7.0.0",
         "primevue": "^3.30.2",
         "uuid": "^10.0.0",
         "vue": "^3.2.41",

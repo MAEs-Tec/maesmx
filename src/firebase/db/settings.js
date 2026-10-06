@@ -1,4 +1,4 @@
-import { firestoreDB } from "../../main";
+import { firestoreDB } from "../client";
 import { collection, addDoc, query, where, getDocs, Timestamp, orderBy, limit } from 'firebase/firestore';
 
 export async function getEvaluationsRevealedAt() {

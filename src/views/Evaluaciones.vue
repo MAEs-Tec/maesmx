@@ -1,4 +1,6 @@
 <script setup>
+import ProgressSpinner from 'primevue/progressspinner';
+import Rating from 'primevue/rating';
 import { ref, onMounted } from 'vue';
 import { getCurrentUser } from '../firebase/db/users';
 import { getEvaluacionesRecibidas } from '../firebase/db/asesorias';

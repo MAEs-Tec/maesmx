@@ -1,4 +1,9 @@
 <script setup>
+import AutoComplete from 'primevue/autocomplete';
+import Button from 'primevue/button';
+import InputText from 'primevue/inputtext';
+import Skeleton from 'primevue/skeleton';
+import Tag from 'primevue/tag';
 import { onMounted, ref, computed } from 'vue';
 import { getCurrentUser, getUsersWithActiveSession, getMaes, getClosestDayAndStartTime } from '../firebase/db/users';
 import { getMajors } from '@/firebase/db/majors'; // Para filter por carrera

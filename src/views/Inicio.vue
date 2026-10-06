@@ -1,5 +1,11 @@
 <script setup>
-import { onMounted, ref, computed, watch } from 'vue';
+import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
+import InputText from 'primevue/inputtext';
+import Rating from 'primevue/rating';
+import Textarea from 'primevue/textarea';
+import { onUnmounted, onMounted, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { getCurrentUser, startActiveSession, stopActiveSession } from '../firebase/db/users';
 import { useToast } from 'primevue/usetoast';
@@ -117,8 +123,10 @@ const prevAnuncio = () => {
   currentAnuncio.value = anuncios.value[currentIndex.value];
 };
 
+let announcementTimer;
+onUnmounted(() => clearInterval(announcementTimer));
 const autoAdvance = () => {
-  setInterval(() => {
+  announcementTimer = setInterval(() => {
     nextAnuncio();
   }, 5000);
 };

@@ -1,4 +1,6 @@
 <script setup>
+import Chart from 'primevue/chart';
+import ProgressSpinner from 'primevue/progressspinner';
 import { getTotalAsesorias, getAsesoriasCountByUser, getAsesoriasCountByArea, getAsesoriasCountByCampus } from '../firebase/db/asesorias';
 import { getTotalMaes } from '../firebase/db/users';
 import { ref, onMounted } from 'vue';

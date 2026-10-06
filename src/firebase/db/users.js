@@ -1,4 +1,4 @@
-import { firestoreDB } from "../../main";
+import { firestoreDB } from "../client";
 import { getAuth } from 'firebase/auth';
 import {
     doc,
@@ -13,9 +13,10 @@ import {
     deleteField,
     increment,
     getFirestore,
+    Timestamp,
 } from 'firebase/firestore';
 import { getUserProfilePicture } from "../img/users";
-import * as XLSX from 'xlsx';
+
 import { writeBatch } from "firebase/firestore";
 import { invalidateCacheTags, withCache } from "../cache/cache";
 import { CACHE_TAGS, CACHE_TTL_MS, cacheKeys, userTag } from "../cache/config";
@@ -89,12 +90,7 @@ async function fetchMaeDirectoryFresh() {
         return null;
     }
 
-    let data = querySnapshot.docs.map(doc => doc.data()).filter(item => item.name);
-
-    data = await Promise.all(data.map(async (item) => {
-        const profilePictureUrl = await getUserProfilePicture(item.email);
-        return { ...item, profilePictureUrl };
-    }));
+    const data = querySnapshot.docs.map(doc => doc.data()).filter(item => item.name);
 
     return sortUsersByClosestSchedule(data);
 }
@@ -106,14 +102,14 @@ async function getMaeDirectory(options = {}) {
             ttlMs: CACHE_TTL_MS.MAE_DIRECTORY,
             persist: true,
             forceRefresh: options.forceRefresh ?? false,
-            tags: [CACHE_TAGS.USERS, CACHE_TAGS.MAES]
+            tags: [CACHE_TAGS.MAES]
         },
         fetchMaeDirectoryFresh
     );
 }
 
 async function invalidateUserCaches(userId, { includeActive = false, includeLeaderboard = false } = {}) {
-    const tags = [CACHE_TAGS.USERS, CACHE_TAGS.USER_DETAILS, CACHE_TAGS.CURRENT_USER, CACHE_TAGS.MAES];
+    const tags = [CACHE_TAGS.MAES];
 
     if (userId) {
         tags.push(userTag(userId));
@@ -151,7 +147,7 @@ export async function getUser(uid, options = {}) {
             ttlMs: CACHE_TTL_MS.USER,
             persist: true,
             forceRefresh: options.forceRefresh ?? false,
-            tags: [CACHE_TAGS.USERS, CACHE_TAGS.USER_DETAILS, userTag(uid)]
+            tags: [userTag(uid)]
         },
         async () => {
             const userRef = doc(firestoreDB, "users", uid);
@@ -179,7 +175,7 @@ export async function getCurrentUser(options = {}) {
                 persist: true,
                 forceRefresh: options.forceRefresh ?? false,
                 cacheNull: false,               // no guardar null en cache persistente
-                tags: [CACHE_TAGS.USERS, CACHE_TAGS.CURRENT_USER, userTag(uid)]
+                tags: [userTag(uid)]
             },
             async () => await getUser(uid, options)
         );
@@ -239,7 +235,8 @@ export const getClosestDayAndStartTime = (schedules) => {
 
 
 export async function getMaes(options = {}) {
-    return await getMaeDirectory(options);
+    const users = await getMaeDirectory(options);
+    return Promise.all((users || []).map(async item => ({ ...item, profilePictureUrl: item.photoURL || await getUserProfilePicture(item.email) })));
 }
 
 export async function getMaesNames(options = {}) {
@@ -259,7 +256,7 @@ export async function getUsersWithActiveSession(getProfilePicture = false, optio
             },
             async () => {
                 const usersRef = collection(firestoreDB, "users");
-                const q = query(usersRef, where('activeSession', '!=', null));
+                const q = query(usersRef, where('activeSession.startTime', '>', Timestamp.fromMillis(Date.now() - 18000000)));
                 const querySnapshot = await getDocs(q);
 
                 if (!querySnapshot) {
@@ -331,7 +328,7 @@ export async function getTodaysMae(options = {}) {
                 ttlMs: CACHE_TTL_MS.MAES_TODAY,
                 persist: false,
                 forceRefresh: options.forceRefresh ?? false,
-                tags: [CACHE_TAGS.USERS, CACHE_TAGS.MAES]
+                tags: [CACHE_TAGS.MAES]
             },
             async () => {
                 const users = await getMaeDirectory(options);
@@ -486,6 +483,7 @@ export async function clearAllUsersWeekSchedule() {
 }
 
 export async function checkAndUpdateUserRole(file = null) {
+    const XLSX = await import('xlsx');
     try {
         const usersRef = collection(firestoreDB, "users");
         const querySnapshot = await getDocs(usersRef);

@@ -1,11 +1,20 @@
 <script setup>
+import Button from 'primevue/button';
+import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
+import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
+import InputText from 'primevue/inputtext';
+import Rating from 'primevue/rating';
+import Tag from 'primevue/tag';
+import Textarea from 'primevue/textarea';
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { getUser as getUserRecord, updateUserSubjects, updateUserSchedule, getCurrentUser, startActiveSession,
-  stopActiveSession,updateUserProfilePicture,  countAchievedBadges,
-  updateUserAchievementBadge, updateUserBackground, updateUserBackgroundImage,
+  stopActiveSession,updateUserProfilePicture,  
+  updateUserBackground, updateUserBackgroundImage,
   updateUserCareer,
-  addBackgroundUsers } from '../firebase/db/users';
+  } from '../firebase/db/users';
 import { getMajors } from '../firebase/db/majors';
 import { getSubjects } from '../firebase/db/subjects';
 import { addAsesoria, getAsesoriasCountForUserInCurrentSemester, getAsesoriasByUidAndRating,
@@ -127,60 +136,9 @@ const loadProfile = async () => {
     subjects.value = availableSubjects;
     asesoriasCount.value = count;
     evalInfo.value = evaluations;
-    if (count >= 1 && profile.badges[0]?.achieved === false) {
-      await updateUserAchievementBadge(profile.uid, "1");
-    }
-    if (count >= 10 && profile.badges[1]?.achieved === false) {
-      await updateUserAchievementBadge(profile.uid, "2");
-    }
-    if (count >= 30 && profile.badges[2]?.achieved === false) {
-      await updateUserAchievementBadge(profile.uid, "3");
-    }
-    if (count >= 50 && profile.badges[3]?.achieved === false) {
-      await updateUserAchievementBadge(profile.uid, "4");
-    }
-    if (count >= 100 && profile.badges[4]?.achieved === false) {
-      await updateUserAchievementBadge(profile.uid, "5");
-    }
-    if (count >= 200 && profile.badges[5]?.achieved === false) {
-      await updateUserAchievementBadge(profile.uid, "6");
-    }
-    if (count >= 500 && profile.badges[6]?.achieved === false) {
-      await updateUserAchievementBadge(profile.uid, "7");
-    }
-    if ( profile.profilePictureUrl !== "https://randomuser.me/api/portraits/lego/5.jpg"
-    && profile.badges[7]?.achieved === false
-    ){
-      await updateUserAchievementBadge(profile.uid, "8");
-    }
-    if ((Math.round((profile.totalTime / 60) * 100) / 100) >= 80 && profile.badges[8]?.achieved === false) {
-        await updateUserAchievementBadge(profile.uid, "9");
-    }
-    if ( profile.badges[11]?.achieved === false
-      && (profile.role == "mae" || count >= 1)
-    ) {
-      await updateUserAchievementBadge(profile.uid, "12");
-    }
-    if ( profile.badges[12]?.achieved === false
-      && (profile.role == "coordi" || profile.role == "admin"
-       || profile.role == "tec")
-    ) {
-      await updateUserAchievementBadge(profile.uid, "13");
-    }
-    if ( profile.badges[13]?.achieved === false
-      && (profile.role == "admin" || profile.role == "tec")
-    ) {
-      await updateUserAchievementBadge(profile.uid, "14");
-    }
-    if ( profile.badges[14]?.achieved === false
-      &&  profile.role == "publi"
-    ) {
-      await updateUserAchievementBadge(profile.uid, "15");
-    }
-
-    const [updatedProfile, achievedBadges, attendance] = await Promise.all([
-      getUser(uid), countAchievedBadges(profile.uid), getStudentReport(profile.uid)
-    ]);
+    const updatedProfile = profile;
+    const achievedBadges = (profile.badges || []).filter(b => b.achieved).length;
+    const attendance = await getStudentReport(profile.uid);
     if (loadId !== profileLoadId) return;
     maeInfo.value = updatedProfile || profile;
     badgesCount.value = achievedBadges;

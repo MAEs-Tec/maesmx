@@ -11,7 +11,7 @@ export function filterVideosByText(videos, text) {
         return title.includes(query) || info.includes(query);
     });
 }
-import { firestoreDB } from "../../main";
+import { firestoreDB } from "../client";
 import {
     getDocs,
     addDoc,

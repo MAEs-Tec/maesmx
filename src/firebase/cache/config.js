@@ -7,7 +7,7 @@ export const CACHE_TTL_MS = {
     CURRENT_USER: 5 * MINUTE,
     USER: 5 * MINUTE,
     PROFILE_PICTURE: 30 * DAY,
-    MAE_DIRECTORY: 10 * MINUTE,
+    MAE_DIRECTORY: 15 * MINUTE,
     MAES_TODAY: 1 * MINUTE,
     ACTIVE_MAES: 30 * SECOND,
     SUBJECTS: 7 * DAY,
@@ -19,8 +19,9 @@ export const CACHE_TTL_MS = {
     ATTENDANCE_TODAY: 30 * SECOND,
     ATTENDANCE_DAY: 10 * MINUTE,
     ATTENDANCE_RANGE: 10 * MINUTE,
+    STATISTICS: 15 * MINUTE,
     ASESORIAS: 5 * MINUTE,
-    LEADERBOARD: 5 * MINUTE,
+    LEADERBOARD: 15 * MINUTE,
     VIDEOS: 1 * DAY
 };
 
@@ -37,6 +38,7 @@ export const CACHE_TAGS = {
     ANNOUNCEMENTS: 'announcements',
     GROUP_ANNOUNCEMENTS: 'announcements:group',
     ATTENDANCE: 'attendance',
+    STATISTICS: 15 * MINUTE,
     ASESORIAS: 'asesorias',
     LEADERBOARD: 'leaderboard',
     VIDEOS: 'videos'

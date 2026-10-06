@@ -1,4 +1,11 @@
 <script setup>
+import Button from 'primevue/button';
+import Checkbox from 'primevue/checkbox';
+import Divider from 'primevue/divider';
+import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
+import Password from 'primevue/password';
+import Toast from 'primevue/toast';
 import { onMounted, ref } from 'vue';
 import { getAuth, getAdditionalUserInfo, GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup, signOut } from 'firebase/auth';
 import { getCurrentUser } from '../../../firebase/db/users';

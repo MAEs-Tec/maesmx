@@ -1,8 +1,9 @@
 <script setup>
+import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
+import Skeleton from 'primevue/skeleton';
+import Tag from 'primevue/tag';
 import { ref } from 'vue';
-import { Dialog } from 'primevue/dialog';
-import { Tag } from 'primevue/tag';
-import { Skeleton } from 'primevue/skeleton';
 
 // Props para recibir del padre
 const props = defineProps(['user']);

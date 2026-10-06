@@ -1,4 +1,10 @@
 <script setup>
+import Button from 'primevue/button';
+import Divider from 'primevue/divider';
+import Dropdown from 'primevue/dropdown';
+import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
+import Password from 'primevue/password';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, ref } from 'vue';
 import { getAuth, createUserWithEmailAndPassword, sendEmailVerification, signOut } from 'firebase/auth';

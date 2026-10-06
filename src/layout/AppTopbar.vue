@@ -1,4 +1,5 @@
 <script setup>
+import Button from 'primevue/button';
 import { getAuth, signOut } from "firebase/auth";
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useLayout } from '@/layout/composables/layout';

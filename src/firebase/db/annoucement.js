@@ -1,4 +1,4 @@
-import { firestoreDB } from "../../main";
+import { firestoreDB } from "../client";
 import {
     addDoc,
     collection,

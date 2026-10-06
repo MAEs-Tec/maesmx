@@ -1,4 +1,14 @@
 <script setup>
+import AutoComplete from 'primevue/autocomplete';
+import Button from 'primevue/button';
+import Calendar from 'primevue/calendar';
+import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
+import Dialog from 'primevue/dialog';
+import Divider from 'primevue/divider';
+import InputText from 'primevue/inputtext';
+import Menubar from 'primevue/menubar';
+import ProgressSpinner from 'primevue/progressspinner';
 import { computed, ref, onMounted } from 'vue';
 import { getSubjects  } from '../firebase/db/subjects';
 import { normalize } from '@/utils/HorarioUtils';

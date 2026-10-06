@@ -1,4 +1,7 @@
 <script setup>
+import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
 import { onMounted, ref, computed } from 'vue';
 import { getAnnouncementsGrupales, addUserToPreregsiter, updateUserAsistence  } from '@/firebase/db/annoucement'; 
 import { getSubjects } from '../firebase/db/subjects';

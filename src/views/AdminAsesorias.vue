@@ -1,44 +1,34 @@
 <script setup>
+import Button from 'primevue/button';
+import Calendar from 'primevue/calendar';
+import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
+import Dialog from 'primevue/dialog';
+import Skeleton from 'primevue/skeleton';
 import { ref, onMounted } from 'vue';
-import { getAsesorias } from '../firebase/db/asesorias';
-import * as XLSX from 'xlsx';
+import { getAsesoriasPage, exportAsesorias } from '../firebase/db/asesorias';
+
 const asesorias = ref([]);
-const startDate = ref(null);
-const endDate = ref(null);
+const startDate = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+const endDate = ref(new Date());
+const nextCursor = ref(null);
+const exportProgress = ref(0);
+const exporting = ref(false);
+const loadError = ref('');
+const loadedRange = ref(null);
 const loading = ref(true);
 const showDialog = ref(false);
 const isFiltered = ref(false); 
 
-const fetchAsesorias = async () => {
+const fetchAsesorias = async (more = false) => {
+    loading.value = true; loadError.value = '';
     try {
-        loading.value = true;
-
-        if (startDate.value && endDate.value) {
-            const asesoriasData = await getAsesorias(startDate.value, endDate.value);
-            asesorias.value = asesoriasData;
-            isFiltered.value = true; 
-        } else {
-            asesorias.value = await getAsesorias();
-            isFiltered.value = false; 
-        }
-
-        /*
-        // Temp debug to see peerInfo and profilePictureUrl for each asesoria
-        asesorias.value.forEach((asesoria, index) => {
-            console.log(
-                `Asesoria #${index}:`,
-                asesoria.peerInfo,
-                'profilePictureUrl:',
-                asesoria.peerInfo?.profilePictureUrl
-            );
-        });*/
-
-    } catch (error) {
-        console.error("Error fetching asesorias: ", error);
-        asesorias.value = [];
-    } finally {
-        loading.value = false;
-    }
+        const range = more ? loadedRange.value : { startDate: startDate.value, endDate: endDate.value };
+        const page = await getAsesoriasPage({ ...range, cursor: more ? nextCursor.value : null });
+        asesorias.value = more ? [...asesorias.value, ...page.items] : page.items;
+        nextCursor.value = page.cursor; loadedRange.value = range; isFiltered.value = true;
+    } catch (error) { loadError.value = error.message; }
+    finally { loading.value = false; }
 };
 
 const filterByDate = () => {
@@ -53,8 +43,12 @@ const exportToExcel = () => {
     exportData(); 
 };
 
-const exportData = () => {
-    const formattedData = asesorias.value.map(asesoria => ({
+const exportData = async () => {
+    const XLSX = await import('xlsx');
+    exporting.value = true;
+    try {
+    const rows = await exportAsesorias(loadedRange.value, count => exportProgress.value = count);
+    const formattedData = rows.map(asesoria => ({
         'ID': asesoria.id || '',
         'Matricula MAE': asesoria.peerInfo?.uid || '',
         'Nombre MAE': asesoria.peerInfo?.name || '',
@@ -85,6 +79,7 @@ const exportData = () => {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Asesorías");
     XLSX.writeFile(workbook, "asesorias.xlsx");
+    } catch (error) { loadError.value = error.message; } finally { exporting.value = false; }
 };
 
 const confirmExportAction = () => {
@@ -107,9 +102,12 @@ onMounted(() => {
             <span class="mx-3 text-4xl text-black font-bold">-</span>
             <Calendar v-model="endDate" placeholder="Fecha de Fin" dateFormat="yy-mm-dd" showIcon class="mb-2 mx-3 w-3" />
             <Button label="Filtrar" @click="filterByDate" class="mb-2 mx-3 w-2" />
-            <Button label="Exportar a Excel" @click="exportToExcel" class="mb-2 mx-3 w-3" :disabled="!isFiltered" />
+            <Button label="Exportar a Excel" @click="exportToExcel" class="mb-2 mx-3 w-3" :disabled="!isFiltered || exporting" />
         </div>
 
+        <p v-if="loadError" role="alert">{{ loadError }}</p>
+        <p v-if="exporting">Exportando {{ exportProgress }} registros…</p>
+        <Button v-if="nextCursor" label="Cargar 50 más" :disabled="loading" @click="fetchAsesorias(true)" />
         <DataTable :value="asesorias" paginator :rows="10" dataKey="id" :loading="loading" responsiveLayout="scroll" class="custom-table">
             <template #empty>No se encontraron asesorías.</template>
             <template #loading>Cargando información. Por favor espera.</template>

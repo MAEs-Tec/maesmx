@@ -1,4 +1,5 @@
 <script setup>
+import Button from 'primevue/button';
 import { getAnnouncements } from '@/firebase/db/annoucement'; 
 import {
   formatDate,
@@ -6,7 +7,7 @@ import {
 } from '@/utils/AnunciosUtils';
 import { useToast } from 'primevue/usetoast';
 import { useRouter } from 'vue-router'; 
-import { onMounted, ref } from 'vue';
+import { onUnmounted, onMounted, ref } from 'vue';
 
 const anuncios = ref([]);
 const currentAnuncio = ref({});
@@ -48,8 +49,10 @@ const prevAnuncio = () => {
   currentAnuncio.value = anuncios.value[currentIndex.value];
 };
 
+let announcementTimer;
+onUnmounted(() => clearInterval(announcementTimer));
 const autoAdvance = () => {
-  setInterval(() => {
+  announcementTimer = setInterval(() => {
     nextAnuncio();
   }, 5000);
 };
@@ -127,7 +130,7 @@ const goToAsesoria = async (asesoria) => {
                         </h1>
                     </div>
                     <div class="flex-grow flex items-end overflow-hidden">
-                        <img src="../../assets/img/maelanding.png" class="w-full h-full object-cover" />
+                        <img src="../../assets/img/maelanding-1280.webp" srcset="/src/assets/img/maelanding-640.webp 640w, /src/assets/img/maelanding-1280.webp 1280w" sizes="(max-width: 768px) 100vw, 50vw" width="1280" height="1280" class="w-full h-full object-cover" />
                     </div>
                 </div>
             </div>

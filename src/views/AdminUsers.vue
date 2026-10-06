@@ -1,8 +1,14 @@
 <script setup>
+import Button from 'primevue/button';
+import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
+import InputText from 'primevue/inputtext';
+import MultiSelect from 'primevue/multiselect';
+import Toast from 'primevue/toast';
 import { ref, onMounted } from 'vue';
 import { FilterMatchMode } from 'primevue/api';
 import { useToast } from 'primevue/usetoast';
-import * as XLSX from 'xlsx';
+
 import { getMaes } from '../firebase/db/users';
 import { getAsesoriasCountForUserInCurrentSemester } from '../firebase/db/asesorias';
 
@@ -70,6 +76,7 @@ const getLocalDateForFilename = () => {
 };
 
 const exportUsersToExcel = async () => {
+    const XLSX = await import('xlsx');
   const usersToExport = getSortedExportUsers();
   if (usersToExport.length === 0 || exporting.value) return;
 

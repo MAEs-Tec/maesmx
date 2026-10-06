@@ -1,9 +1,14 @@
 <script setup>
+import Button from 'primevue/button';
+import Calendar from 'primevue/calendar';
+import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
+import InputText from 'primevue/inputtext';
 import { ref, onMounted } from 'vue';
 import { getReportByDate } from '@/firebase/db/attendance';
 import { getReportByDateRange } from '@/firebase/db/attendance';
 import { computed } from 'vue'; // To get number of mae attendances 
-import * as XLSX from 'xlsx'; // To export to excel 
+ // To export to excel 
 import Dialog from 'primevue/dialog'; // To use dialog modal
 import { FilterMatchMode } from 'primevue/api'; // Add filtering abilities
 
@@ -200,7 +205,8 @@ const exportToExcel = async () => {
 };
 
 // The info that gets exported from maeStats
-const exportData = () => {
+const exportData = async () => {
+    const XLSX = await import('xlsx');
   const formattedData = maeStats.value.map(mae => ({
     'Matrícula': mae.id,
     'Registros en el periodo': mae.count,

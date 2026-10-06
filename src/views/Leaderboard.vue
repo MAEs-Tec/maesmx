@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import { getExperience,updateUserAchievementBadge } from '@/firebase/db/users';
+import { getExperience } from '@/firebase/db/users';
 import { getAsesoriasCountForUserInCurrentSemester } from '@/firebase/db/asesorias';
 
 const users = ref([]);
@@ -11,7 +11,7 @@ onMounted(async () => {
     const fetchedUsers = await getExperience();
     users.value = assignRanks(fetchedUsers);
     userGold.value = users.value[0]; // Usar .value para reasignar
-    await updateUserAchievementBadge(users.value[0].uid, "11");
+
 
     // Cargar conteo de asesorías de cada usuario en paralelo
     const counts = await Promise.all(

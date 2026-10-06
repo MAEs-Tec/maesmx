@@ -1,4 +1,8 @@
 <script setup>
+import Button from 'primevue/button';
+import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
+import Tag from 'primevue/tag';
 
 const materia = " Modelación Matemática Intermedia"
 const intensiva = "Si"

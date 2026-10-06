@@ -1,4 +1,14 @@
 <script setup>
+import Button from 'primevue/button';
+import Calendar from 'primevue/calendar';
+import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
+import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
+import InputNumber from 'primevue/inputnumber';
+import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
+import Tag from 'primevue/tag';
 import { getSubjectColor } from '@/utils/CoordiUtils';
 import { ref, onMounted, watch } from 'vue';
 import { useToast } from 'primevue/usetoast';

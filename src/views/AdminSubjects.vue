@@ -1,10 +1,19 @@
 <script setup>
+import Button from 'primevue/button';
+import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
+import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
+import InputNumber from 'primevue/inputnumber';
+import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
+import ToggleButton from 'primevue/togglebutton';
 import { ref, onMounted } from 'vue';
 import { FilterMatchMode } from 'primevue/api';
 import { getSubjects, addSubject, deleteSubject, upsertSubjects } from '../firebase/db/subjects';
 import { getMaes } from '../firebase/db/users';
 import { topOptions, areaOptions } from '@/utils/PerfilUtils';
-import * as XLSX from 'xlsx';
+
 
 const loading = ref(true);
 const subjects = ref([]);
@@ -139,6 +148,7 @@ const normalizeHeader = (header) => String(header ?? '').replace(/^\uFEFF/, '').
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 const importSubjects = async (event) => {
+    const XLSX = await import('xlsx');
   const file = event.target.files?.[0];
   event.target.value = '';
   if (!file) return;

@@ -1,4 +1,5 @@
 <script setup>
+import Button from 'primevue/button';
     
     const fecha = "Martes 14 de Noviembre de 2023"
 </script>

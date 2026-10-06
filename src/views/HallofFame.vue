@@ -1,4 +1,5 @@
 <script setup>
+import Button from 'primevue/button';
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 
 // Carousel data and controls

@@ -1,4 +1,10 @@
 <script setup>
+import AutoComplete from 'primevue/autocomplete';
+import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
+import InputText from 'primevue/inputtext';
+import Tag from 'primevue/tag';
 import { ref, computed, onMounted, reactive } from 'vue';
 import MultiSelect from 'primevue/multiselect';
 import { useToast } from 'primevue/usetoast';

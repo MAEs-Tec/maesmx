@@ -1,4 +1,9 @@
 <script setup>
+import Button from 'primevue/button';
+import Column from 'primevue/column';
+import DataTable from 'primevue/datatable';
+import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
 import { onMounted, ref, computed } from 'vue';
 import { getAnnouncementsAllGrupales,updateUserAsistence,processAsistence
  } from '@/firebase/db/annoucement'; 

@@ -1,4 +1,6 @@
-import { firestoreDB } from "../../main";
+import { getAsesoriasPage, exportAsesorias, currentSemester, calendarKey } from './advisoryQueries';
+export { getAsesoriasPage, exportAsesorias } from './advisoryQueries';
+import { firestoreDB } from "../client";
 import {
     addDoc,
     collection,
@@ -25,7 +27,7 @@ import {
     toMillis
 } from "../../utils/PointsUtils";
 
-const SEMESTER_START = new Date('2024-08-05');
+
 
 function normalizeDateKey(date) {
     if (!date) {
@@ -33,7 +35,7 @@ function normalizeDateKey(date) {
     }
 
     if (date instanceof Date) {
-        return date.toISOString();
+        return calendarKey(date);
     }
 
     return String(date);
@@ -189,27 +191,15 @@ async function fetchAsesoriasFresh(startDate = null, endDate = null) {
 
 // Función para obtener asesorías por UID, reutilizando getAsesorias
 export async function getAsesoriasByUid(uid, options = {}) {
-    try {
-        const today = new Date(); 
-        const asesorias = await getAsesorias(SEMESTER_START, today, options);
-        const includeTests = options.includeTests === true;
-
-        const asesoriasFiltradas = asesorias.filter(asesoria =>
-            asesoria.peerInfo?.uid === uid &&
-            (includeTests || isRealAsesoria(asesoria))
-        );
-
-        return asesoriasFiltradas;
-    } catch (error) {
-        console.error("Error fetching asesorias by UID: ", error);
-        return [];
-    }
+    const range = options.startDate ? options : currentSemester();
+    if (options.exportAll) return exportAsesorias({ ...range, peerUid: uid });
+    return (await getAsesoriasPage({ ...range, ...options, peerUid: uid })).items;
 }
 
 export async function updateAllExperienceAsesorias() {
     const startDate = new Date('2024-08-05');
     const today = new Date();
-    const asesorias = await getAsesorias(startDate, today);
+    const asesorias = await getAsesorias(startDate, today, { exportAll: true });
     const processed = new Set(); // Conjunto para evitar procesar la misma asesoría más de una vez
 
     for (const advisory of asesorias) {
@@ -594,19 +584,8 @@ export async function borrarTodasEvaluaciones() {
 }
 
 export async function getAsesorias(startDate = null, endDate = null, options = {}) {
-    const startKey = normalizeDateKey(startDate);
-    const endKey = normalizeDateKey(endDate);
-
-    return await withCache(
-        cacheKeys.asesoriasRange(startKey, endKey),
-        {
-            ttlMs: CACHE_TTL_MS.ASESORIAS,
-            persist: true,
-            forceRefresh: options.forceRefresh ?? false,
-            tags: [CACHE_TAGS.ASESORIAS]
-        },
-        async () => await fetchAsesoriasFresh(startDate, endDate)
-    );
+    const range = startDate || endDate ? { startDate, endDate } : currentSemester();
+    return options.exportAll ? exportAsesorias(range) : (await getAsesoriasPage({ ...range, ...options })).items;
 }
 
 export async function getAsesoriasByUidAndRating(uidUser, uidPeer = null, options = {}) {

@@ -1,14 +1,38 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import AutoComplete from 'primevue/autocomplete';
+import Button from 'primevue/button';
+import Calendar from 'primevue/calendar';
+import Dropdown from 'primevue/dropdown';
+import ProgressSpinner from 'primevue/progressspinner';
+import { ref, onMounted, computed, watch } from 'vue';
 import { getCurrentUser} from '../firebase/db/users';
 import { getSubjects } from '../firebase/db/subjects';
-import { getAsesoriasByUid } from '../firebase/db/asesorias'
+import { getAsesoriasPage } from '../firebase/db/asesorias'
 import { getSubjectColor, normalize } from '@/utils/HorarioUtils';
 
 const userInfo = ref(null);
 const asesorias = ref([]);
 const isLoading = ref(true); 
 const subjects = ref([]);
+const startDate = ref(new Date(new Date().getFullYear(), new Date().getMonth() < 6 ? 0 : 6, 1));
+const endDate = ref(new Date());
+const cursor = ref(null);
+const loadError = ref('');
+let requestId = 0;
+const loadPage = async (more = false) => {
+    const id = ++requestId;
+    isLoading.value = true; loadError.value = '';
+    try {
+        const page = await getAsesoriasPage({ peerUid: userInfo.value.uid,
+            startDate: date.value || startDate.value, endDate: date.value || endDate.value,
+            subjectId: subjectInput.value?.id, evaluated: evalInput.value,
+            cursor: more ? cursor.value : null });
+        if (id !== requestId) return;
+        asesorias.value = more ? [...asesorias.value, ...page.items] : page.items;
+        cursor.value = page.cursor;
+    } catch (error) { if (id === requestId) loadError.value = error.message; }
+    finally { if (id === requestId) isLoading.value = false; }
+};
 const date = ref(null);
 const evalInput = ref(null);
 
@@ -23,7 +47,7 @@ const evaluacion = [
 
 onMounted(async () => {
     userInfo.value = await getCurrentUser();
-    asesorias.value = await getAsesoriasByUid(userInfo.value.uid);
+    await loadPage();
     subjects.value = await getSubjects();
     isLoading.value = false;  
     
@@ -35,31 +59,8 @@ const formatDate = (timestamp) => {
     return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
 };
 
-const filterAsesorias = computed(() => {
-    const selectedSubject = subjectInput.value;
-    const selectedDate = date.value;
-    const selectedEval = evalInput.value;
-
-    if (selectedSubject === '' && !selectedDate && selectedEval === null) {
-        return asesorias.value;
-    }
-
-    return asesorias.value.filter(asesoria => {
-        const subjectMatches = asesoria.subject.id === selectedSubject.id;
-
-        const asesoriaDate = new Date(asesoria.date.seconds * 1000);
-        const selectedDateObj = new Date(selectedDate);
-        const dateMatches = asesoriaDate.toDateString() === selectedDateObj.toDateString();
-
-        const evalMatches = (asesoria.rating && selectedEval) || (!asesoria.rating && !selectedEval);
-
-        if ((subjectMatches || selectedSubject === '') && (dateMatches || !selectedDate) && (evalMatches || selectedEval === null)) {
-            return true;
-        }
-    });
-});
-
-
+const filterAsesorias = computed(() => asesorias.value);
+watch([date, evalInput, () => subjectInput.value?.id], () => { if (userInfo.value) loadPage(); });
 
 const clearFilters = () => {
     subjectInput.value = '';
@@ -71,7 +72,7 @@ const filterSubjects = () => {
     const query = normalize(subjectInput.value);
 
     //Conseguir las materias de las asesorías dadas
-    const asesoriasSubjects = asesorias.value.map(asesoria => asesoria.subject);
+    const asesoriasSubjects = subjects.value;
     //Eliminar materias duplicadas y ordenarlas alfabéticamente
     const uniqueSubjectsMap = new Map(asesoriasSubjects.map(subject => [subject.id, subject]));
     const uniqueSubjects = Array.from(uniqueSubjectsMap.values());  
@@ -88,6 +89,13 @@ const filterSubjects = () => {
 </script>
 
 <template>
+    <div class="flex gap-2 mb-3">
+        <Calendar v-model="startDate" placeholder="Desde" />
+        <Calendar v-model="endDate" placeholder="Hasta" />
+        <Button label="Consultar período" :disabled="isLoading" @click="loadPage()" />
+    </div>
+    <p v-if="loadError" role="alert">{{ loadError }}</p>
+    <Button v-if="cursor" label="Cargar 50 más" :disabled="isLoading" @click="loadPage(true)" />
     <div v-if="subjectInput || date || evalInput != null" class="flex">
         <button @click="clearFilters" class="mr-2 bg-transparent border-none">
             <i class="pi pi-arrow-left text-black" style="font-size: 1.5rem; margin-right: 0.5rem;"></i>

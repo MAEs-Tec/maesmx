@@ -1,10 +1,42 @@
 import { Timestamp } from 'firebase/firestore';
+import { recordCostOperation } from '../diagnostics';
 
-const DB_NAME = 'maesmx-cache';
+const DB_NAME = 'maesmx-cache-v2';
 const STORE_NAME = 'entries';
 
 const memoryCache = new Map();
 const inFlightRequests = new Map();
+let scope = 'unconfigured:anonymous';
+let generation = 0;
+let persistentQueue = Promise.resolve();
+function enqueuePersistent(task) {
+    const result = persistentQueue.then(task);
+    persistentQueue = result.catch(() => {});
+    return result;
+}
+const scopedKey = key => `${scope}:${key}`;
+const channel = typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined'
+    ? new BroadcastChannel('maesmx-cache-v2') : null;
+if (channel) channel.onmessage = ({ data }) => {
+    if (data?.scope !== scope) return;
+    if (data.type === 'tags') invalidateCacheTags(data.tags, false);
+    if (data.type === 'logout') configureCacheSession(data.project, null, false);
+};
+
+export async function configureCacheSession(project = 'unknown', uid = null, broadcast = true) {
+    const previous = scope;
+    const next = `${project}:${uid || 'anonymous'}`;
+    if (previous === next) return;
+    generation++;
+    scope = next;
+    memoryCache.clear();
+    inFlightRequests.clear();
+    if (!uid && broadcast) channel?.postMessage({ type: 'logout', scope: previous, project });
+    await enqueuePersistent(async () => {
+        const records = await getAllPersistentEntries();
+        await Promise.all(records.filter(entry => entry.key.startsWith(`${previous}:`)).map(entry => deletePersistentEntry(entry.key)));
+    }).catch(error => console.warn('Cache session cleanup failed', error));
+}
 
 function isBrowser() {
     return typeof window !== 'undefined';
@@ -236,12 +268,13 @@ async function hydratePersistentEntry(key) {
 }
 
 export async function setCachedValue(key, value, { ttlMs = 0, tags = [], persist = false } = {}) {
+    key = scopedKey(key);
     const entry = createEntry(key, value, { ttlMs, tags });
     setMemoryEntry(key, entry);
 
     if (persist) {
         try {
-            await writePersistentEntry(entry);
+            await enqueuePersistent(() => writePersistentEntry(entry));
         } catch (error) {
             console.warn(`Persistent cache write failed for ${key}; using memory cache only.`, error);
         }
@@ -255,16 +288,22 @@ export async function withCache(
     { ttlMs = 0, tags = [], persist = false, forceRefresh = false, cacheNull = true } = {},
     loader
 ) {
+    const originalKey = key;
+    key = scopedKey(key);
+    const requestGeneration = generation;
     if (!forceRefresh) {
         const memoryEntry = getMemoryEntry(key);
         if (memoryEntry) {
+            recordCostOperation('cache:memory-hit');
             return cloneValue(memoryEntry.value);
         }
 
         if (persist) {
             try {
+                await persistentQueue;
                 const persistentEntry = await hydratePersistentEntry(key);
-                if (persistentEntry) {
+                if (persistentEntry && generation === requestGeneration) {
+                    recordCostOperation('cache:persistent-hit');
                     return cloneValue(persistentEntry.value);
                 }
             } catch (error) {
@@ -274,17 +313,26 @@ export async function withCache(
     }
 
     if (inFlightRequests.has(key)) {
+        recordCostOperation('cache:deduplicated');
         return cloneValue(await inFlightRequests.get(key));
     }
 
     const request = (async () => {
+        recordCostOperation('cache:miss');
         const freshValue = await loader();
-        if (freshValue !== null || cacheNull) {
-            await setCachedValue(key, freshValue, { ttlMs, tags, persist });
+        if ((freshValue !== null || cacheNull) && generation === requestGeneration) {
+            // Serialize invalidation and writes. A late response cannot repopulate
+            // persistent storage after a mutation or an account change.
+            await enqueuePersistent(async () => {
+                if (generation !== requestGeneration || scopedKey(originalKey) !== key) return;
+                const entry = createEntry(key, freshValue, { ttlMs, tags });
+                setMemoryEntry(key, entry);
+                if (persist) await writePersistentEntry(entry);
+            }).catch(error => console.warn('Persistent cache write failed', error));
         }
         return freshValue;
     })().finally(() => {
-        inFlightRequests.delete(key);
+        if (inFlightRequests.get(key) === request) inFlightRequests.delete(key);
     });
 
     inFlightRequests.set(key, request);
@@ -292,19 +340,26 @@ export async function withCache(
 }
 
 export async function invalidateCacheKey(key) {
+    key = scopedKey(key);
+    generation++;
+    inFlightRequests.delete(key);
     memoryCache.delete(key);
     try {
-        await deletePersistentEntry(key);
+        await enqueuePersistent(() => deletePersistentEntry(key));
     } catch (error) {
         console.warn(`Persistent cache delete failed for ${key}.`, error);
     }
 }
 
-export async function invalidateCacheTags(tags = []) {
+export async function invalidateCacheTags(tags = [], broadcast = true) {
     const wantedTags = normalizeTags(tags);
     if (wantedTags.length === 0) {
         return;
     }
+    generation++;
+    inFlightRequests.clear();
+    const targetScope = scope;
+    if (broadcast) channel?.postMessage({ type: 'tags', tags: wantedTags, scope });
 
     for (const [key, entry] of memoryCache.entries()) {
         if (entry.tags?.some((tag) => wantedTags.includes(tag))) {
@@ -313,12 +368,13 @@ export async function invalidateCacheTags(tags = []) {
     }
 
     try {
-        const persistentEntries = await getAllPersistentEntries();
-        const keysToDelete = persistentEntries
-            .filter((entry) => entry.tags?.some((tag) => wantedTags.includes(tag)))
-            .map((entry) => entry.key);
-
-        await Promise.all(keysToDelete.map((key) => deletePersistentEntry(key)));
+        await enqueuePersistent(async () => {
+            const persistentEntries = await getAllPersistentEntries();
+            const keysToDelete = persistentEntries
+                .filter(entry => entry.key.startsWith(`${targetScope}:`) && entry.tags?.some(tag => wantedTags.includes(tag)))
+                .map(entry => entry.key);
+            await Promise.all(keysToDelete.map(key => deletePersistentEntry(key)));
+        });
     } catch (error) {
         console.warn('Persistent cache tag invalidation failed.', error);
     }

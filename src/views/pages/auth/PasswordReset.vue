@@ -1,4 +1,7 @@
 <script setup>
+import Button from 'primevue/button';
+import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
 import { onMounted, ref } from 'vue';
 import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
 import { useRoute } from 'vue-router';

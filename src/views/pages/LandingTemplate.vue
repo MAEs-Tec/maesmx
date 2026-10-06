@@ -1,4 +1,6 @@
 <script setup>
+import Button from 'primevue/button';
+import Divider from 'primevue/divider';
 import { useLayout } from '@/layout/composables/layout';
 import { computed } from 'vue';
 // import AppConfig from '@/layout/AppConfig.vue';

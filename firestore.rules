@@ -146,10 +146,26 @@ service cloud.firestore {
     }
 
     match /asesorias/{asesoriaId} {
+      // userInfo.uid es la matricula del alumno, no el uid de Firebase Auth
+      function isOwnAsesoria() {
+        return signedIn()
+          && request.auth.token.email is string
+          && resource.data.get('userInfo', {}).get('uid', '') is string
+          && resource.data.userInfo.uid.lower() == currentUserKey().lower();
+      }
+
+      // El alumno evalua su asesoria y, al registrarla, se marcan los puntos otorgados
+      function changesOnlyStudentFields() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'rating', 'comment',
+          'duplicate', 'pointsAwarded', 'pointsReason', 'pointsSubjectId', 'pointsAwardedAt'
+        ]);
+      }
+
       allow create: if signedIn();
       allow read: if signedIn();
       allow update: if isCoordi()
-        || (signedIn() && resource.data.userInfo.uid == request.auth.uid);
+        || (isOwnAsesoria() && changesOnlyStudentFields());
       allow delete: if isAdmin();
     }
 

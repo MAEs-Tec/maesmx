@@ -6,6 +6,7 @@ import { computed } from 'vue'; // To get number of mae attendances
 import * as XLSX from 'xlsx'; // To export to excel 
 import Dialog from 'primevue/dialog'; // To use dialog modal
 import { FilterMatchMode } from 'primevue/api'; // Add filtering abilities
+import { getSemesterRange } from '@/utils/PointsUtils';
 
 // Date management 
 const today = new Date();
@@ -26,8 +27,8 @@ const selectedDate = ref(formatYesterday); // Loads previous day
 // Date range 
 const rangeLoading = ref(true); // Separates loading state for range data
 
-// Temp default for semester
-const startDate = ref('2026-02-09'); 
+// Por defecto el semestre en curso (antes estaba fijo en feb 2026 y mezclaba semestres)
+const startDate = ref(formatDate(getSemesterRange(today).start));
 const endDate = ref(formatDate(today)); // Current date of semester, use aux funct
 
 // Arrays for reports

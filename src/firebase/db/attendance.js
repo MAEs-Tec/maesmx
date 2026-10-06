@@ -185,39 +185,23 @@ function getDateStringsBetween(startDate, endDate) {
 // Gets the attendance reports for every day
 async function fetchReportByDateRangeFresh(startDate, endDate) {
     const dateStrings = getDateStringsBetween(startDate, endDate);
-    const report = [];
 
-    // Checks each document date w the reports
-    for (const date of dateStrings) {
-        const reportRef = collection(firestoreDB, "attendance", date, "report");
+    // Un getDocs por dia en paralelo (en serie tardaba mucho con un semestre completo)
+    const reportsByDate = await Promise.all(dateStrings.map(async (date) => {
         try {
-            const reportSnap = await getDocs(reportRef);
-            // Makes sure not empty date w no attendance
-            if (!reportSnap.empty) {
-                //console.log(`Found ${reportSnap.size} reports for ${date}`);
-                reportSnap.forEach((doc) => {
-                    /*report.push({
-                        id: doc.id,
-                        ...doc.data(),
-                        date,
-                    });*/
-                    const data = doc.data(); 
-                    // Only keeps id and report, modify if want other fields (like name or email)
-                    report.push({
-                        id: doc.id, // Student matricula
-                        report: data.report, // (A, R, F, J)
-                        date, // Para que el Excel pueda mostrar de que dia viene cada registro
-                    });
-                });
-            } else {
-                console.log(`No reports ${date}`);
-            }
+            const reportSnap = await getDocs(collection(firestoreDB, "attendance", date, "report"));
+            return reportSnap.docs.map((doc) => ({
+                id: doc.id, // Student matricula
+                report: doc.data().report, // (A, R, F, J)
+                date, // Para que el Excel pueda mostrar de que dia viene cada registro
+            }));
         } catch (error) {
             console.warn(`Skipping ${date}:`, error.message);
+            return [];
         }
-    }
+    }));
 
-    return report;
+    return reportsByDate.flat();
 }
 
 export async function getTodaysReport(options = {}) {

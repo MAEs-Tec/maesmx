@@ -39,7 +39,7 @@ function normalizeDateKey(date) {
     return String(date);
 }
 
-function getCurrentSemesterRange(referenceDate = new Date()) {
+export function getCurrentSemesterRange(referenceDate = new Date()) {
     const now = referenceDate;
     const currentYear = now.getFullYear();
 
@@ -188,18 +188,36 @@ async function fetchAsesoriasFresh(startDate = null, endDate = null) {
 }
 
 // Función para obtener asesorías por UID, reutilizando getAsesorias
+// Consulta solo las del MAE: antes bajaba toda la coleccion y la llave de cache llevaba
+// la hora exacta, asi que nunca acertaba y llenaba IndexedDB con copias completas
+async function fetchAsesoriasByPeerFresh(uid) {
+    const q = query(collection(firestoreDB, "asesorias"), where("peerInfo.uid", "==", uid));
+    const querySnapshot = await getDocs(q);
+    const startMs = SEMESTER_START.getTime();
+
+    return querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(asesoria => (timestampToMs(asesoria.date) ?? 0) >= startMs)
+        .sort((a, b) => (timestampToMs(b.date) || 0) - (timestampToMs(a.date) || 0));
+}
+
 export async function getAsesoriasByUid(uid, options = {}) {
     try {
-        const today = new Date(); 
-        const asesorias = await getAsesorias(SEMESTER_START, today, options);
+        if (!uid) return [];
+
+        const asesorias = await withCache(
+            cacheKeys.asesoriasByPeer(uid),
+            {
+                ttlMs: CACHE_TTL_MS.ASESORIAS,
+                persist: true,
+                forceRefresh: options.forceRefresh ?? false,
+                tags: [CACHE_TAGS.ASESORIAS]
+            },
+            async () => await fetchAsesoriasByPeerFresh(uid)
+        );
         const includeTests = options.includeTests === true;
 
-        const asesoriasFiltradas = asesorias.filter(asesoria =>
-            asesoria.peerInfo?.uid === uid &&
-            (includeTests || isRealAsesoria(asesoria))
-        );
-
-        return asesoriasFiltradas;
+        return (asesorias ?? []).filter(asesoria => includeTests || isRealAsesoria(asesoria));
     } catch (error) {
         console.error("Error fetching asesorias by UID: ", error);
         return [];
@@ -446,7 +464,9 @@ export async function updateAsesoria(id, data) {
       
       console.log("Asesoria actualizada exitosamente");
     } catch (error) {
+      // Se relanza: antes la vista mostraba "Guardado exitoso" aunque Firestore rechazara la evaluacion
       console.error("Error updating asesoria: ", error);
+      throw error;
     }
   }
   
@@ -463,9 +483,9 @@ export async function updateAsesoria(id, data) {
 }
 
 
-export async function getAsesoriasCountByUser(options = {}) {
+export async function getAsesoriasCountByUser(startDate = null, endDate = null, options = {}) {
     try {
-        const asesorias = await getAsesorias(null, null, options);
+        const asesorias = await getAsesorias(startDate, endDate, options);
         const userAsesoriasSet = new Set((asesorias ?? []).filter(isRealAsesoria).map(doc => doc.userInfo?.uid).filter(Boolean));
         return userAsesoriasSet.size;
     } catch (error) {
@@ -474,9 +494,9 @@ export async function getAsesoriasCountByUser(options = {}) {
     }
 }
 
-export async function getAsesoriasCountByArea(options = {}) {
+export async function getAsesoriasCountByArea(startDate = null, endDate = null, options = {}) {
     try {
-        const asesorias = await getAsesorias(null, null, options);
+        const asesorias = await getAsesorias(startDate, endDate, options);
         const areasCount = {};
 
         (asesorias ?? []).filter(isRealAsesoria).forEach(asesoriaData => {
@@ -508,9 +528,9 @@ export async function getAsesoriasCountByArea(options = {}) {
 }
 
 
-export async function getAsesoriasCountByCampus(options = {}) {
+export async function getAsesoriasCountByCampus(startDate = null, endDate = null, options = {}) {
     try {
-        const asesorias = await getAsesorias(null, null, options);
+        const asesorias = await getAsesorias(startDate, endDate, options);
         const campusCount = {};
 
         (asesorias ?? []).filter(isRealAsesoria).forEach(doc => {

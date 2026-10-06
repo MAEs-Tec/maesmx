@@ -232,18 +232,18 @@ const guardarEvaluacion = async () => {
       </div>
 
       <div class="flex flex-column md:flex-row md:gap-4   w-full  ">
-         <!-- <Button
-          class="p-button-help p-button-lg py-4 w-full md:w-5 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
+        <!-- Las asesorias no se agendan: el boton solo explica como recibir una -->
+        <Button
+          class="p-button-help p-button-lg py-4 w-full md:w-4 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
           :style="{ background: 'linear-gradient(to right, #CC7722, #DAA520)' }"
           @click="showDialogSolicitar = true"
-          :disabled=" isSavingAsesoria" 
         >
-            Solicitar asesoría
+            Agendar asesoría
             <img src="/assets/calendarOutline.svg" class="ml-4" alt="calendar icon" style="width: 3.0rem; height: 3.0rem;" />
-        </Button> -->
+        </Button>
 
         <Button
-          class="p-button-help p-button-lg py-4 w-full md:w-5 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
+          class="p-button-help p-button-lg py-4 w-full md:w-4 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
           :style="{ background: 'linear-gradient(to right, #4466A7, #51A3AC)' }"
           @click="showDialogAsesoria = true"
           :disabled=" isSavingAsesoria" 
@@ -254,7 +254,7 @@ const guardarEvaluacion = async () => {
 
         
           <Button
-            class="p-button-help p-button-lg py-4 w-full md:w-5 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
+            class="p-button-help p-button-lg py-4 w-full md:w-4 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
             :style="{ background: 'linear-gradient(to right, #44A79b, #69ac51)' }"
             @click="showDialogEvaluacion = true"
             :disabled=" isSavingAsesoria" 
@@ -396,7 +396,7 @@ const guardarEvaluacion = async () => {
     </div>
   </Dialog>
 
-  <Dialog v-model:visible="showDialogSolicitar" modal header="Solicitar asesoría" class="md:w-4">
+  <Dialog v-model:visible="showDialogSolicitar" modal header="Agendar asesoría" class="md:w-4">
     
     <p class="font-medium">
       <b>¡Gracias por tu interés en recibir una asesoría con MAEs!</b><br>

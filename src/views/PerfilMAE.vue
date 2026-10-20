@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { getUser as getUserRecord, updateUserSubjects, updateUserSchedule, getCurrentUser, startActiveSession,
   stopActiveSession,updateUserProfilePicture,  countAchievedBadges,
   updateUserAchievementBadge, updateUserBackground, updateUserBackgroundImage,
@@ -13,6 +13,7 @@ import { addAsesoria, getAsesoriasCountForUserInCurrentSemester, getAsesoriasByU
   updateRatingBonusForMae
  } from '../firebase/db/asesorias';
 import { getStudentReport } from '../firebase/db/attendance';
+import { getAdvisoryRequest, getMatchingRequests, registerRequestedAdvisory } from '../firebase/db/advisoryRequests';
 import { formatDate } from '@/utils/AnunciosUtils';
 import { FilterMatchMode } from 'primevue/api';
 import { useToast } from 'primevue/usetoast';
@@ -39,6 +40,7 @@ const loadError = ref('');
 
 const toast = useToast();
 const route = useRoute();
+const router = useRouter();
 const { isDarkTheme } = useLayout();
 const userId = computed(() => route.params.id);
 const maeInfo = ref(null);
@@ -406,6 +408,68 @@ const comentarioAsesoria = ref('');
 const materiaAsesoria = ref(null);
 const isSavingAsesoria = ref(false);
 const isSavingEval = ref(false);
+const matchingRequests = ref([]);
+const selectedRequest = ref(null);
+const isLoadingRequests = ref(false);
+const requestLoadError = ref('');
+const requestLookupHint = ref('');
+let requestLoadVersion = 0;
+
+const requestOptions = computed(() => matchingRequests.value.map(item => ({
+  ...item,
+  label: `${item.subject?.name || 'Materia'}${item.topic ? ` · ${item.topic}` : ''} · ${item.id.slice(-6)}`
+})));
+
+const openAsesoriaDialog = async (requestId = null) => {
+  const version = ++requestLoadVersion;
+  selectedRequest.value = null;
+  matchingRequests.value = [];
+  requestLoadError.value = '';
+  requestLookupHint.value = '';
+  materiaAsesoria.value = null;
+  showDialogAsesoria.value = true;
+  isLoadingRequests.value = true;
+  try {
+    const studentKey = userInfo.value?.uid;
+    const maeKey = maeInfo.value?.uid;
+    if (!studentKey || !maeKey) throw new Error('No se pudo identificar al estudiante o al MAE.');
+    const candidates = requestId
+      ? [await getAdvisoryRequest(requestId)]
+      : await getMatchingRequests(studentKey, maeKey);
+    if (version !== requestLoadVersion) return;
+    matchingRequests.value = (candidates || []).filter(item => item &&
+      item.studentKey === studentKey && item.assignedMaeKey === maeKey &&
+      (item.status === 'assigned' || (item.status === 'closed' && item.closeReason === 'missing_registration')));
+    if (requestId && matchingRequests.value.length !== 1) {
+      throw new Error('Esta solicitud ya no está pendiente de tu registro con este MAE. Consulta su estado en Solicitudes de asesoría.');
+    }
+    if (matchingRequests.value.length === 1) {
+      selectedRequest.value = requestOptions.value[0];
+      materiaAsesoria.value = selectedRequest.value.subject;
+    }
+  } catch (error) {
+    if (version !== requestLoadVersion) return;
+    if (requestId) {
+      requestLoadError.value = error.message || 'No se pudieron consultar las solicitudes. Intenta de nuevo.';
+    } else {
+      // El registro normal no depende de las solicitudes: solo avisamos.
+      console.warn('No se pudieron consultar las solicitudes pendientes:', error);
+      requestLookupHint.value = 'No pudimos revisar si tienes solicitudes pendientes con este MAE. Puedes registrar tu asesoría normalmente.';
+    }
+  } finally {
+    if (version === requestLoadVersion) isLoadingRequests.value = false;
+  }
+};
+
+watch(selectedRequest, request => {
+  materiaAsesoria.value = request?.subject || null;
+});
+
+watch(() => [route.query?.requestId, route.params.id, isLoading.value], ([requestId, , loading]) => {
+  if (!loading && maeInfo.value && userInfo.value && typeof requestId === 'string') {
+    openAsesoriaDialog(requestId);
+  }
+});
 
 const openCarreraDialog = async () => {
   if (majorsList.value.length === 0) {
@@ -439,22 +503,45 @@ const guardarCarrera = async () => {
 
 // Para guardar la asesoría
 const saveAsesoria = async () => {
-  if (isSavingAsesoria.value) return; 
+  if (isSavingAsesoria.value || isLoadingRequests.value || requestLoadError.value || !materiaAsesoria.value) return;
   isSavingAsesoria.value = true; 
   toast.add({ severity: 'info', summary: 'Guardando cambios', detail: 'Se está registrando la asesoría', life: 3000 });
   try {
-    await addAsesoria(maeInfo.value, userInfo.value, materiaAsesoria.value, comentarioAsesoria.value, ratingAsesoria.value); 
-    maeInfo.value = await getUser(route.params.id);
+    if (selectedRequest.value) {
+      await registerRequestedAdvisory({
+        requestId: selectedRequest.value.id,
+        assignmentVersion: selectedRequest.value.assignmentVersion,
+        rating: ratingAsesoria.value,
+        comment: comentarioAsesoria.value
+      });
+    } else {
+      await addAsesoria(maeInfo.value, userInfo.value, materiaAsesoria.value, comentarioAsesoria.value, ratingAsesoria.value);
+    }
     toast.add({ severity: 'success', summary: 'Guardado exitoso', detail: 'La asesoría se registró con éxito', life: 3000 });
+    showDialogAsesoria.value = false;
+    selectedRequest.value = null;
     ratingAsesoria.value = null;
     comentarioAsesoria.value = '';
     materiaAsesoria.value = null;
+    if (route.query?.requestId) {
+      try {
+        const { requestId, ...query } = route.query;
+        await router?.replace({ query });
+      } catch (error) {
+        console.warn('No se pudo limpiar el parámetro requestId:', error);
+      }
+    }
+    // A refresh failure after a successful write must not invite a second registration.
+    try {
+      maeInfo.value = await getUser(route.params.id, { forceRefresh: true });
+      asesoriasCount.value = await getAsesoriasCountForUserInCurrentSemester(maeInfo.value.uid, { forceRefresh: true });
+    } catch (error) {
+      console.warn('La asesoría se guardó, pero no se pudo refrescar el perfil:', error);
+    }
   } catch (error) {
-    toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al tratar de registrar la asesoría' });
+    toast.add({ severity: 'error', summary: 'No se pudo registrar', detail: error.message || 'Ocurrió un error al tratar de registrar la asesoría' });
   } finally{
     isSavingAsesoria.value = false; 
-    showDialogAsesoria.value = false;  
-    asesoriasCount.value = await getAsesoriasCountForUserInCurrentSemester(maeInfo.value.uid);
   }
 }
 
@@ -656,7 +743,7 @@ const guardarEvaluacion = async () => {
           v-if="userInfo.uid != maeInfo.uid" 
            class="p-button-help p-button-lg w-full  text-white  border-round-3xl text-xl font-bold flex justify-content-center align-items-center border-none	 "
           :style="{ background: 'linear-gradient(to right, #4466A7, #51A3AC)' }"
-          @click="showDialogAsesoria = true"
+          @click="openAsesoriaDialog()"
           :disabled=" isSavingAsesoria" 
         >
             Registrar asesoría
@@ -703,7 +790,7 @@ const guardarEvaluacion = async () => {
           v-if="userInfo.uid != maeInfo.uid" 
            class="p-button-help p-button-lg w-full  text-white  border-round-3xl text-xl font-bold flex justify-content-center align-items-center border-none	 "
           :style="{ background: 'linear-gradient(to right, #4466A7, #51A3AC)' }"
-          @click="showDialogAsesoria = true"
+          @click="openAsesoriaDialog()"
           :disabled=" isSavingAsesoria" 
         >
             Registrar asesoría
@@ -887,11 +974,25 @@ const guardarEvaluacion = async () => {
 </Dialog>
 
   <Dialog v-model:visible="showDialogAsesoria" modal header="Registrar asesoría" class="md:w-4">
+    <p v-if="isLoadingRequests" role="status">Consultando solicitudes pendientes…</p>
+    <div v-if="requestLoadError" role="alert" class="mb-3">
+      <p>{{ requestLoadError }}</p>
+      <Button label="Reintentar" text @click="openAsesoriaDialog(route.query?.requestId || null)" />
+    </div>
+    <p v-if="requestLookupHint" class="text-sm text-color-secondary" role="status">{{ requestLookupHint }}</p>
+    <template v-if="matchingRequests.length">
+      <label for="advisory-request" class="font-bold block mb-2">Solicitud de asesoría</label>
+      <Dropdown inputId="advisory-request" v-model="selectedRequest" :options="requestOptions"
+        optionLabel="label" dataKey="id" placeholder="Selecciona la solicitud atendida"
+        :showClear="!route.query?.requestId" :disabled="isSavingAsesoria || !!route.query?.requestId"
+        class="w-full mb-2" />
+      <p v-if="selectedRequest" class="text-sm">Tu registro confirmará esta solicitud. La materia corresponde al aviso original.</p>
+    </template>
     <p class="font-bold">Materia</p>
-    <Dropdown v-model="materiaAsesoria" :options="groupedSubjects" optionGroupLabel="label" optionGroupChildren="items" filter optionLabel="name" placeholder="Materia" checkmark :highlightOnSelect="false" class="w-12 mb-2" />
+    <Dropdown v-model="materiaAsesoria" :options="groupedSubjects" optionGroupLabel="label" optionGroupChildren="items" filter optionLabel="name" placeholder="Materia" checkmark :highlightOnSelect="false" :disabled="!!selectedRequest || isLoadingRequests || isSavingAsesoria" class="w-12 mb-2" />
     <div class="flex justify-content-end gap-2">
       <Button type="button" label="Cerrar" severity="secondary" @click="showDialogAsesoria = false"></Button>
-      <Button type="button" label="Confirmar registro" :disabled="!(materiaAsesoria !== null)" @click="saveAsesoria"></Button>
+      <Button type="button" label="Confirmar registro" :loading="isSavingAsesoria" :disabled="!materiaAsesoria || isLoadingRequests || !!requestLoadError" @click="saveAsesoria"></Button>
     </div>
   </Dialog>
 

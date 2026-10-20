@@ -92,6 +92,7 @@ export function buildMenuForRole(role, uid) {
             items: [
                 { label: 'Inicio', icon: 'pi pi-fw pi-home', to: '/inicio' },
                 { label: 'Maes activos', icon: 'pi pi-fw pi-globe', to: '/maesactivos' },
+                { label: 'Solicitudes de asesoría', icon: 'pi pi-fw pi-comment', to: '/solicitudes' },
                 { label: 'Horarios', icon: 'pi pi-fw pi-clock', to: '/horarios' },
                 { label: 'Asesorías grupales', icon: 'pi pi-fw pi-calendar', to: '/asesoriasGrupales' },
                 { label: 'Maeteca', icon: 'pi pi-fw pi-desktop', to: '/maeteca' }

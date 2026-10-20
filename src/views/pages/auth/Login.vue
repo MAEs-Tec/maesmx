@@ -44,6 +44,10 @@ function isValidTecMxEmail(email) {
 }
 
 const navigateAfterSignIn = async () => {
+    if (typeof route.query.requestId === 'string' && route.query.requestId) {
+        await router.push({ name: 'solicitudAsesoria', params: { id: route.query.requestId } });
+        return;
+    }
     const asesoriaId = route.query.asesoriaId || '';
     if (asesoriaId) {
         await router.push({
@@ -60,6 +64,7 @@ const registrationTarget = () => {
     return {
         path: '/auth/register',
         query: {
+            ...(typeof route.query.requestId === 'string' ? { requestId: route.query.requestId } : {}),
             ...(asesoriaId ? { asesoriaId } : {}),
             provider: 'google'
         }
@@ -165,7 +170,10 @@ function handleRegisterClick() {
     const asesoriaId = route.query.asesoriaId || '';
     router.push({
         path: '/auth/register',
-        query: asesoriaId ? { asesoriaId } : {}
+        query: {
+            ...(asesoriaId ? { asesoriaId } : {}),
+            ...(typeof route.query.requestId === 'string' ? { requestId: route.query.requestId } : {})
+        }
     });
 }
 </script>

@@ -186,6 +186,7 @@ const loginTarget = () => {
     return {
         path: '/auth/login',
         query: {
+            ...(typeof route.query.requestId === 'string' ? { requestId: route.query.requestId } : {}),
             ...(asesoriaId ? { asesoriaId } : {}),
             ...(newUserInfo.value.email ? { email: newUserInfo.value.email } : {})
         }
@@ -193,6 +194,10 @@ const loginTarget = () => {
 };
 
 const navigateAfterRegistration = async () => {
+    if (typeof route.query.requestId === 'string' && route.query.requestId) {
+        await router.push({ name: 'solicitudAsesoria', params: { id: route.query.requestId } });
+        return;
+    }
     const asesoriaId = route.query.asesoriaId || '';
     if (asesoriaId) {
         await router.push({

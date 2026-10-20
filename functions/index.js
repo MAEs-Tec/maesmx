@@ -1,8 +1,23 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { Timestamp } = require('firebase-admin/firestore');
 
 admin.initializeApp();
 const db = admin.firestore();
+const { createAdvisoryService } = require('./advisory-requests');
+const advisoryService = createAdvisoryService({ db, admin, functions });
+for (const name of [
+    'createAdvisoryRequest', 'offerAdvisoryHelp', 'withdrawAdvisoryOffer',
+    'assignAdvisoryRequest', 'unassignAdvisoryRequest', 'closeAdvisoryRequest',
+    'registerRequestedAdvisory'
+]) {
+    exports[name] = functions.https.onCall((data, context) => advisoryService[name](data || {}, context));
+}
+exports.deliverAdvisoryNotification = functions.runWith({ failurePolicy: true })
+    .firestore.document('advisoryRequests/{requestId}/events/{eventId}')
+    .onCreate(advisoryService.dispatchEvent);
+exports.broadenAdvisoryRequests = functions.pubsub.schedule('every 1 minutes')
+    .timeZone('America/Mexico_City').onRun(advisoryService.broadenPending);
 
 // --- helpers de roles / autenticación ---
 function assertAuthenticated(context) {
@@ -103,7 +118,7 @@ exports.cleanupExpiredAnnouncements = functions.pubsub.schedule('0 0 1 * *').tim
       // Filtramos por visible=true Y dateTime < ahora
       const query = announcementsRef
         .where('visible', '==', true)
-        .where('dateTime', '<', admin.firestore.Timestamp.fromDate(now));
+        .where('dateTime', '<', Timestamp.fromDate(now));
 
       const snapshot = await query.get();
 

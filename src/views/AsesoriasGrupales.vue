@@ -27,11 +27,15 @@ onMounted(async () => {
     const asesoríaId = route.query.asesoriaId;
     if (asesoríaId) {
         const selectedAsesoria = asesorias.value.find(asesoria => asesoria.id === asesoríaId);
-        if(hasAttended(selectedAsesoria)){
+        // El link puede apuntar a una asesoría vencida u oculta
+        if (!selectedAsesoria) {
+            toast.add({ severity: 'warn', summary: 'Aviso', detail: 'Esa asesoría grupal ya no está disponible.', life: 3000 });
+        }
+        else if(hasAttended(selectedAsesoria)){
             toast.add({  
                 severity: 'error', 
                 summary: 'Error', 
-                detail: `Ya confirmaste esta asesoría de ${selectedAsesoria.subject.name}.`, 
+                detail: `Ya confirmaste esta asesoría de ${selectedAsesoria.subject?.name}.`, 
                 life: 3000 
             });
         }
@@ -50,7 +54,7 @@ const filteredAsesorias = computed(() => {
         return asesorias.value;
     }
     return asesorias.value.filter(asesoria =>
-        asesoria.subject.id === selectedSubject.id
+        asesoria.subject?.id === selectedSubject.id
     );
 });
 
@@ -114,7 +118,7 @@ const confirmPreRegistro = async () => {
 const confirmAsistence = async () => {
     try {
         const announcementId = selectedAsesoria.value.id;
-        await  updateUserAsistence(announcementId, userInfo.value.uid);
+        await  updateUserAsistence(announcementId, userInfo.value.uid, true);
 
         toast.add({ 
             severity: 'success', 
@@ -197,10 +201,10 @@ const hasAttended = (asesoria) => {
              class="flex flex-col md:flex-row bg-white border-round-3xl w-full md:w-5 boder-gray card-container"
              style="height: 15rem;">
             <!-- Info de asesoría -->
-            <div class="color-bar" :class="getSubjectColor(asesoria.subject.area)"></div>
+            <div class="color-bar" :class="getSubjectColor(asesoria.subject?.area)"></div>
             <div class="px-5 mt-4 w-full">
                 <div style="height: 50px">
-                    <p class="font-bold text-black text-xl text-black-alpha-90 text-center">{{ asesoria.subject.name }}</p>
+                    <p class="font-bold text-black text-xl text-black-alpha-90 text-center">{{ asesoria.subject?.name }}</p>
                 </div>
                 <!-- Location -->
                 <div class="flex align-items-center">
@@ -268,10 +272,10 @@ const hasAttended = (asesoria) => {
         </template>
 
         <div class="dialog-content border-round-3xl boder-gray bg-white">
-            <div class="color-bar" :class="getSubjectColor(selectedAsesoria?.subject.area)"></div>
+            <div class="color-bar" :class="getSubjectColor(selectedAsesoria?.subject?.area)"></div>
 
             <div class="px-5 mt-4 w-full">
-                <p class="font-bold text-lg text-center">{{ selectedAsesoria?.subject.name }}</p>
+                <p class="font-bold text-lg text-center">{{ selectedAsesoria?.subject?.name }}</p>
                 <div class="flex align-items-center">
                     <img src="/assets/ubicacion.svg" class="mr-2" alt="ubicacion icon" style="width: 1.4rem; height: 1.4rem;" />
                     <p>{{ selectedAsesoria?.location }}</p>
@@ -307,10 +311,10 @@ const hasAttended = (asesoria) => {
         </template>
 
         <div class="dialog-content border-round-3xl boder-gray bg-white">
-            <div class="color-bar" :class="getSubjectColor(selectedAsesoria?.subject.area)"></div>
+            <div class="color-bar" :class="getSubjectColor(selectedAsesoria?.subject?.area)"></div>
 
             <div class="px-5 mt-4 w-full">
-                <p class="font-bold text-lg text-center">{{ selectedAsesoria?.subject.name }}</p>
+                <p class="font-bold text-lg text-center">{{ selectedAsesoria?.subject?.name }}</p>
                 <div class="flex align-items-center">
                     <img src="/assets/ubicacion.svg" class="mr-2" alt="ubicacion icon" style="width: 1.4rem; height: 1.4rem;" />
                     <p>{{ selectedAsesoria?.location }}</p>

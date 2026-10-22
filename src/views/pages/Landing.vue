@@ -15,7 +15,7 @@ const toast = useToast();
 const router = useRouter(); 
 
 onMounted(async () => {
-  anuncios.value  = await  getAnnouncements()
+  anuncios.value  = (await  getAnnouncements()) ?? []
   nextAnuncio()
   autoAdvance();
 });
@@ -36,7 +36,7 @@ const scrollToSection = (id) => {
   } else {
     currentIndex.value = 0;
   }
-  currentAnuncio.value = anuncios.value[currentIndex.value];
+  currentAnuncio.value = anuncios.value[currentIndex.value] ?? {};
 };
 
 const prevAnuncio = () => {
@@ -45,7 +45,7 @@ const prevAnuncio = () => {
   } else {
     currentIndex.value = anuncios.value.length - 1; 
   }
-  currentAnuncio.value = anuncios.value[currentIndex.value];
+  currentAnuncio.value = anuncios.value[currentIndex.value] ?? {};
 };
 
 const autoAdvance = () => {
@@ -184,7 +184,7 @@ const goToAsesoria = async (asesoria) => {
                 <div class="flex-1 text-left">
                     <h2 v-if="currentAnuncio.type === 'Asesoría'" class="text-white text-4xl font-bold text-center m-auto mb-2">Asesorías grupales</h2>
                     <p v-if="currentAnuncio.type === 'Asesoría'" class="font-medium ml-5 text-2xl mb-1" >
-                    Materia: {{ currentAnuncio.subject.name }}
+                    Materia: {{ currentAnuncio.subject?.name ?? currentAnuncio.subject }}
                     </p>
                     <p v-if="currentAnuncio.type === 'Asesoría'" class="font-medium ml-5 text-2xl mb-1">
                     Fecha: {{ formatDate(currentAnuncio.dateTime) }}, {{ formatTime(currentAnuncio.startTime, false) }} - {{ formatTime(currentAnuncio.endTime, true) }}

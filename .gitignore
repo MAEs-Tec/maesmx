@@ -24,6 +24,11 @@ coverage
 
 # Enviorment
 .env
+.env.local
+.env.*.local
+
+# Pentest engagements (evidencia, tokens de prueba, scope)
+engagement-*/
 
 # Editor directories and files
 .vscode/*
@@ -48,3 +53,7 @@ public/themes/nano/
 CLAUDE.md
 TODO.md
 BITACORA.md
+PROPUESTA_LEADERBOARD.md
+
+# Config local de Claude Code
+.claude/launch.json

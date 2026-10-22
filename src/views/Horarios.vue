@@ -36,11 +36,22 @@ const daysOfWeek = [
 ];
 
 onMounted(() => {
-    getMaes().then((data) => {
-        maes.value = data;
-        console.log(maes)
-        loading.value = false;
-    });
+    // Docs legacy pueden no traer weekSchedule/subjects; se normalizan para que la tabla no truene
+    getMaes()
+        .then((data) => {
+            maes.value = (data ?? []).map(mae => ({
+                ...mae,
+                weekSchedule: mae.weekSchedule ?? {},
+                subjects: mae.subjects ?? []
+            }));
+        })
+        .catch((error) => {
+            console.error('Error al cargar horarios:', error);
+            maes.value = [];
+        })
+        .finally(() => {
+            loading.value = false;
+        });
 
     FilterService.register(ARRAY_CONTAINS.value, (value, filter) => {
         if (!filter || filter.trim() === '') return true;

@@ -6,6 +6,7 @@ import { computed } from 'vue'; // To get number of mae attendances
 import * as XLSX from 'xlsx'; // To export to excel 
 import Dialog from 'primevue/dialog'; // To use dialog modal
 import { FilterMatchMode } from 'primevue/api'; // Add filtering abilities
+import { getSemesterRange } from '@/utils/PointsUtils';
 
 // Date management 
 const today = new Date();
@@ -26,8 +27,8 @@ const selectedDate = ref(formatYesterday); // Loads previous day
 // Date range 
 const rangeLoading = ref(true); // Separates loading state for range data
 
-// Temp default for semester
-const startDate = ref('2026-02-09'); 
+// Por defecto el semestre en curso (antes estaba fijo en feb 2026 y mezclaba semestres)
+const startDate = ref(formatDate(getSemesterRange(today).start));
 const endDate = ref(formatDate(today)); // Current date of semester, use aux funct
 
 // Arrays for reports
@@ -37,6 +38,10 @@ const reportRange = ref([]);
 // To work w Excel exporting
 const isFiltered = ref(false);
 const showDialog = ref(false);
+// Rango que realmente esta cargado en la tabla (puede diferir de los calendarios si no se presiono Filtrar)
+const loadedRange = ref({ start: null, end: null });
+const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const REPORT_LABELS = { A: 'Asistencia', R: 'Retraso', F: 'Falta', J: 'Justificado' };
 
 // To work w filters
 const filters = ref({
@@ -98,6 +103,7 @@ onMounted(async () => {
   try {
     // reports.value = await loadRangeReport(selectedDate.value); // Single date
     reportRange.value = await loadRangeReport(startDate.value, endDate.value);
+    loadedRange.value = { start: startDate.value, end: endDate.value };
     isFiltered.value = true; // Did filter og info using dates
   } catch (error) {
     console.error('Error loading day report:', error);
@@ -153,14 +159,13 @@ const filterByDate = async () => {
     loading.value = true;
     rangeLoading.value = true;
     
-    // Convert Date objects to strings if they're Date objects to load proper info 
-    const start = startDate.value instanceof Date ? formatDate(startDate.value) : startDate.value;
-    const end = endDate.value instanceof Date ? formatDate(endDate.value) : endDate.value;
+    const { start, end } = getSelectedRange();
     
     //console.log('Filtering from:', start, 'to:', end);
     
     // Update the reportRange w new data 
     reportRange.value = await loadRangeReport(start, end);
+    loadedRange.value = { start, end };
     isFiltered.value = true; // Added for excel to indicate when done filtering
     
   } catch (error) {
@@ -173,11 +178,24 @@ const filterByDate = async () => {
   }
 };
 
+// Convert Date objects to strings if they're Date objects to load proper info
+function getSelectedRange() {
+  const start = startDate.value instanceof Date ? formatDate(startDate.value) : startDate.value;
+  const end = endDate.value instanceof Date ? formatDate(endDate.value) : endDate.value;
+  return { start, end };
+}
+
 // Function to export excel 
-const exportToExcel = () => {
+const exportToExcel = async () => {
   if (!isFiltered.value) {
     showDialog.value = true;
     return;
+  }
+  // Si cambiaron las fechas sin presionar Filtrar, se exportaba el rango anterior sin avisar
+  const { start, end } = getSelectedRange();
+  if (start !== loadedRange.value.start || end !== loadedRange.value.end) {
+    await filterByDate();
+    if (!isFiltered.value) return;
   }
   exportData();
 };
@@ -186,7 +204,7 @@ const exportToExcel = () => {
 const exportData = () => {
   const formattedData = maeStats.value.map(mae => ({
     'Matrícula': mae.id,
-    'Asistencias esperadas': mae.count,
+    'Registros en el periodo': mae.count,
     'Proporción': `${mae.A} de ${mae.count}`,
     'Porcentaje': mae.count > 0 ? Math.round((mae.A / mae.count) * 100) : 0, //If have at least one attendance, calcs the %; if no attendance at all, leaves at 0
     'Asistencias': mae.A,
@@ -196,10 +214,22 @@ const exportData = () => {
     
   }));
 
-  const worksheet = XLSX.utils.json_to_sheet(formattedData);
+  // Una fila por registro para poder revisar contra la hoja fisica de que dia sale cada conteo
+  const detailData = reportRange.value
+    .filter(entry => REPORT_LABELS[entry.report])
+    .sort((a, b) => a.id.localeCompare(b.id) || (a.date ?? '').localeCompare(b.date ?? ''))
+    .map(entry => ({
+      'Matrícula': entry.id,
+      'Fecha': entry.date ?? '',
+      'Día': entry.date ? DAY_NAMES[new Date(`${entry.date}T12:00:00`).getDay()] : '',
+      'Registro': REPORT_LABELS[entry.report],
+    }));
+
+  const { start, end } = loadedRange.value;
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Asistencias");
-  XLSX.writeFile(workbook, "historial_asistencias.xlsx");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(formattedData), "Asistencias");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(detailData), "Detalle");
+  XLSX.writeFile(workbook, `historial_asistencias_${start}_a_${end}.xlsx`);
 };
 
 const confirmExportAction = () => {

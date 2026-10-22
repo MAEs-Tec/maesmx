@@ -56,7 +56,7 @@ const showDialogEvaluacion = ref(false);
 onMounted(async () => {
   userInfo.value = await getCurrentUser();
   subjects.value = await getSubjects();
-  anuncios.value  = await  getAnnouncements()
+  anuncios.value  = (await  getAnnouncements()) ?? []
   if (userInfo.value) {
     evalInfo.value = await getAsesoriasByUidAndRating(userInfo.value.uid);
   }
@@ -105,7 +105,7 @@ const nextAnuncio = () => {
   } else {
     currentIndex.value = 0;
   }
-  currentAnuncio.value = anuncios.value[currentIndex.value];
+  currentAnuncio.value = anuncios.value[currentIndex.value] ?? {};
 };
 
 const prevAnuncio = () => {
@@ -114,7 +114,7 @@ const prevAnuncio = () => {
   } else {
     currentIndex.value = anuncios.value.length - 1; 
   }
-  currentAnuncio.value = anuncios.value[currentIndex.value];
+  currentAnuncio.value = anuncios.value[currentIndex.value] ?? {};
 };
 
 const autoAdvance = () => {
@@ -324,7 +324,7 @@ const guardarEvaluacion = async () => {
           <div class="flex-1 text-left">
             <h2 v-if="currentAnuncio.type === 'Asesoría'" class="text-white text-3xl font-bold text-center m-auto mb-2">Asesorías grupales</h2>
             <p v-if="currentAnuncio.type === 'Asesoría'" class="font-medium ml-5 text-xl mb-1" >
-              Materia: {{ currentAnuncio.subject.name }}
+              Materia: {{ currentAnuncio.subject?.name ?? currentAnuncio.subject }}
             </p>
             <p v-if="currentAnuncio.type === 'Asesoría'" class="font-medium ml-5 text-xl mb-1">
               Fecha: {{ formatDate(currentAnuncio.dateTime) }}, {{ formatTime(currentAnuncio.startTime, false) }} - {{ formatTime(currentAnuncio.endTime, true) }}

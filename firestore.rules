@@ -121,6 +121,20 @@ service cloud.firestore {
           && request.resource.data.asistence[currentUserKey()] == false;
       }
 
+      // Un estudiante pre-registrado confirma su propia asistencia (QR de la asesoría).
+      // La primera confirmación reclama pointsAwarded; solo puede pasar de no-true a true.
+      function isOwnAttendanceConfirm() {
+        return signedIn()
+          && request.auth.token.email is string
+          && currentUserKey() in resource.data.get('preregister', {})
+          && request.resource.data.asistence.diff(resource.data.get('asistence', {})).affectedKeys().hasOnly([currentUserKey()])
+          && request.resource.data.asistence[currentUserKey()] == true
+          && (changedOnly(['asistence'])
+              || (changedOnly(['asistence', 'pointsAwarded', 'pointsAwardedAt', 'pointsAwardedTo'])
+                  && resource.data.get('pointsAwarded', false) != true
+                  && request.resource.data.pointsAwarded == true));
+      }
+
       allow read: if true;
       allow create, delete: if isContentManager() || hasAnyRole(['publi']);
       allow update: if isContentManager()
@@ -131,7 +145,8 @@ service cloud.firestore {
           'pointsAwardedAt',
           'pointsAwardedTo'
         ]))
-        || isOwnPreregisterUpdate();
+        || isOwnPreregisterUpdate()
+        || isOwnAttendanceConfirm();
     }
 
     // Solo quien puede entrar a /coordi registra asistencias; los MAEs solo las leen

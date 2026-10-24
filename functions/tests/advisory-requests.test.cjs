@@ -58,6 +58,7 @@ function fakeDb(seed = {}) {
         if (op === '==') return actual === value;
         if (op === 'in') return value.includes(actual);
         if (op === '>') return actual !== undefined && cmp(actual) > cmp(value);
+        if (op === '<=') return actual !== undefined && cmp(actual) <= cmp(value);
         throw new Error(`op ${op}`);
     });
     function query(path, filters = []) {
@@ -105,7 +106,7 @@ const session = ago => ({ startTime: Timestamp.fromMillis(now - ago) });
 const mae = (extra = {}) => ({ name: 'MAE', role: 'mae', campus: 'c1', subjects: [{ id: 'math' }], activeSession: session(1000), points: 0, ...extra });
 const ctx = (key, role = 'user') => ({ auth: { uid: key, token: { email: `${key}@tec.mx`, email_verified: true, role } } });
 const openRequest = (extra = {}) => ({
-    studentKey: 'student', creatorKey: 'student', campus: 'c1', subject: { id: 'math', name: 'Mate' }, topic: '',
+    createdAt: Timestamp.fromMillis(now - 60000), studentKey: 'student', creatorKey: 'student', campus: 'c1', subject: { id: 'math', name: 'Mate' }, topic: '',
     status: 'open', assignmentVersion: 0, activeOfferCount: 0, broadcastMode: 'all', broadenAt: Timestamp.fromMillis(now + 1e6), ...extra
 });
 const eventsOf = (db, id = 'r1') => [...db.store.keys()].filter(key => key.startsWith(`advisoryRequests/${id}/events/`)).map(key => [key.split('/').pop(), db.store.get(key)]);
@@ -117,10 +118,10 @@ test('active MAE lookup queries only recent turns by campus', async () => {
     const query = db.log.queries.find(item => item.path === 'users');
     assert.deepEqual(query.filters.map(([name, op]) => `${name} ${op}`), ['campus ==', 'activeSession.startTime >']);
 });
-test('scheduler is a single query when there are no open requests', async () => {
+test('scheduler only runs the expiry and open-request queries when nothing is pending', async () => {
     const db = fakeDb({ 'advisoryRequests/r1': openRequest({ status: 'closed' }), 'users/m1': mae() });
     await make(db).broadenPending();
-    assert.equal(db.log.queries.length, 1);
+    assert.equal(db.log.queries.length, 2);
 });
 test('scheduler notifies MAEs who start a turn later, once, honoring subject mode, student and unassigned MAE', async () => {
     const db = fakeDb({
@@ -192,4 +193,83 @@ test('registering reads the MAE history outside the transaction and stays idempo
     const again = await service.registerRequestedAdvisory({ requestId: 'r1', assignmentVersion: 0 }, ctx('student'));
     assert.equal(again.advisoryId, first.advisoryId);
     assert.equal(db.store.get('users/m1').points, 15);
+});
+test('requests expire after three hours: open ones as expired, assigned ones pending registration', async () => {
+    const old = Timestamp.fromMillis(now - 3 * 3600000);
+    const db = fakeDb({
+        'advisoryRequests/r1': openRequest({ createdAt: old }),
+        'advisoryRequests/r2': openRequest({ createdAt: old, status: 'assigned', assignedMaeKey: 'm1' }),
+        'advisoryRequests/r3': openRequest(), 'users/m1': mae(), 'users/student': { name: 'S', role: 'user', campus: 'c1' }
+    });
+    await make(db).broadenPending();
+    assert.equal(db.store.get('advisoryRequests/r1').status, 'closed');
+    assert.equal(db.store.get('advisoryRequests/r1').closeReason, 'expired');
+    assert.equal(db.store.get('advisoryRequests/r2').closeReason, 'missing_registration');
+    assert.equal(db.store.get('advisoryRequests/r3').status, 'open');
+    assert.ok(!eventsOf(db).some(([name]) => name.startsWith('turn-')), 'expired requests are not re-announced');
+    await make(db).registerRequestedAdvisory({ requestId: 'r2', assignmentVersion: 0 }, ctx('student'));
+    assert.equal(db.store.get('advisoryRequests/r2').status, 'registered');
+});
+test('offers from MAEs who left their turn expire so the request can widen', async () => {
+    const db = fakeDb({
+        'advisoryRequests/r1': openRequest({ broadcastMode: 'subject', broadenAt: Timestamp.fromMillis(now - 1), activeOfferCount: 1 }),
+        'advisoryRequests/r1/offers/gone': { name: 'Gone', location: 'Mesa', status: 'active', assignmentVersion: 0 },
+        'users/gone': mae({ activeSession: undefined }), 'users/other': mae({ subjects: [] })
+    });
+    await make(db).broadenPending();
+    assert.equal(db.store.get('advisoryRequests/r1/offers/gone').status, 'expired');
+    assert.equal(db.store.get('advisoryRequests/r1').activeOfferCount, 0);
+    assert.equal(db.store.get('advisoryRequests/r1').broadcastMode, 'all');
+    assert.deepEqual(eventsOf(db).find(([name]) => name === 'expanded-0')[1].recipientKeys, ['other']);
+});
+test('a student can only have one active request per subject', async () => {
+    const db = fakeDb({ 'schools/tec.mx/subjects/math': { name: 'Mate' }, 'users/student': { name: 'S', role: 'user', campus: 'c1' } });
+    const service = make(db);
+    const first = await service.createAdvisoryRequest({ operationId: 'op1', subjectId: 'math' }, ctx('student'));
+    assert.deepEqual(await service.createAdvisoryRequest({ operationId: 'op1', subjectId: 'math' }, ctx('student')), first, 'retries stay idempotent');
+    await assert.rejects(service.createAdvisoryRequest({ operationId: 'op2', subjectId: 'math' }, ctx('student')), error => error.code === 'already-exists');
+    await service.closeAdvisoryRequest({ requestId: first.requestId, reason: 'not_held' }, ctx('student'));
+    const second = await service.createAdvisoryRequest({ operationId: 'op3', subjectId: 'math' }, ctx('student'));
+    assert.notEqual(second.requestId, first.requestId);
+});
+test('coordination role comes from the profile even if the claim still says user', async () => {
+    const db = fakeDb({
+        'schools/tec.mx/subjects/math': { name: 'Mate' }, 'users/coordi1': { role: 'coordi', campus: 'c1' }
+    });
+    const { requestId } = await make(db).createAdvisoryRequest({ operationId: 'op1', subjectId: 'math', studentEmail: 'nuevo@tec.mx', campus: 'c1' }, ctx('coordi1', 'user'));
+    assert.equal(db.store.get(`advisoryRequests/${requestId}`).studentKey, 'nuevo');
+});
+test('registering without a rating leaves the rating bonus untouched', async () => {
+    const db = fakeDb({
+        'advisoryRequests/r1': openRequest({ status: 'assigned', assignedMaeKey: 'm1' }),
+        'users/student': { name: 'S', role: 'user', campus: 'c1' }, 'users/m1': mae({ points: 40, ratingBonusPoints: 30 }),
+        'asesorias/old': { peerInfo: { uid: 'm1' }, userInfo: { uid: 'x' }, rating: 1, date: Timestamp.fromMillis(now - 86400000) }
+    });
+    await make(db).registerRequestedAdvisory({ requestId: 'r1', assignmentVersion: 0 }, ctx('student'));
+    assert.equal(db.store.get('users/m1').ratingBonusPoints, 30);
+    assert.equal(db.store.get('users/m1').points, 50);
+});
+test('a registration that lands while computing points is included before awarding', async () => {
+    const db = fakeDb({
+        'advisoryRequests/r1': openRequest({ status: 'assigned', assignedMaeKey: 'm1' }),
+        'users/student': { name: 'S', role: 'user', campus: 'c1' }, 'users/m1': mae({ points: 0, ratingBonusPoints: 0 })
+    });
+    const collection = db.collection;
+    let raced = false;
+    db.collection = name => {
+        const result = collection(name);
+        if (name !== 'asesorias' || raced) return result;
+        // Otro registro del mismo estudiante con este MAE termina justo después de leer el historial
+        return { ...result, where: (...args) => ({ get: async () => {
+            const snap = await result.where(...args).get();
+            raced = true;
+            db.store.set('asesorias/other', { peerInfo: { uid: 'm1' }, userInfo: { uid: 'student' }, rating: null, date: Timestamp.fromMillis(now - 1000) });
+            db.store.set('users/m1', { ...db.store.get('users/m1'), points: 10, advisoryHistoryVersion: 1 });
+            return snap;
+        } }) };
+    };
+    await make(db).registerRequestedAdvisory({ requestId: 'r1', assignmentVersion: 0 }, ctx('student'));
+    assert.equal(db.store.get('asesorias/request_r1').pointsReason, 'recurrent_under_3_hours');
+    assert.equal(db.store.get('users/m1').points, 12.5);
+    assert.equal(db.store.get('users/m1').advisoryHistoryVersion, 2);
 });

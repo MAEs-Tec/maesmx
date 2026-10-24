@@ -13,6 +13,8 @@ const millis = value => {
     return 0;
 };
 const LATE_TURN_WINDOW_MS = 10 * 60 * 1000;
+const REQUEST_TTL_MS = 3 * 60 * 60 * 1000;
+const ACTIVE_STATUSES = ['open', 'assigned'];
 const round = value => Math.round(value * 100) / 100;
 function isActiveMae(user, now = Date.now()) {
     const start = millis(user?.activeSession?.startTime);
@@ -52,7 +54,8 @@ function createAdvisoryService({ db, admin, functions, now = () => Date.now() })
         const profile = await db.collection('users').doc(key).get();
             if (!profile.exists) fail('failed-precondition', 'Tu perfil ya no esta disponible.');
         const user = profile.data();
-        return { key, email, user, role: context.auth.token.role || user.role || 'user' };
+        // El rol del perfil solo lo cambia admin/tec y no depende de que el claim ya esté sincronizado.
+        return { key, email, user, role: user.role || 'user' };
     }
     function manages(who, request) {
         return request.studentKey === who.key || request.creatorKey === who.key ||
@@ -119,8 +122,16 @@ function createAdvisoryService({ db, admin, functions, now = () => Date.now() })
         request.broadcastMode = matching.length ? 'subject' : 'all';
         request.broadenAt = Timestamp.fromMillis(now() + 5 * 60 * 1000);
         const ref = requests.doc(crypto.createHash('sha256').update(`${who.key}:${operationId}`).digest('hex'));
+        // Candado por estudiante y materia: dos publicaciones simultáneas no pueden quedar activas a la vez.
+        const lockRef = db.collection('advisoryRequestLocks').doc(`${studentKey}_${subject.id}`);
         await db.runTransaction(async tx => {
-            if ((await tx.get(ref)).exists) return;
+            const [existing, lock] = await Promise.all([tx.get(ref), tx.get(lockRef)]);
+            if (existing.exists) return;
+            if (lock.exists) {
+                const current = await tx.get(requests.doc(lock.data().requestId));
+                if (current.exists && ACTIVE_STATUSES.includes(current.data().status)) fail('already-exists', `Ya hay una solicitud activa de ${subject.name}.`);
+            }
+            tx.set(lockRef, { requestId: ref.id, studentKey, subjectId: subject.id, updatedAt: stamp() });
             tx.create(ref, request);
             event(tx, ref, 'created', 'request_created', [...participants(request), ...coordis], 'Solicitud publicada', `Se busca asesoría de ${subject.name}.`);
             event(tx, ref, 'broadcast-0', 'help_requested', (matching.length ? matching : all).map(doc => doc.id), '¿Puedes apoyar?', `Se busca asesoría de ${subject.name}${topic ? `: ${topic}` : ''}.`);
@@ -239,54 +250,62 @@ function createAdvisoryService({ db, admin, functions, now = () => Date.now() })
         const rating = data.rating == null ? null : data.rating;
         if (rating !== null && (!Number.isInteger(rating) || rating < 1 || rating > 5)) fail('invalid-argument', 'La evaluación debe estar entre 1 y 5.');
         const comment = data.comment == null || data.comment === '' ? '' : text(data.comment, 'comentario', 2000);
-        // El historial se lee fuera de la transacción para no bloquear todas las asesorías del MAE.
         const first = await ref.get();
         if (!first.exists) fail('not-found', 'Solicitud no encontrada.');
         const seen = first.data();
         if (seen.studentKey !== who.key) fail('permission-denied', 'Solo el estudiante puede registrar esta asesoría.');
         if (seen.status === 'registered' && seen.advisoryId === advisoryRef.id) return { requestId: ref.id, advisoryId: advisoryRef.id };
         if (!seen.assignedMaeKey) fail('failed-precondition', 'La asignación cambió o no permite registro.');
-        const historySnap = await db.collection('asesorias').where('peerInfo.uid', '==', seen.assignedMaeKey).get();
-        const timestamp = now();
-        await db.runTransaction(async tx => {
-            const request = await readRequest(tx, ref);
-            if (request.studentKey !== who.key) fail('permission-denied', 'Solo el estudiante puede registrar esta asesoría.');
-            if (request.status === 'registered' && request.advisoryId === advisoryRef.id) return;
-            if (request.assignedMaeKey !== seen.assignedMaeKey) fail('aborted', 'La asignación cambió, intenta de nuevo.');
-            if (data.assignmentVersion !== request.assignmentVersion || !request.assignedMaeKey ||
-                !(request.status === 'assigned' || (request.status === 'closed' && request.closeReason === 'missing_registration'))) fail('failed-precondition', 'La asignación cambió o no permite registro.');
-            const peerRef = db.collection('users').doc(request.assignedMaeKey);
-            const [peerSnap, studentSnap, existing] = await Promise.all([
-                tx.get(peerRef), tx.get(db.collection('users').doc(who.key)), tx.get(advisoryRef)
-            ]);
-            if (!peerSnap.exists || !studentSnap.exists) fail('failed-precondition', 'No se encontraron los perfiles.');
-            if (existing.exists) fail('failed-precondition', 'El registro ya existe y requiere revisión.');
-            const history = historySnap.docs.map(doc => doc.data()).filter(item => item._test !== true && !item._type);
-            const previous = history.filter(item => item.userInfo?.uid === who.key && millis(item.date) <= timestamp);
-            const points = advisoryPoints(previous, timestamp);
-            const peer = peerSnap.data();
-            const updates = { points: Math.max(0, round((Number(peer.points) || 0) + points.pointsAwarded)) };
-            {
-                const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Mexico_City', year: 'numeric', month: 'numeric' }).formatToParts(new Date(timestamp));
-                const year = Number(parts.find(part => part.type === 'year').value);
-                const month = Number(parts.find(part => part.type === 'month').value);
-                const start = Date.UTC(year, month <= 6 ? 0 : 6, 1, 6);
-                const end = Date.UTC(year, month <= 6 ? 6 : 12, 1, 6);
-                const ratings = history.filter(item => item.rating != null && item.duplicate !== true && millis(item.date) >= start && millis(item.date) < end).map(item => item.rating);
-                updates.ratingBonusPoints = ratingBonus(rating === null ? ratings : [...ratings, rating]);
-                updates.points = Math.max(0, round(updates.points + updates.ratingBonusPoints - (Number(peer.ratingBonusPoints) || 0)));
-            }
-            tx.create(advisoryRef, {
-                requestId: ref.id, assignmentVersion: request.assignmentVersion,
-                peerInfo: profileInfo(peer, request.assignedMaeKey), userInfo: profileInfo(studentSnap.data(), who.key, true),
-                subject: request.subject, rating, comment, date: stamp(), duplicate: false,
-                ...points, pointsSubjectId: request.subject.id, pointsAwardedAt: stamp()
+        const peerRef = db.collection('users').doc(seen.assignedMaeKey);
+        // El historial se lee fuera de la transacción para no bloquear todas las asesorías del MAE.
+        // advisoryHistoryVersion delata otro registro simultáneo del mismo MAE: entonces se relee y recalcula.
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const historyVersion = Number((await peerRef.get()).data()?.advisoryHistoryVersion) || 0;
+            const historySnap = await db.collection('asesorias').where('peerInfo.uid', '==', seen.assignedMaeKey).get();
+            const timestamp = now();
+            const stale = await db.runTransaction(async tx => {
+                const request = await readRequest(tx, ref);
+                if (request.studentKey !== who.key) fail('permission-denied', 'Solo el estudiante puede registrar esta asesoría.');
+                if (request.status === 'registered' && request.advisoryId === advisoryRef.id) return false;
+                if (request.assignedMaeKey !== seen.assignedMaeKey) fail('aborted', 'La asignación cambió, intenta de nuevo.');
+                if (data.assignmentVersion !== request.assignmentVersion || !request.assignedMaeKey ||
+                    !(request.status === 'assigned' || (request.status === 'closed' && request.closeReason === 'missing_registration'))) fail('failed-precondition', 'La asignación cambió o no permite registro.');
+                const [peerSnap, studentSnap, existing] = await Promise.all([
+                    tx.get(peerRef), tx.get(db.collection('users').doc(who.key)), tx.get(advisoryRef)
+                ]);
+                if (!peerSnap.exists || !studentSnap.exists) fail('failed-precondition', 'No se encontraron los perfiles.');
+                if (existing.exists) fail('failed-precondition', 'El registro ya existe y requiere revisión.');
+                const peer = peerSnap.data();
+                if ((Number(peer.advisoryHistoryVersion) || 0) !== historyVersion) return true;
+                const history = historySnap.docs.map(doc => doc.data()).filter(item => item._test !== true && !item._type);
+                const previous = history.filter(item => item.userInfo?.uid === who.key && millis(item.date) <= timestamp);
+                const points = advisoryPoints(previous, timestamp);
+                const updates = { points: Math.max(0, round((Number(peer.points) || 0) + points.pointsAwarded)), advisoryHistoryVersion: historyVersion + 1 };
+                // Sin calificación el bono del semestre no cambia, así que no se recalcula.
+                if (rating !== null) {
+                    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Mexico_City', year: 'numeric', month: 'numeric' }).formatToParts(new Date(timestamp));
+                    const year = Number(parts.find(part => part.type === 'year').value);
+                    const month = Number(parts.find(part => part.type === 'month').value);
+                    const start = Date.UTC(year, month <= 6 ? 0 : 6, 1, 6);
+                    const end = Date.UTC(year, month <= 6 ? 6 : 12, 1, 6);
+                    const ratings = history.filter(item => item.rating != null && item.duplicate !== true && millis(item.date) >= start && millis(item.date) < end).map(item => item.rating);
+                    updates.ratingBonusPoints = ratingBonus([...ratings, rating]);
+                    updates.points = Math.max(0, round(updates.points + updates.ratingBonusPoints - (Number(peer.ratingBonusPoints) || 0)));
+                }
+                tx.create(advisoryRef, {
+                    requestId: ref.id, assignmentVersion: request.assignmentVersion,
+                    peerInfo: profileInfo(peer, request.assignedMaeKey), userInfo: profileInfo(studentSnap.data(), who.key, true),
+                    subject: request.subject, rating, comment, date: stamp(), duplicate: false,
+                    ...points, pointsSubjectId: request.subject.id, pointsAwardedAt: stamp()
+                });
+                tx.update(peerRef, updates);
+                tx.update(ref, { status: 'registered', advisoryId: advisoryRef.id, registeredAt: stamp(), updatedAt: stamp() });
+                event(tx, ref, 'registered', 'advisory_registered', participants(request), 'Asesoría registrada', `El estudiante registró su asesoría de ${request.subject.name}.`);
+                return false;
             });
-            tx.update(peerRef, updates);
-            tx.update(ref, { status: 'registered', advisoryId: advisoryRef.id, registeredAt: stamp(), updatedAt: stamp() });
-            event(tx, ref, 'registered', 'advisory_registered', participants(request), 'Asesoría registrada', `El estudiante registró su asesoría de ${request.subject.name}.`);
-        });
-        return { requestId: ref.id, advisoryId: advisoryRef.id };
+            if (!stale) return { requestId: ref.id, advisoryId: advisoryRef.id };
+        }
+        fail('aborted', 'Hay otros registros en curso para este MAE, intenta de nuevo.');
     }
     async function dispatchEvent(snapshot) {
         const value = snapshot.data();
@@ -322,7 +341,50 @@ function createAdvisoryService({ db, admin, functions, now = () => Date.now() })
                 '¿Puedes apoyar?', `Se busca asesoría de ${request.subject.name}${request.topic ? `: ${request.topic}` : ''}.`, request.assignmentVersion);
         });
     }
+    // A las 3 h una solicitud abierta caduca; una asignada queda pendiente de registro para no perder los puntos del MAE.
+    async function expireOne(ref) {
+        await db.runTransaction(async tx => {
+            const request = await readRequest(tx, ref);
+            if (!ACTIVE_STATUSES.includes(request.status) || millis(request.createdAt) > now() - REQUEST_TTL_MS) return;
+            const reason = request.status === 'open' ? 'expired' : 'missing_registration';
+            tx.update(ref, { status: 'closed', closeReason: reason, updatedAt: stamp(), closedAt: stamp() });
+            event(tx, ref, `closed-${request.assignmentVersion}`, 'request_closed', participants(request), 'Solicitud cerrada',
+                reason === 'expired' ? 'La solicitud caducó sin asesor después de 3 horas.' : 'La asesoría está pendiente de registro.');
+        });
+    }
+    // Una oferta solo cuenta mientras su MAE sigue en turno en el campus; si no, bloquearía la ampliación del aviso.
+    async function expireStaleOffers(ref, request) {
+        const offers = await ref.collection('offers').where('assignmentVersion', '==', request.assignmentVersion).where('status', '==', 'active').get();
+        const profiles = await Promise.all(offers.docs.map(doc => db.collection('users').doc(doc.id).get()));
+        const stale = offers.docs.filter((doc, index) => !isActiveMae(profiles[index].data(), now()) || profiles[index].data()?.campus !== request.campus);
+        if (!stale.length) return request.activeOfferCount;
+        return db.runTransaction(async tx => {
+            const current = await readRequest(tx, ref);
+            const snaps = await Promise.all(stale.map(doc => tx.get(doc.ref)));
+            if (current.status !== 'open') return current.activeOfferCount;
+            const expired = snaps.filter(snap => snap.data()?.status === 'active' && snap.data().assignmentVersion === current.assignmentVersion);
+            if (!expired.length) return current.activeOfferCount;
+            const count = Math.max(0, current.activeOfferCount - expired.length);
+            expired.forEach(snap => tx.update(snap.ref, { status: 'expired', updatedAt: stamp() }));
+            tx.update(ref, { activeOfferCount: count, updatedAt: stamp() });
+            return count;
+        });
+    }
+    async function expireAssigned() {
+        const cutoff = Timestamp.fromMillis(now() - REQUEST_TTL_MS);
+        let cursor = null;
+        do {
+            let query = requests.where('status', '==', 'assigned').where('createdAt', '<=', cutoff).orderBy('createdAt').limit(100);
+            if (cursor) query = query.startAfter(cursor);
+            const snap = await query.get();
+            for (let offset = 0; offset < snap.docs.length; offset += 10) {
+                await Promise.all(snap.docs.slice(offset, offset + 10).map(doc => expireOne(doc.ref)));
+            }
+            cursor = snap.size === 100 ? snap.docs[snap.docs.length - 1] : null;
+        } while (cursor);
+    }
     async function broadenPending() {
+        await expireAssigned();
         // Page through open requests instead of loading historical data.
         let cursor = null;
         const open = [], broadened = new Set();
@@ -330,13 +392,21 @@ function createAdvisoryService({ db, admin, functions, now = () => Date.now() })
             let query = requests.where('status', '==', 'open').orderBy('__name__').limit(100);
             if (cursor) query = query.startAfter(cursor);
             const snap = await query.get();
-            const due = snap.docs.filter(doc => doc.data().needsBroadcast ||
-                (doc.data().broadcastMode === 'subject' && millis(doc.data().broadenAt) <= now() && doc.data().activeOfferCount === 0));
+            const live = [];
+            for (const doc of snap.docs) {
+                if (millis(doc.data().createdAt) <= now() - REQUEST_TTL_MS) await expireOne(doc.ref);
+                else live.push({ doc, data: doc.data() });
+            }
+            for (const item of live.filter(item => item.data.activeOfferCount > 0)) {
+                item.data.activeOfferCount = await expireStaleOffers(item.doc.ref, item.data);
+            }
+            const due = live.filter(({ data }) => data.needsBroadcast ||
+                (data.broadcastMode === 'subject' && millis(data.broadenAt) <= now() && data.activeOfferCount === 0)).map(item => item.doc);
             for (let offset = 0; offset < due.length; offset += 10) {
                 await Promise.all(due.slice(offset, offset + 10).map(doc => broadenOne(doc.ref)));
             }
             due.forEach(doc => broadened.add(doc.id));
-            open.push(...snap.docs);
+            open.push(...live.map(item => item.doc));
             cursor = snap.size === 100 ? snap.docs[snap.docs.length - 1] : null;
         } while (cursor);
         if (!open.length) return;

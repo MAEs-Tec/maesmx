@@ -26,9 +26,13 @@ test('advisory requests against real Firestore emulator', { skip: !enabled }, as
     const subjectId = `integration_math_${runId}`;
     const requestRef = result => db.collection('advisoryRequests').doc(result.requestId);
     let sequence = 0;
-    const create = async (overrides = {}, context = ctx('student')) => service.createAdvisoryRequest({
-        operationId: `integration-${Date.now()}-${sequence++}`, subjectId, ...overrides
-    }, context);
+    // Cada subprueba parte de cero: se libera el candado de una solicitud activa por materia.
+    const releaseLocks = () => Promise.all([key('student'), key('future')].flatMap(student =>
+        [subjectId, 'integration_unmatched'].map(subject => db.doc(`advisoryRequestLocks/${student}_${subject}`).delete())));
+    const create = async (overrides = {}, context = ctx('student')) => {
+        await releaseLocks();
+        return service.createAdvisoryRequest({ operationId: `integration-${Date.now()}-${sequence++}`, subjectId, ...overrides }, context);
+    };
     try {
         await Promise.all([
             db.doc(`schools/tec.mx/subjects/${subjectId}`).set({ name: 'Matemáticas' }),
@@ -62,6 +66,12 @@ test('advisory requests against real Firestore emulator', { skip: !enabled }, as
                 await db.doc(`users/${key('inactive')}`).set({ ...profile('mae'), activeSession: { startTime: admin.firestore.Timestamp.fromMillis(clock + offset) } });
                 await assert.rejects(service.offerAdvisoryHelp({ ...result, location: 'Mesa' }, ctx('inactive', 'mae')), error => error.code === 'permission-denied');
             }
+        });
+        await t.test('simultaneous publications for the same subject leave exactly one active request', async () => {
+            await releaseLocks();
+            const results = await Promise.allSettled(['a', 'b'].map(suffix => service.createAdvisoryRequest({ operationId: `lock-${runId}-${suffix}`, subjectId }, ctx('student'))));
+            assert.equal(results.filter(item => item.status === 'fulfilled').length, 1);
+            assert.equal(results.find(item => item.status === 'rejected').reason.code, 'already-exists');
         });
         await t.test('not-held closure is idempotent, rejects registration and cannot close an open request as missing-registration', async () => {
             const result = await create();
@@ -153,9 +163,20 @@ test('advisory requests against real Firestore emulator', { skip: !enabled }, as
             await service.broadenPending();
             assert.ok(!(await notifiedKeys(second)).includes(key('newturn')));
         });
+        await t.test('after three hours open requests expire and assigned ones stay registrable', async () => {
+            const open = await create();
+            const assigned = await create({ subjectId: 'integration_unmatched' });
+            await service.offerAdvisoryHelp({ ...assigned, location: 'Mesa 12' }, ctx('other', 'mae'));
+            await service.assignAdvisoryRequest({ ...assigned, maeKey: key('other') }, ctx('student'));
+            clock += 3 * 60 * 60 * 1000;
+            await service.broadenPending();
+            assert.equal((await requestRef(open).get()).data().closeReason, 'expired');
+            assert.equal((await requestRef(assigned).get()).data().closeReason, 'missing_registration');
+            assert.ok((await service.registerRequestedAdvisory({ ...assigned, assignmentVersion: 0 }, ctx('student'))).advisoryId);
+        });
         await t.test('real client rules isolate requests, offers and notifications and forbid forged state', async () => {
             const { initializeApp, deleteApp } = await import('firebase/app');
-            const { getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, updateDoc, serverTimestamp, terminate } = await import('firebase/firestore');
+            const { getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, updateDoc, serverTimestamp, terminate, deleteField, increment, Timestamp } = await import('firebase/firestore');
             const clients = [];
             function client(suffix, verified = true) {
                 const app = initializeApp({ projectId, apiKey: 'demo-key' }, `rules-${suffix}-${verified}`);
@@ -187,6 +208,24 @@ test('advisory requests against real Firestore emulator', { skip: !enabled }, as
                 await denied(updateDoc(doc(owner, noticePath), { title: 'forged' }));
                 await updateDoc(doc(owner, noticePath), { readAt: serverTimestamp() });
                 assert.ok((await getDoc(doc(owner, noticePath))).data().readAt);
+
+                // Perfiles: campus, turno y horas no se falsean; coordinación solo en su campus
+                await Promise.all([
+                    db.doc(`users/${key('shift')}`).set({ ...profile('mae'), activeSession: null, totalTime: 30 }),
+                    db.doc(`users/${key('coordi2')}`).set({ ...profile('coordi'), campus: 'Other Campus' })
+                ]);
+                const shiftPath = `users/${key('shift')}`;
+                const shift = client('shift'), sameCampus = client('coordi'), otherCampus = client('coordi2');
+                await denied(updateDoc(doc(shift, shiftPath), { campus: 'Other Campus' }));
+                await denied(updateDoc(doc(shift, shiftPath), { activeSession: { location: 'Mesa', startTime: Timestamp.fromMillis(Date.now() - 4 * 3600000) } }));
+                await denied(updateDoc(doc(shift, shiftPath), { totalTime: 9999 }));
+                await updateDoc(doc(shift, shiftPath), { activeSession: { location: 'Mesa', status: 'PENDING', startTime: serverTimestamp() } });
+                await denied(updateDoc(doc(shift, shiftPath), { totalTime: 130, activeSession: deleteField() }));
+                await updateDoc(doc(shift, shiftPath), { totalTime: 30, activeSession: deleteField() });
+                await denied(updateDoc(doc(otherCampus, shiftPath), { totalTime: increment(60) }));
+                await denied(updateDoc(doc(sameCampus, shiftPath), { subjects: [{ id: 'forged' }] }));
+                await updateDoc(doc(sameCampus, shiftPath), { totalTime: increment(60) });
+                assert.equal((await db.doc(shiftPath).get()).data().totalTime, 90);
             } finally {
                 await Promise.all(clients.map(async ({ app, store }) => { await terminate(store); await deleteApp(app); }));
             }

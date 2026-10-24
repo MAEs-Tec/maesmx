@@ -80,7 +80,10 @@ const statusText = request => ({
     open: 'Buscando asesor',
     assigned: 'Asignada · pendiente de registro',
     registered: 'Asesoría registrada',
-    closed: request.closeReason === 'missing_registration' ? 'Cerrada · falta registro' : 'Cerrada · no se realizó'
+    closed: {
+        missing_registration: 'Cerrada · falta registro',
+        expired: 'Caducó sin asesor'
+    }[request.closeReason] || 'Cerrada · no se realizó'
 }[request.status] || 'Solicitud');
 const canRegister = computed(() => isOwner.value && (
     selected.value?.status === 'assigned' ||

@@ -45,10 +45,12 @@ function requiredString(value, field) {
     return value.trim();
 }
 
-// Al crear un usuario nuevo, asignar claim role: 'user'.
-exports.initializeUserRoleClaim = functions.auth.user().onCreate(async (user) => {
-    await admin.auth().setCustomUserClaims(user.uid, { role: 'user' });
-});
+// Al crear un usuario nuevo, asignar el claim del rol de su perfil ('user' si no hay perfil o no está verificado).
+const { createRoleInitializer, createOwnRoleClaimSync } = require('./role-sync');
+exports.initializeUserRoleClaim = functions.auth.user().onCreate(createRoleInitializer({ db, auth: admin.auth() }));
+
+// El propio usuario sincroniza su claim desde su perfil; no puede elegir el rol.
+exports.syncOwnRoleClaim = functions.https.onCall(createOwnRoleClaimSync({ db, auth: admin.auth(), HttpsError: functions.https.HttpsError }));
 
 // Función ADMIN explícita para sincronizar el claim de UN usuario desde Firestore.
 // No es auto-reescritura: requiere rol admin para ejecutarse.

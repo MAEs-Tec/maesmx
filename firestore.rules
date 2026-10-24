@@ -122,6 +122,46 @@ service cloud.firestore {
       return !changedUserFields().hasAny(['role', 'status']);
     }
 
+    // El campus define sobre que sede manda una coordi: solo admin/tec lo cambian
+    function preservesCampus() {
+      return !changedUserFields().hasAny(['campus']);
+    }
+
+    // El turno solo se abre con la hora del servidor (evita falsear startTime) o se cierra
+    function validActiveSessionChange() {
+      return !changedUserFields().hasAny(['activeSession'])
+        || !('activeSession' in request.resource.data)
+        || (request.resource.data.activeSession is map
+          && request.resource.data.activeSession.get('startTime', null) == request.time);
+    }
+
+    // Las horas solo suben al cerrar el turno y a lo mas lo que duro (el cliente redondea hacia abajo
+    // y descarta turnos de mas de 310 min)
+    function validTotalTimeChange() {
+      let before = resource.data.get('totalTime', 0);
+      let after = request.resource.data.get('totalTime', 0);
+      let session = resource.data.get('activeSession', null);
+      return !changedUserFields().hasAny(['totalTime'])
+        || (session is map
+          && session.get('startTime', null) is timestamp
+          && !('activeSession' in request.resource.data)
+          && after is number
+          && after >= before
+          && after - before <= 310
+          && (after - before) * 60 <= (request.time - session.startTime).seconds() + 60);
+    }
+
+    // Turno y materias son del dueno; una coordi no los toca en perfiles ajenos
+    function preservesOwnerOnlyFields() {
+      return !changedUserFields().hasAny(['activeSession', 'subjects']);
+    }
+
+    // Una coordi solo gestiona perfiles de su campus
+    function coordiOfCampus(campus) {
+      return hasAnyRole(['coordi'])
+        && get(/databases/$(database)/documents/users/$(currentUserKey())).data.get('campus', null) == campus;
+    }
+
     // Flujos de la pagina que escriben en el perfil de OTRO usuario desde el navegador:
     // un estudiante evalua o registra una asesoria (puntos y bono del MAE) y quien abre
     // un perfil o el leaderboard desbloquea logros. Hasta que esto pase a Cloud
@@ -136,7 +176,8 @@ service cloud.firestore {
       // Dueno: turno (activeSession/totalTime), tienda (useCoins), horario, materias, foto.
       // Coordi: agregar horas y puntos de asistencia de otros MAEs.
       allow update: if isTechAdmin()
-        || ((isOwnUserDoc(userId) || isCoordi()) && preservesAccessFields())
+        || (isOwnUserDoc(userId) && preservesAccessFields() && preservesCampus() && validActiveSessionChange() && validTotalTimeChange())
+        || (coordiOfCampus(resource.data.get('campus', null)) && preservesAccessFields() && preservesCampus() && preservesOwnerOnlyFields())
         || (signedIn() && changesOnlyGamificationFields());
       allow delete: if isAdmin();
     }

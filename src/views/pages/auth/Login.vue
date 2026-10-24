@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import { getAuth, getAdditionalUserInfo, GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup, signOut } from 'firebase/auth';
 import { getCurrentUser } from '../../../firebase/db/users';
+import { ensureRoleClaim } from '../../../auth/roles';
 import router from '../../../router';
 import { useRoute } from 'vue-router';
 
@@ -44,6 +45,7 @@ function isValidTecMxEmail(email) {
 }
 
 const navigateAfterSignIn = async () => {
+    await ensureRoleClaim(await getCurrentUser());
     if (typeof route.query.requestId === 'string' && route.query.requestId) {
         await router.push({ name: 'solicitudAsesoria', params: { id: route.query.requestId } });
         return;

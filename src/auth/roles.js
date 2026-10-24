@@ -1,4 +1,5 @@
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 export const ROLES = {
     ADMIN: 'admin',
@@ -73,6 +74,25 @@ export async function getClaimsRole() {
     } catch (error) {
         console.warn('Unable to refresh role claim:', error);
         return ROLES.USER;
+    }
+}
+
+// Si el claim no coincide con el rol del perfil (p.ej. una coordi dada de alta antes de crear su cuenta),
+// se pide al servidor que lo sincronice. Solo hay llamada cuando difieren.
+export async function ensureRoleClaim(profile) {
+    const user = getAuth().currentUser;
+    if (!user?.emailVerified || !profile?.role) return;
+    try {
+        const token = await user.getIdTokenResult();
+        if ((token.claims.role || ROLES.USER) === profile.role) return;
+        const result = await httpsCallable(getFunctions(), 'syncOwnRoleClaim')();
+        if (result.data?.changed) {
+            const fresh = await user.getIdTokenResult(true);
+            cachedUid = user.uid;
+            cachedRole = fresh.claims.role || ROLES.USER;
+        }
+    } catch (error) {
+        console.warn('Unable to synchronize role claim:', error);
     }
 }
 

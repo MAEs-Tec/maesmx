@@ -61,6 +61,52 @@ service cloud.firestore {
       return request.auth.token.email.split('@')[0];
     }
 
+    function verifiedInstitutional() {
+      return signedIn()
+        && request.auth.token.get('email_verified', false) == true
+        && request.auth.token.email is string
+        && request.auth.token.email.lower().matches('^[a-z0-9._%+-]+@tec[.]mx$');
+    }
+
+    function advisoryUserKey() {
+      return currentUserKey().lower();
+    }
+
+    function managesAdvisory(data) {
+      return data.studentKey == advisoryUserKey()
+        || data.creatorKey == advisoryUserKey()
+        || isTechAdmin()
+        || (hasAnyRole(['coordi'])
+          && get(/databases/$(database)/documents/users/$(advisoryUserKey())).data.campus == data.campus);
+    }
+
+    match /advisoryRequests/{requestId} {
+      allow read: if verifiedInstitutional() && (managesAdvisory(resource.data)
+        || exists(/databases/$(database)/documents/advisoryRequests/$(requestId)/recipients/$(advisoryUserKey())));
+      allow write: if false;
+      match /offers/{maeKey} {
+        allow read: if verifiedInstitutional()
+          && (managesAdvisory(get(/databases/$(database)/documents/advisoryRequests/$(requestId)).data)
+            || maeKey == advisoryUserKey());
+        allow write: if false;
+      }
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+      match /recipients/{userKey} {
+        allow read: if verifiedInstitutional() && userKey == advisoryUserKey();
+        allow write: if false;
+      }
+    }
+
+    match /advisoryNotifications/{userKey}/items/{notificationId} {
+      allow read: if verifiedInstitutional() && userKey == advisoryUserKey();
+      allow update: if verifiedInstitutional() && userKey == advisoryUserKey()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt'])
+        && request.resource.data.readAt == request.time;
+      allow create, delete: if false;
+    }
+
     function isCreatingOwnUserDoc() {
       return isOwnEmail(request.resource.data.email)
         && request.resource.data.role == 'user'
@@ -74,6 +120,46 @@ service cloud.firestore {
     // Rol y estatus solo los cambia admin/tec (evita escalacion de privilegios)
     function preservesAccessFields() {
       return !changedUserFields().hasAny(['role', 'status']);
+    }
+
+    // El campus define sobre que sede manda una coordi: solo admin/tec lo cambian
+    function preservesCampus() {
+      return !changedUserFields().hasAny(['campus']);
+    }
+
+    // El turno solo se abre con la hora del servidor (evita falsear startTime) o se cierra
+    function validActiveSessionChange() {
+      return !changedUserFields().hasAny(['activeSession'])
+        || !('activeSession' in request.resource.data)
+        || (request.resource.data.activeSession is map
+          && request.resource.data.activeSession.get('startTime', null) == request.time);
+    }
+
+    // Las horas solo suben al cerrar el turno y a lo mas lo que duro (el cliente redondea hacia abajo
+    // y descarta turnos de mas de 310 min)
+    function validTotalTimeChange() {
+      let before = resource.data.get('totalTime', 0);
+      let after = request.resource.data.get('totalTime', 0);
+      let session = resource.data.get('activeSession', null);
+      return !changedUserFields().hasAny(['totalTime'])
+        || (session is map
+          && session.get('startTime', null) is timestamp
+          && !('activeSession' in request.resource.data)
+          && after is number
+          && after >= before
+          && after - before <= 310
+          && (after - before) * 60 <= (request.time - session.startTime).seconds() + 60);
+    }
+
+    // Turno y materias son del dueno; una coordi no los toca en perfiles ajenos
+    function preservesOwnerOnlyFields() {
+      return !changedUserFields().hasAny(['activeSession', 'subjects']);
+    }
+
+    // Una coordi solo gestiona perfiles de su campus
+    function coordiOfCampus(campus) {
+      return hasAnyRole(['coordi'])
+        && get(/databases/$(database)/documents/users/$(currentUserKey())).data.get('campus', null) == campus;
     }
 
     // Flujos de la pagina que escriben en el perfil de OTRO usuario desde el navegador:
@@ -90,7 +176,8 @@ service cloud.firestore {
       // Dueno: turno (activeSession/totalTime), tienda (useCoins), horario, materias, foto.
       // Coordi: agregar horas y puntos de asistencia de otros MAEs.
       allow update: if isTechAdmin()
-        || ((isOwnUserDoc(userId) || isCoordi()) && preservesAccessFields())
+        || (isOwnUserDoc(userId) && preservesAccessFields() && preservesCampus() && validActiveSessionChange() && validTotalTimeChange())
+        || (coordiOfCampus(resource.data.get('campus', null)) && preservesAccessFields() && preservesCampus() && preservesOwnerOnlyFields())
         || (signedIn() && changesOnlyGamificationFields());
       allow delete: if isAdmin();
     }
@@ -177,11 +264,16 @@ service cloud.firestore {
         ]);
       }
 
-      allow create: if signedIn();
+      // Linked records are created atomically with their request by the server.
+      allow create: if signedIn() && !asesoriaId.matches('^request_.*')
+        && !request.resource.data.keys().hasAny(['requestId', 'assignmentVersion']);
       allow read: if signedIn();
-      allow update: if isCoordi()
-        || (isOwnAsesoria() && changesOnlyStudentFields());
-      allow delete: if isAdmin();
+      allow update: if !request.resource.data.diff(resource.data).affectedKeys().hasAny(['requestId', 'assignmentVersion'])
+        && (resource.data.keys().hasAny(['requestId'])
+          ? ((isCoordi() || isOwnAsesoria())
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'comment']))
+          : (isCoordi() || (isOwnAsesoria() && changesOnlyStudentFields())));
+      allow delete: if isAdmin() && !resource.data.keys().hasAny(['requestId']);
     }
 
     match /videos/{videoId} {

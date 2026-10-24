@@ -3,6 +3,7 @@ import { getAuth, signOut } from "firebase/auth";
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useLayout } from '@/layout/composables/layout';
 import { useRouter } from 'vue-router';
+import RequestNotifications from '@/components/RequestNotifications.vue';
 
 const { layoutConfig, onMenuToggle, toggleDarkMode, isDarkTheme } = useLayout();
 
@@ -89,6 +90,7 @@ const isOutsideClicked = (event) => {
             <i class="pi pi-bars"></i>
         </button>
 
+        <RequestNotifications class="ml-auto" />
         <button class="p-link layout-topbar-menu-button layout-topbar-button" @click="onTopBarMenuButton()">
             <i class="pi pi-ellipsis-v"></i>
         </button>
@@ -106,6 +108,32 @@ const isOutsideClicked = (event) => {
     </div>
 </template>
 
-<style lang="scss" scoped></style>
+<style lang="scss" scoped>
+// The bell already pushes right with ml-auto; keep the menu beside it instead of splitting the space.
+@media (min-width: 992px) {
+    .layout-topbar .layout-topbar-menu {
+        margin-left: 0;
+    }
+}
+@media (max-width: 991px) {
+    .layout-topbar {
+        padding: 0 1rem;
+        gap: 0.25rem;
+    }
+    .layout-topbar .request-notifications {
+        order: 3;
+        margin-left: auto !important;
+        flex-shrink: 0;
+    }
+    .layout-topbar .layout-topbar-menu-button {
+        order: 4;
+        flex-shrink: 0;
+    }
+}
+@media (max-width: 575px) {
+    .layout-topbar .layout-topbar-logo span { display: none; }
+    .layout-topbar .layout-topbar-logo img { margin-right: 0; }
+}
+</style>
 
 

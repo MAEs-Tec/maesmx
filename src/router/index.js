@@ -29,6 +29,11 @@ const router = createRouter({
                     component: () => import('@/views/Inicio.vue')
                 },
                 {
+                    path: '/solicitudes/:id?',
+                    name: 'solicitudAsesoria',
+                    component: () => import('@/views/SolicitudesAsesoria.vue')
+                },
+                {
                     path: '/maesactivos',
                     name: 'maesactivos',
                     component: () => import('@/views/MaesActivos.vue')
@@ -228,6 +233,12 @@ router.beforeEach((to, from, next) => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
         unsubscribe(); 
         if (!user) {
+            if (to.name === 'solicitudAsesoria' && to.params.id) {
+                return next({ path: '/auth/login', query: { requestId: to.params.id } });
+            }
+            if (to.name === 'perfil' && to.query.requestId) {
+                return next({ path: '/auth/login', query: { requestId: to.query.requestId } });
+            }
             if (to.path === "/asesoriasGrupales" && to.query.asesoriaId) {
               const asesoriaId = to.query.asesoriaId;
               return next(`/auth/login?redirect=/asesoriasGrupales&asesoriaId=${asesoriaId}`);

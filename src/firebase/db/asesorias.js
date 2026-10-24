@@ -112,7 +112,7 @@ export async function addAsesoria(maeInfo, userInfo, subject, comment, rating) {
         await updateRatingBonusForMae(maeInfo.uid);
     }
     await invalidateAsesoriaCaches();
-    return;
+    return docRef.id;
 }
 
 export async function getAsesoriasCountForUserInCurrentSemester(userId, options = {}) {

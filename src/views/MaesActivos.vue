@@ -214,6 +214,9 @@ const onMajorSelect = () => {
         <h1 class="text-black text-6xl font-bold m-0 sm:text-left" v-else> 
             MAEs activos
         </h1>
+        <router-link :to="{ path: '/solicitudes', query: { create: '1', ...(subjectInput?.id ? { subjectId: subjectInput.id } : {}) } }" class="mt-3">
+            <Button label="Solicitar asesoría" icon="pi pi-plus" severity="secondary" outlined />
+        </router-link>
     </div>
     
     <!-- Buscar entre los maes activos -->

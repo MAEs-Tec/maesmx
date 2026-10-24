@@ -123,7 +123,10 @@ const onSignUp = async () => {
 
         const userCredential = await createUserWithEmailAndPassword(auth, newUserInfo.value.email, password1.value);
         await sendEmailVerification(userCredential.user);
-        await createUser(newUserInfo.value);
+        // Un perfil dado de alta antes (p.ej. por coordinación) conserva su rol: no se sobrescribe.
+        if (!(await getCurrentUser({ forceRefresh: true }))) {
+            await createUser(newUserInfo.value);
+        }
         await signOut(auth);
         await router.push(loginTarget());
         toast.add({
@@ -186,6 +189,7 @@ const loginTarget = () => {
     return {
         path: '/auth/login',
         query: {
+            ...(typeof route.query.requestId === 'string' ? { requestId: route.query.requestId } : {}),
             ...(asesoriaId ? { asesoriaId } : {}),
             ...(newUserInfo.value.email ? { email: newUserInfo.value.email } : {})
         }
@@ -193,6 +197,10 @@ const loginTarget = () => {
 };
 
 const navigateAfterRegistration = async () => {
+    if (typeof route.query.requestId === 'string' && route.query.requestId) {
+        await router.push({ name: 'solicitudAsesoria', params: { id: route.query.requestId } });
+        return;
+    }
     const asesoriaId = route.query.asesoriaId || '';
     if (asesoriaId) {
         await router.push({

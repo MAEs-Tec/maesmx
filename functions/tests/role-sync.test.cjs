@@ -49,3 +49,29 @@ test('transient Auth failure propagates for retry', async () => {
 test('unsupported roles are not granted', async () => {
     const h = harness(['superadmin']); await h.run('user', 'superadmin'); assert.equal(h.calls.length, 0);
 });
+
+const { createRoleInitializer, createOwnRoleClaimSync } = require('../role-sync');
+function claimHarness(profileRole) {
+    const writes = [];
+    const db = { collection: () => ({ doc: () => ({ get: async () => snapshot(profileRole) }) }) };
+    const auth = {
+        getUser: async uid => ({ uid, customClaims: { role: 'user', otherPermission: true } }),
+        setCustomUserClaims: async (uid, data) => writes.push([uid, data])
+    };
+    return { db, auth, writes };
+}
+test('new accounts keep the role of a profile created beforehand only when the email is verified', async () => {
+    const h = claimHarness('coordi');
+    await createRoleInitializer(h)({ uid: 'g', email: 'A01@tec.mx', emailVerified: true });
+    await createRoleInitializer(h)({ uid: 'p', email: 'a01@tec.mx', emailVerified: false });
+    assert.deepEqual(h.writes, [['g', { role: 'coordi' }], ['p', { role: 'user' }]]);
+});
+test('users can only sync their own claim to their profile role once verified', async () => {
+    class HttpsError extends Error { constructor(code) { super(code); this.code = code; } }
+    const h = claimHarness('coordi');
+    const sync = createOwnRoleClaimSync({ ...h, HttpsError });
+    await assert.rejects(sync({}, {}), error => error.code === 'unauthenticated');
+    assert.deepEqual(await sync({ role: 'admin' }, { auth: { uid: 'p', token: { email: 'a01@tec.mx', email_verified: true, role: 'user' } } }), { role: 'coordi', changed: true });
+    assert.deepEqual(h.writes, [['p', { role: 'coordi', otherPermission: true }]]);
+    assert.deepEqual(await sync({}, { auth: { uid: 'p', token: { email: 'a01@tec.mx', email_verified: false, role: 'user' } } }), { role: 'user', changed: false });
+});

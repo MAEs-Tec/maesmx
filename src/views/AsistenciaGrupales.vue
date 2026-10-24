@@ -6,6 +6,7 @@ import { getSubjects } from '../firebase/db/subjects';
 import { getSubjectColor } from '@/utils/HorarioUtils';
 import { formatDate, formatTime } from '@/utils/AnunciosUtils';
 import { getCurrentUser } from '../firebase/db/users';
+import { useToast } from 'primevue/usetoast';
 
 const asesorias = ref([]);
 const subjects = ref([]);
@@ -15,6 +16,7 @@ const selectedAsesoria = ref(null);
 const showDialog = ref(false); 
 const showDialogAsistence = ref(false); 
 const processedAsistence = ref(null); 
+const toast = useToast();
 
 
 const loadAsistance = async () => {
@@ -33,7 +35,7 @@ const filteredAsesorias = computed(() => {
         return asesorias.value;
     }
     return asesorias.value.filter(asesoria =>
-        asesoria.subject.id === selectedSubject.id
+        asesoria.subject?.id === selectedSubject.id
     );
 });
 
@@ -47,6 +49,17 @@ const handleAsistence= async (asesoria) => {
     selectedAsesoria.value = asesoria;
     await loadAsistance();
     showDialogAsistence.value = true;
+};
+
+// Guarda el valor elegido (no alterna): abrir el dropdown o elegir el mismo valor no cambia nada
+const handleAsistenceChange = async (userId, value) => {
+    if (!selectedAsesoria.value?.id || typeof value !== 'boolean') return;
+    try {
+        await updateUserAsistence(selectedAsesoria.value.id, userId, value);
+    } catch (error) {
+        toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo guardar la asistencia. Intenta de nuevo.', life: 3000 });
+    }
+    await loadAsistance();
 };
 
 const closeDialog = () => {
@@ -102,10 +115,10 @@ const isMaeAssign = (asesoria) => {
         <div v-for="asesoria in filteredAsesorias" :key="asesoria.id" 
              class="flex flex-col md:flex-row bg-white border-round-3xl w-full md:w-5 boder-gray card-container"
              style="height: 190px;">
-            <div class="color-bar" :class="getSubjectColor(asesoria.subject.area)"></div>
+            <div class="color-bar" :class="getSubjectColor(asesoria.subject?.area)"></div>
             <div class="px-5 mt-4 w-full">
                 <div style="height: 50px">
-                    <p class="font-bold text-lg text-center">{{ asesoria.subject.name }}</p>
+                    <p class="font-bold text-lg text-center">{{ asesoria.subject?.name }}</p>
                 </div>
                 <div class="flex align-items-center">
                     <img src="/assets/ubicacion.svg" class="mr-2" alt="ubicacion icon" style="width: 1.4rem; height: 1.4rem;" />
@@ -120,8 +133,8 @@ const isMaeAssign = (asesoria) => {
                     </p>
                 </div>
                 <div v-if="asesoria && asesoria.maesAsignados" :class="{
-                    'flex justify-content-end': !isMaeAssign(asesoria) && userInfo.role !== 'admin',
-                    'flex flex-row justify-content-between': isMaeAssign(asesoria) || userInfo.role === 'admin',
+                    'flex justify-content-end': !isMaeAssign(asesoria) && userInfo?.role !== 'admin',
+                    'flex flex-row justify-content-between': isMaeAssign(asesoria) || userInfo?.role === 'admin',
                 }">
                     <div class="mt-2">
                         <Button  
@@ -135,7 +148,7 @@ const isMaeAssign = (asesoria) => {
                     </div>
                     <div class="flex justify-content-end mt-2">
                         <Button  
-                            v-if="isMaeAssign(asesoria) || userInfo.role === 'admin'" 
+                            v-if="isMaeAssign(asesoria) || userInfo?.role === 'admin'" 
                             label="Pasar asistencia" 
                             class="font-bold text-black text-md btn border-round-xl flex align-items-center" 
                             @click="handleAsistence(asesoria)"
@@ -165,9 +178,9 @@ const isMaeAssign = (asesoria) => {
         </template>
 
         <div class="dialog-content border-round-3xl boder-gray bg-white">
-            <div class="color-bar" :class="getSubjectColor(selectedAsesoria?.subject.area)"></div>
+            <div class="color-bar" :class="getSubjectColor(selectedAsesoria?.subject?.area)"></div>
             <div class="px-5 mt-4 w-full">
-                <p class="font-bold text-lg text-center">{{ selectedAsesoria?.subject.name }}</p>
+                <p class="font-bold text-lg text-center">{{ selectedAsesoria?.subject?.name }}</p>
             </div>
             <div class="px-5 mt-4 w-full">
                 <template v-if="selectedAsesoria?.maesAsignados && selectedAsesoria.maesAsignados.length > 0">
@@ -204,7 +217,7 @@ const isMaeAssign = (asesoria) => {
         class="custom-dialog md:w-6 w-10"
     >
         <template #header>
-            <h2 class="text-center text-2xl ">Pasar asistencia de {{selectedAsesoria.subject.name}}</h2>
+            <h2 class="text-center text-2xl ">Pasar asistencia de {{selectedAsesoria.subject?.name }}</h2>
         </template>
 
         <DataTable 
@@ -259,7 +272,7 @@ const isMaeAssign = (asesoria) => {
                             'dropdown-green': data.asistence === true,
                             'dropdown-red': data.asistence === false
                         }"
-                        @click="updateUserAsistence(selectedAsesoria?.id,data.uid)"
+                        @change="(event) => handleAsistenceChange(data.uid, event.value)"
                     >
                         <template #value="{ value }">
                             <div class="flex items-center gap-2">

@@ -72,17 +72,27 @@ const requireAnnouncementPermission = (hasPermission) => {
   return false;
 };
 
+// Anuncios legacy pueden traer subject como string (o sin subject/title); no deben tumbar la vista
+const getSubjectName = (subject) => (typeof subject === 'string' ? subject : subject?.name) || 'Sin materia';
+const getAnuncioTitle = (anuncio) => anuncio.type === 'Asesoría' ? getSubjectName(anuncio.subject) : (anuncio.title || 'Sin título');
+const truncateText = (text, max = 30) => text.length > max ? text.slice(0, max) + '...' : text;
+
 onMounted(async () => {
-  const [loadedSubjects, loadedAnnouncements, loadedMaes, currentUser] = await Promise.all([
+  const [loadedSubjects, loadedAnnouncements, loadedMaes, currentUser] = await Promise.allSettled([
     getSubjects(),
     getAnnouncementsEdit(),
     getMaes(),
     getCurrentUser()
   ]);
-  subjects.value = loadedSubjects;
-  anuncios.value = loadedAnnouncements;
-  maeInfo.value = loadedMaes;
-  currentUserRole.value = currentUser?.role ?? null;
+  const failed = [loadedSubjects, loadedAnnouncements, loadedMaes, currentUser].filter(r => r.status === 'rejected');
+  failed.forEach(r => console.error('Error al cargar gestión de anuncios:', r.reason));
+  if (failed.length > 0) {
+    toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo cargar toda la información. Recarga la página.', life: 5000 });
+  }
+  subjects.value = loadedSubjects.value ?? [];
+  anuncios.value = loadedAnnouncements.value ?? [];
+  maeInfo.value = loadedMaes.value ?? [];
+  currentUserRole.value = currentUser.value?.role ?? null;
 });
 
 const loadAsistance = async () => {
@@ -391,7 +401,10 @@ const handleEdit = async () => {
         previewUrl.value = announcement.imageUrl || null;
 
         if (announcement.type === 'Asesoría') {
-          subjectInput.value = announcement.subject;
+          // Si el subject legacy es string, intenta mapearlo al catálogo para que se pueda corregir al guardar
+          subjectInput.value = typeof announcement.subject === 'string'
+            ? (subjects.value.find(s => s.name === announcement.subject) || announcement.subject)
+            : (announcement.subject || '');
           startTime.value = convertTimestampToDate(announcement.startTime);
           endTime.value = convertTimestampToDate(announcement.endTime);
           dateTime.value = convertTimestampToDate(announcement.dateTime);
@@ -416,6 +429,10 @@ const handleEditAnn = async () => {
     if (!requireAnnouncementPermission(canEditAnnouncements.value)) return;
 
     if (selectedType.value === 'Asesoría') {
+        if (typeof subjectInput.value === 'string' && subjectInput.value) {
+            toast.add({ severity: 'error', summary: 'Error', detail: 'Acuerdate que debes seleccionar la materia.', life: 3000 });
+            return;
+        }
         if (!subjectInput.value || !dateTime.value || !startTime.value || !endTime.value) {
             toast.add({ severity: 'error', summary: 'Error', detail: 'Por favor completa todos los campos antes de guardar.', life: 3000 });
             return;
@@ -625,7 +642,7 @@ const handleEditAnn = async () => {
 
         <div class="flex flex-row justify-content-between">
           <p class="font-bold text-xl text-left mt-0 mb-1">
-            {{ anuncio.type === 'Asesoría' ? (anuncio.subject.name.length > 30 ? anuncio.subject.name.slice(0, 30) + '...' : anuncio.subject.name)  : (anuncio.title.length > 30 ? anuncio.title.slice(0, 30) + '...' : anuncio.title) }}
+            {{ truncateText(getAnuncioTitle(anuncio)) }}
           </p>
           <i @click="openInfoDialog(anuncio)" class="pi pi-info-circle mr-2 text-2xl cursor-pointer"   
           :class="anuncio.visible ? 'text-gray-500 ' : 'text-white'"></i>
@@ -733,7 +750,7 @@ const handleEditAnn = async () => {
                   Asesorías grupales
                 </h2>
               <p class="font-medium text-xl text-left ml-5">
-                Materia: {{ subjectInput.name }} 
+                Materia: {{ getSubjectName(subjectInput) }} 
               </p>
               <p class="font-medium text-xl text-left ml-5">
                 Fecha: {{ formatDate(dateTime) }}, {{ formatTime(startTime, false) }} - {{ formatTime(endTime, true) }}
@@ -880,7 +897,7 @@ const handleEditAnn = async () => {
               </span>
               <span v-else>
                 <InputText 
-                :value="selectedAnuncio?.subject.name" 
+                :value="getSubjectName(selectedAnuncio?.subject)" 
                 class="w-full text-lg" 
                 readonly 
               />
@@ -964,7 +981,7 @@ const handleEditAnn = async () => {
               </span>
               
               <span v-else>
-                <div v-if="selectedAnuncio?.maesAsignados.length > 0" class="mt-4">
+                <div v-if="selectedAnuncio?.maesAsignados?.length > 0" class="mt-4">
                   <p class="text-black text-xl font-semibold text-left  mt-4"><strong> MAEs y coordinador seleccionados:</strong></p>
                   <ul>
                     <li v-for="mae in selectedAnuncio?.maesAsignados" :key="mae.uid">{{ mae.name }}</li>
@@ -1155,7 +1172,7 @@ const handleEditAnn = async () => {
           v-if="canManageAnnouncements"
           v-model:visible="showDialogDelete" 
           modal  
-          :header="`¿Deseas eliminar esta asesoria ${selectedAnuncio?.title || selectedAnuncio?.subject.name}?`" 
+          :header="`¿Deseas eliminar esta asesoria ${selectedAnuncio?.title || getSubjectName(selectedAnuncio?.subject)}?`" 
           class="md:w-4"
         >
 

@@ -57,3 +57,6 @@ PROPUESTA_LEADERBOARD.md
 brag-output*/
 
 .CLAUDE
+
+# Config local de Claude Code
+.claude/launch.json

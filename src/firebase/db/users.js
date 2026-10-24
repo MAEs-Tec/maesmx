@@ -263,7 +263,7 @@ export async function getUsersWithActiveSession(getProfilePicture = false, optio
                 const querySnapshot = await getDocs(q);
 
                 if (!querySnapshot) {
-                    return null;
+                    return [];
                 }
 
                 const fiveHoursAgoTimestampSeconds = Math.floor(Date.now() / 1000) - 18000;
@@ -281,6 +281,7 @@ export async function getUsersWithActiveSession(getProfilePicture = false, optio
         );
     } catch (error) {
         console.error('Error retrieving users:', error);
+        return [];
     }
 };
 

@@ -9,7 +9,8 @@ import {
     doc, 
     getDoc,
     deleteDoc,
-    serverTimestamp
+    serverTimestamp,
+    runTransaction
 } from 'firebase/firestore';
 import { addAnnoucement } from "../img/users";
 import { 
@@ -18,6 +19,23 @@ import {
 import { invalidateCacheTags, withCache } from '../cache/cache';
 import { CACHE_TAGS, CACHE_TTL_MS, cacheKeys } from '../cache/config';
 import { POINTS_RULES } from "../../utils/PointsUtils";
+
+// createdAt puede ser Timestamp, Date o faltar en anuncios viejos; sin fecha van al inicio
+const createdAtMs = (announcement) => {
+    const createdAt = announcement?.createdAt;
+    if (!createdAt) return 0;
+    if (typeof createdAt.seconds === 'number') return createdAt.seconds * 1000;
+    const time = new Date(createdAt).getTime();
+    return Number.isNaN(time) ? 0 : time;
+};
+
+const sortByCreatedAt = (a, b) => createdAtMs(a) - createdAtMs(b);
+
+const toDateOrNull = (value) => {
+    if (!value) return null;
+    const date = typeof value.toDate === 'function' ? value.toDate() : new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+};
 
 async function invalidateAnnouncementCaches() {
     await invalidateCacheTags([CACHE_TAGS.ANNOUNCEMENTS, CACHE_TAGS.GROUP_ANNOUNCEMENTS]);
@@ -60,7 +78,7 @@ async function fetchAnnouncementsEditFresh() {
                 id: doc.id,
                 ...doc.data(),
             }))
-            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt )); 
+            .sort(sortByCreatedAt);
 
 
         return announcements;
@@ -101,11 +119,7 @@ async function fetchAnnouncementsFresh() {
                 console.log(announcement.visible)
                 return isVisible || isSpecial;
             })
-            .sort((a, b) => {
-                const dateA = a.createdAt.seconds ? new Date(a.createdAt.seconds * 1000) : new Date(a.createdAt);
-                const dateB = b.createdAt.seconds ? new Date(b.createdAt.seconds * 1000) : new Date(b.createdAt);
-                return dateA - dateB;
-            });
+            .sort(sortByCreatedAt);
             console.log(announcements)
         return announcements;
     } catch (error) {
@@ -133,12 +147,14 @@ async function fetchAnnouncementsGrupalesFresh() {
             .map(doc => ({
                 id: doc.id,
                 ...doc.data(),
-                dateTime: doc.data().dateTime.toDate(), 
+                dateTime: toDateOrNull(doc.data().dateTime), 
             }))
             .filter(ann => {
+                // Sin fecha válida no se puede mostrar como próxima asesoría
+                if (!ann.dateTime) return false;
                 return ann.dateTime >= now || ann.dateTime.toDateString() === now.toDateString();
             })
-            .sort((a, b) => a.createdAt.seconds - b.createdAt.seconds); // Ordenar por fecha de creación
+            .sort(sortByCreatedAt); // Ordenar por fecha de creación
 
         console.log(announcements);
         return announcements;
@@ -222,51 +238,60 @@ export async function processAsistence(announcementId) {
 }
 
 
-export async function updateUserAsistence(announcementId, userId) {
+// status explícito (true/false); si no se manda, alterna el valor actual
+export async function updateUserAsistence(announcementId, userId, status) {
     try {
         const announcementRef = doc(firestoreDB, 'announcements', announcementId);
 
-        const announcementSnapshot = await getDoc(announcementRef);
-        if (!announcementSnapshot.exists()) {
-            throw new Error(`El anuncio con ID ${announcementId} no existe.`);
-        }
+        // La transacción reclama pointsAwarded junto con la asistencia: si dos personas
+        // marcan al mismo tiempo o se reintenta, solo una otorga los puntos grupales.
+        const { newAsistenceStatus, maesToAward } = await runTransaction(firestoreDB, async (transaction) => {
+            const announcementSnapshot = await transaction.get(announcementRef);
+            if (!announcementSnapshot.exists()) {
+                throw new Error(`El anuncio con ID ${announcementId} no existe.`);
+            }
 
-        const announcementData = announcementSnapshot.data();
-        const currentAsistence = announcementData.asistence || {};
-        const maesAsignados = announcementData.maesAsignados || [];
+            const announcementData = announcementSnapshot.data();
+            const currentAsistence = announcementData.asistence || {};
+            const maesAsignados = announcementData.maesAsignados || [];
 
-        const newAsistenceStatus = !currentAsistence[userId];
-        const updatedAsistence = {
-            ...currentAsistence,
-            [userId]: newAsistenceStatus,
-        };
+            const newAsistenceStatus = typeof status === 'boolean' ? status : !currentAsistence[userId];
+            const updatedAsistence = {
+                ...currentAsistence,
+                [userId]: newAsistenceStatus,
+            };
 
-        const awardableMaes = maesAsignados.filter(mae => mae?.uid && mae.assigned !== false);
-        const shouldAwardGroupPoints = newAsistenceStatus && announcementData.pointsAwarded !== true;
-        const pointsUpdate = {};
-
-        if (shouldAwardGroupPoints) {
-            if (awardableMaes.length > 0) {
-                for (const mae of awardableMaes) {
-                    await updatePoints(mae.uid, POINTS_RULES.groupAdvisory);
-                    console.log(`Puntos de asesoría grupal para ${mae.name}: +${POINTS_RULES.groupAdvisory}`);
+            const awardableMaes = maesAsignados.filter(mae => mae?.uid && mae.assigned !== false);
+            const shouldAwardGroupPoints = newAsistenceStatus && announcementData.pointsAwarded !== true && awardableMaes.length > 0;
+            const pointsUpdate = shouldAwardGroupPoints
+                ? {
+                    pointsAwarded: true,
+                    pointsAwardedAt: serverTimestamp(),
+                    pointsAwardedTo: awardableMaes.map(mae => mae.uid)
                 }
+                : {};
 
-                pointsUpdate.pointsAwarded = true;
-                pointsUpdate.pointsAwardedAt = serverTimestamp();
-                pointsUpdate.pointsAwardedTo = awardableMaes.map(mae => mae.uid);
-            } else {
-                console.log('No hay MAEs asignados para asignar puntos.');
+            transaction.update(announcementRef, {
+                asistence: updatedAsistence,
+                ...pointsUpdate
+            });
+
+            return { newAsistenceStatus, maesToAward: shouldAwardGroupPoints ? awardableMaes : [] };
+        });
+
+        // Se otorgan después de reclamar pointsAwarded: un fallo aquí puede dejar puntos sin dar, nunca duplicados
+        for (const mae of maesToAward) {
+            try {
+                await updatePoints(mae.uid, POINTS_RULES.groupAdvisory);
+                console.log(`Puntos de asesoría grupal para ${mae.name}: +${POINTS_RULES.groupAdvisory}`);
+            } catch (pointsError) {
+                console.error(`No se pudieron otorgar los puntos grupales a ${mae.uid}:`, pointsError);
             }
         }
 
-        await updateDoc(announcementRef, {
-            asistence: updatedAsistence,
-            ...pointsUpdate
-        });
-
         await invalidateAnnouncementCaches();
         console.log(`Asistencia para el usuario ${userId} actualizada exitosamente a ${newAsistenceStatus}.`);
+        return newAsistenceStatus;
     } catch (error) {
         console.error('Error actualizando la asistencia del usuario:', error);
         throw error;
@@ -346,8 +371,8 @@ async function fetchAnnouncementsAllGrupalesFresh() {
         const announcements = querySnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data(),
-            dateTime: doc.data().dateTime.toDate(),
-        }));
+            dateTime: toDateOrNull(doc.data().dateTime),
+        })).filter(announcement => announcement.dateTime);
 
         const futureAnnouncements = announcements
             .filter(announcement => 

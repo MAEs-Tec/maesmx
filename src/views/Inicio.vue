@@ -22,7 +22,6 @@ const showDialogSession = ref(false);
 const location = ref('Biblioteca Piso 3');
 const router = useRouter(); 
 const showDialogAsesoria = ref(false);
-const showDialogSolicitar = ref(false);
 const ratingAsesoria = ref(null);
 const comentarioAsesoria = ref('');
 const materiaAsesoria = ref(null)
@@ -232,13 +231,13 @@ const guardarEvaluacion = async () => {
       </div>
 
       <div class="flex flex-column md:flex-row md:gap-4   w-full  ">
-        <!-- Las asesorias no se agendan: el boton solo explica como recibir una -->
+        <!-- Recibir asesoria lleva a publicar una solicitud a los MAEs en turno -->
         <Button
           class="p-button-help p-button-lg py-4 w-full md:w-4 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
           :style="{ background: 'linear-gradient(to right, #CC7722, #DAA520)' }"
-          @click="showDialogSolicitar = true"
+          @click="router.push('/solicitudes')"
         >
-            Agendar asesoría
+            Recibir asesoría
             <img src="/assets/calendarOutline.svg" class="ml-4" alt="calendar icon" style="width: 3.0rem; height: 3.0rem;" />
         </Button>
 
@@ -393,28 +392,6 @@ const guardarEvaluacion = async () => {
     <div class="flex justify-content-end gap-2">
       <Button type="button" label="Cerrar" severity="secondary" @click="showDialogAsesoria = false"></Button>
       <Button type="button" label="Confirmar registro" :disabled="!(materiaAsesoria !== null)" @click="saveAsesoria"></Button>
-    </div>
-  </Dialog>
-
-  <Dialog v-model:visible="showDialogSolicitar" modal header="Agendar asesoría" class="md:w-4">
-    
-    <p class="font-medium">
-      <b>¡Gracias por tu interés en recibir una asesoría con MAEs!</b><br>
-      Las asesorías se imparten en Espacio MAE en la Biblioteca Piso 3, y estamos disponibles de Lunes a Viernes de 9am a 6pm.<br>
-      <br>
-      <b>En esta misma página puedes consultar:</b><br>
-      - En "MAEs activos", los MAEs que están disponibles en este momento y las materias que imparten.<br>
-      - En "Horarios", los días y horas en que habrá MAEs para la materia que necesites.<br>
-      <br>
-      <span class="font-bold">Importante:</span><br>
-      Por el momento, las asesorías <b>no se agendan ni se apartan</b>.<br>
-      Para recibir una, solo necesitas acudir al Espacio MAE y acercarte con un MAE disponible en ese momento.<br>
-      <br>
-      <b>Gracias por tu comprensión.</b>
-    </p>
-
-    <div class="flex justify-content-end gap-2">
-      <Button type="button" label="Cerrar" severity="secondary" @click="showDialogSolicitar = false"></Button>
     </div>
   </Dialog>
 

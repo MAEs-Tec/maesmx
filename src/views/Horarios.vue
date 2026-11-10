@@ -162,7 +162,7 @@ function getDisplayedSubject(subjects) {
                 <div class="mae-activity-card card h-full p-4 border-round-3xl shadow-md cursor-pointer flex flex-column justify-between">
                     <div class="flex flex-column">
                         <span class="flex flex-row items-center">
-                            <img v-if="mae.profilePictureUrl" :src="mae.profilePictureUrl" alt="Foto de perfil"
+                            <img v-if="mae.profilePictureUrl" :src="mae.profilePictureUrl" alt="Foto de perfil" loading="lazy" decoding="async"
                             class="border-circle h-5rem w-5rem">
                             <img 
                                 v-else 

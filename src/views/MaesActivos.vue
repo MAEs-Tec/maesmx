@@ -286,7 +286,7 @@ const onMajorSelect = () => {
                         <!-- Contendio de card con info de MAE -->
                         <div class="flex flex-row items-center mt-2 ml-2 p-2">
                             <!-- Foto -->
-                            <img v-if="mae.profilePictureUrl" :src="mae.profilePictureUrl" alt="Foto de perfil" class="border-circle h-5rem w-5rem">
+                            <img v-if="mae.profilePictureUrl" :src="mae.profilePictureUrl" alt="Foto de perfil" loading="lazy" decoding="async" class="border-circle h-5rem w-5rem">
                             <Skeleton v-else shape="circle" size="5rem"></Skeleton>
                             <div class="flex flex-column justify-content-center pl-4 w-full">
                                 <span class="font-bold text-lg text-black-alpha-90 truncate mb-2" style="max-width: 65%; max-height: 38%;  overflow: hidden; white-space: nowrap; text-overflow: ellipsis">{{ mae.name }}</span>
@@ -336,7 +336,7 @@ const onMajorSelect = () => {
                         <div class="flex border-round-top-xl h-1rem w-full" v-if="mae.role === 'coordi'" style="background-color: #58AFCA;"></div>
                         <div class="flex border-round-top-xl bg-white h-1rem w-full" v-if="mae.role !== 'coordi' && mae.role !== 'admin'"></div>
                         <div class="flex flex-row items-center mt-2 ml-2 p-2">
-                            <img v-if="mae.profilePictureUrl" :src="mae.profilePictureUrl" alt="Foto de perfil" class="border-circle h-5rem w-5rem opacity-50">
+                            <img v-if="mae.profilePictureUrl" :src="mae.profilePictureUrl" alt="Foto de perfil" loading="lazy" decoding="async" class="border-circle h-5rem w-5rem opacity-50">
                             <Skeleton v-else shape="circle" size="5rem"></Skeleton>
                             <div class="flex flex-column justify-content-center pl-4 w-full">
                                 <span class="font-bold text-lg text-black-alpha-90 truncate mb-2" style="max-width: 65%; max-height: 38%;  overflow: hidden; white-space: nowrap; text-overflow: ellipsis">{{ mae.name }}</span>

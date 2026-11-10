@@ -3,6 +3,7 @@ import { initializeApp } from "firebase/app";
 import { firebaseStorage } from "../../main";
 import { invalidateCacheTags, withCache } from "../cache/cache";
 import { CACHE_TAGS, CACHE_TTL_MS, cacheKeys, profilePictureTag } from "../cache/config";
+import { compressImage } from "../../utils/imageCompress";
 
 const DEFAULT_PROFILE_PICTURE = 'https://randomuser.me/api/portraits/lego/5.jpg';
 
@@ -49,7 +50,8 @@ export const storage = getStorage(firebaseAppImage);
 export async function uploadFile(file, email) {
     try {
         const storageRef = ref(storage, `users/${email}/photo`);
-        await uploadBytes(storageRef, file);
+        const blob = await compressImage(file, { maxWidth: 320, maxHeight: 320, mode: 'cover', quality: 0.8 });
+        await uploadBytes(storageRef, blob, { contentType: blob.type || file.type, cacheControl: 'public, max-age=3600' });
         const url = await getDownloadURL(storageRef);
         await invalidateUserProfilePictureCache(email);
         return url;
@@ -62,7 +64,8 @@ export async function uploadFile(file, email) {
 export async function addAnnoucement(file, path) {
     try {
         const storageRef = ref(storage, path);
-        await uploadBytes(storageRef, file);
+        const blob = await compressImage(file, { maxWidth: 1280, maxHeight: 1280, mode: 'inside', quality: 0.8 });
+        await uploadBytes(storageRef, blob, { contentType: blob.type || file.type, cacheControl: 'public, max-age=31536000, immutable' });
         return await getDownloadURL(storageRef);
     } catch (error) {
         console.error('Error uploading file:', error);

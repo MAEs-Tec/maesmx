@@ -47,7 +47,7 @@ export async function saveAnnouncement(announcementData, selectedFile) {
         let imageUrl = '';
 
         if (selectedFile) {
-            const filePath = `announcements/${announcementData.type}/${selectedFile.name}`;
+            const filePath = `announcements/${announcementData.type}/${Date.now()}-${selectedFile.name}`;
             imageUrl = await addAnnoucement(selectedFile, filePath);
         }
         const docRef = await addDoc(collection(firestoreDB, 'announcements'), {

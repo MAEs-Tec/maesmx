@@ -417,7 +417,13 @@ export async function updateRatingBonusForMae(uid, referenceDate = new Date()) {
         const { start, end } = getCurrentSemesterRange(referenceDate);
         const startMs = start.getTime();
         const endMs = end.getTime();
-        const asesorias = await fetchAsesoriasByPeerInRangeFresh(uid, start, end);
+        let asesorias;
+        try {
+            asesorias = await fetchAsesoriasByPeerInRangeFresh(uid, start, end);
+        } catch (error) {
+            console.warn('Consulta por MAE falló; uso getAsesoriasByUid', error);
+            asesorias = await getAsesoriasByUid(uid, { forceRefresh: true, includeTests: true });
+        }
         const ratings = (asesorias ?? [])
             .filter(a => {
                 const dateMs = toMillis(a.date);

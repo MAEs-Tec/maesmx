@@ -257,7 +257,11 @@ const uploadProfilePicture = async () => {
   try {
     const url = await uploadFile(selectedFile.value, userInfo.value.email);
     await updateUserProfilePicture(userInfo.value.uid, url); 
-    maeInfo.value = await getUser(route.params.id); 
+    maeInfo.value = await getUser(route.params.id);
+    if (maeInfo.value?.profilePictureUrl) {
+      const sep = maeInfo.value.profilePictureUrl.includes('?') ? '&' : '?';
+      maeInfo.value = { ...maeInfo.value, profilePictureUrl: `${maeInfo.value.profilePictureUrl}${sep}v=${Date.now()}` };
+    }
     toast.add({ severity: 'success', summary: 'Foto actualizada', life: 3000 });
   } catch (error) {
     toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo actualizar la foto de perfil' });

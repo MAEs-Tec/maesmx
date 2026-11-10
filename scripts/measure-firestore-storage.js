@@ -158,20 +158,23 @@ async function main() {
         const docs = [];
         if (wantFull) {
             // Escaneo completo en stream para no cargar todo en memoria.
+            // Tope duro: se reserva el total antes de leer (el stream precarga lotes).
+            reserve(r.count);
             for await (const doc of r.query.stream()) {
-                reserve(1);
                 measure(doc, stats, exempt);
             }
+            reads -= r.count - stats.sampled;
         } else if (r.kind === 'root') {
             // Muestra aleatoria por ancla de ID; si no alcanza, completa desde el inicio.
             reserve(n);
             const first = await r.query.where(FieldPath.documentId(), '>=', randomAnchor()).orderBy(FieldPath.documentId()).limit(n).get();
             first.docs.forEach((d) => docs.push(d));
             if (docs.length < n) {
-                reserve(n - docs.length);
                 const rest = await r.query.orderBy(FieldPath.documentId()).limit(n - docs.length).get();
                 rest.docs.forEach((d) => docs.push(d));
             }
+            // Ya se reservaron n lecturas: devolver las que no se usaron (anclas altas).
+            reads -= n - docs.length;
             docs.forEach((d) => measure(d, stats, exempt));
         } else {
             // Grupos de subcolección: primeros n por ruta (no aleatorio).

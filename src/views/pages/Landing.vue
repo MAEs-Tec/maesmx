@@ -127,7 +127,7 @@ const goToAsesoria = async (asesoria) => {
                         </h1>
                     </div>
                     <div class="flex-grow flex items-end overflow-hidden">
-                        <img src="../../assets/img/maelanding.png" class="w-full h-full object-cover" />
+                        <img src="../../assets/img/maelanding.webp" class="w-full h-full object-cover" />
                     </div>
                 </div>
             </div>

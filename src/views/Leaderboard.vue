@@ -15,7 +15,7 @@ onMounted(async () => {
 
     // Cargar conteo de asesorías de cada usuario en paralelo
     const counts = await Promise.all(
-        users.value.map(u => getAsesoriasCountForUserInCurrentSemester(u.uid))
+        users.value.map(u => getAsesoriasCountForUserInCurrentSemester(u.uid, { bulk: true }))
     );
     const map = {};
     users.value.forEach((u, i) => { map[u.uid] = counts[i]; });

@@ -773,6 +773,11 @@ export async function updateUserAchievementBadge(uid, badgeId) {
         const userData = userDoc.data();
         const badges = userData.badges || [];
 
+        const target = badges.find((badge) => badge.id === badgeId);
+        if (!target || target.achieved === true) {
+            return; // sin cambios: no escribir ni invalidar cachés
+        }
+
         const updatedBadges = badges.map((badge) => {
             if (badge.id === badgeId) {
                 return { ...badge, achieved: true };

@@ -128,7 +128,7 @@ onMounted(async () => {
   try {
     const data = await getMaes();
     const counts = await Promise.all(
-      data.map(mae => getAsesoriasCountForUserInCurrentSemester(mae.uid))
+      data.map(mae => getAsesoriasCountForUserInCurrentSemester(mae.uid, { bulk: true }))
     );
     data.forEach((mae, i) => {
       mae.asesoriasCount = counts[i];

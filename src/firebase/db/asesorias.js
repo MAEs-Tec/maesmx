@@ -115,6 +115,17 @@ export async function addAsesoria(maeInfo, userInfo, subject, comment, rating) {
     return docRef.id;
 }
 
+async function fetchAsesoriasByPeerInRangeFresh(uid, start, end) {
+    const q = query(
+        collection(firestoreDB, "asesorias"),
+        where("peerInfo.uid", "==", uid),
+        where("date", ">=", Timestamp.fromDate(start)),
+        where("date", "<=", Timestamp.fromDate(end))
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
 export async function getAsesoriasCountForUserInCurrentSemester(userId, options = {}) {
     const { start, end } = getCurrentSemesterRange();
     const semesterKey = `${start.getFullYear()}-${start.getMonth() < 6 ? '01' : '02'}`;
@@ -128,7 +139,17 @@ export async function getAsesoriasCountForUserInCurrentSemester(userId, options 
             tags: [CACHE_TAGS.ASESORIAS]
         },
         async () => {
-            const asesorias = await getAsesorias(start, end, options);
+            let asesorias;
+            if (options.bulk === true) {
+                asesorias = await getAsesorias(start, end, options);
+            } else {
+                try {
+                    asesorias = await fetchAsesoriasByPeerInRangeFresh(userId, start, end);
+                } catch (error) {
+                    console.warn('Consulta por MAE falló; uso el barrido del semestre.', error);
+                    asesorias = await getAsesorias(start, end, options);
+                }
+            }
             return (asesorias ?? []).filter((doc) => {
                 const dateMs = timestampToMs(doc.date);
                 return (
@@ -315,7 +336,9 @@ export async function updateExperienceAsesorias(peerUid, userUid, subjectId, adv
         }
 
         const asesoriasRef = collection(firestoreDB, "asesorias");
-        const q = query(asesoriasRef, where("peerInfo.uid", "==", peerUid));
+        const q = query(asesoriasRef,
+            where("peerInfo.uid", "==", peerUid),
+            where("userInfo.uid", "==", userUid));
         const querySnapshot = await getDocs(q);
 
         const previousAdvisories = querySnapshot.docs
@@ -394,7 +417,7 @@ export async function updateRatingBonusForMae(uid, referenceDate = new Date()) {
         const { start, end } = getCurrentSemesterRange(referenceDate);
         const startMs = start.getTime();
         const endMs = end.getTime();
-        const asesorias = await getAsesoriasByUid(uid);
+        const asesorias = await fetchAsesoriasByPeerInRangeFresh(uid, start, end);
         const ratings = (asesorias ?? [])
             .filter(a => {
                 const dateMs = toMillis(a.date);

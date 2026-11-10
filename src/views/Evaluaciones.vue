@@ -52,7 +52,6 @@ const recargar = async () => {
 onMounted(async () => {
   userInfo.value = await getCurrentUser();
   revealedAt.value = await getEvaluationsRevealedAt();
-  clearedAt.value = await getEvaluationsClearedAt();
   await recargar();
   isLoading.value = false;
 });

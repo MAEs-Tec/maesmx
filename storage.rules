@@ -40,6 +40,16 @@ service firebase.storage {
         && email.lower() == request.auth.token.email.lower();
     }
 
+    match /maeteca/{resourceId}/{fileName} {
+      allow read: if signedIn();
+      allow create: if hasAnyRole(['admin', 'tec', 'coordi'])
+        && fileName.matches('.*\\.pdf$')
+        && request.resource.contentType == 'application/pdf'
+        && request.resource.size > 0
+        && request.resource.size < 10 * 1024 * 1024;
+      allow delete: if hasAnyRole(['admin', 'tec', 'coordi']);
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

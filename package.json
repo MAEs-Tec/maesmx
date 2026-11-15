@@ -10,6 +10,7 @@
     },
     "dependencies": {
         "chart.js": "3.3.2",
+        "exceljs": "^4.4.0",
         "file-saver": "^2.0.5",
         "firebase": "^10.14.1",
         "primeflex": "^3.3.1",

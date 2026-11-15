@@ -1,28 +1,27 @@
 <script setup>
-import { ref, computed, onMounted, reactive } from 'vue';
-import MultiSelect from 'primevue/multiselect';
+import { ref, computed, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
-import { normalize } from '@/utils/HorarioUtils';
 import { getSubjects } from '../firebase/db/subjects';
 import {
-    createSampleVideos,
-    addVideoToMaeteca,
     loadMaetecaVideos,
     canUserManageVideos,
     getVideoThumbnail,
     getVideoById,
     getVideoEmbedUrl,
-    AVAILABLE_TAG_OPTIONS,
+    getResourceType,
+    deleteMaetecaResource,
+    RESOURCE_TYPES,
     VIDEO_CAREERS,
     SEMESTERS,
     TYPES,
     // TAGS is the dropdown of simple {name,code}
     TAGS,
-    openVideo,
-    handleThumbnailKey,
     filterVideosByText
 } from '../firebase/db/maeteca';
 import { getCurrentUser } from '../firebase/db/users';
+import MaetecaResourceDialog from '@/components/maeteca/MaetecaResourceDialog.vue';
+import MaetecaBulkUpload from '@/components/maeteca/MaetecaBulkUpload.vue';
+import MaetecaPdfViewer from '@/components/maeteca/MaetecaPdfViewer.vue';
 
 // Datos de ejemplo para los dropdowns (importados desde la capa de datos)
 const selectedTag = ref();
@@ -40,79 +39,111 @@ const types = TYPES;
 // Colores alternos para bandas de cartas
 const bandColors = ['band--red', 'band--purple', 'band--green'];
 
-// Acción: crear videos de ejemplo en Firestore
 const toast = useToast();
-const loadingSamples = ref(false);
 const testingRead = ref(false);
 const currentUserRole = ref(null);
 const canManageVideos = computed(() => canUserManageVideos(currentUserRole.value));
 const videos = ref([]);
-// Materias para el AutoComplete del popup
+// Materias para el diálogo de recursos y la carga en masa
 const subjects = ref([]);
-const filteredSubjects = ref([]);
 // Buscador global movible
 const searchQuery = ref('');
 
-// Filtrado tipo MaesActivos: busca en título y descripción, normalizado
-const displayedVideos = computed(() => filterVideosByText(videos.value, searchQuery.value));
+// Filtro por tipo de recurso
+const typeFilter = ref('all');
+const typeFilterOptions = [{ name: 'Todos', code: 'all' }, ...RESOURCE_TYPES];
 
-// Video principal (intro) cargado desde documento 'intro-maeteca'
-const mainVideo = ref(null);
-const mainVideoEmbedUrl = computed(() => getVideoEmbedUrl(mainVideo.value) || null);
-
-const showAddVideoDialog = ref(false);
-const savingVideo = ref(false);
-const availableTagOptions = AVAILABLE_TAG_OPTIONS;
-
-const tagLabelMap = computed(() =>
-    (availableTagOptions || []).reduce((acc, option) => {
-        acc[option.value] = option.label;
-        return acc;
-    }, {})
+// Filtrado tipo MaesActivos: busca en título y descripción, normalizado, y por tipo
+const displayedVideos = computed(() =>
+    filterVideosByText(videos.value, searchQuery.value).filter((v) => typeFilter.value === 'all' || getResourceType(v) === typeFilter.value)
 );
 
-const videoForm = reactive({
-    link: '',
-    title: '',
-    subject: { name: 'General', code: 'general' },
-    career: { name: 'Todas', code: 'all' },
-    tags: []
-});
-const videoCareers = VIDEO_CAREERS;
+// Recurso principal (intro) cargado desde documento 'intro-maeteca'
+const mainVideo = ref(null);
+const mainVideoEmbedUrl = computed(() => (getResourceType(mainVideo.value) === 'pdf' ? null : getVideoEmbedUrl(mainVideo.value) || null));
 
-const isSubmitDisabled = computed(() => !videoForm.link.trim() || !videoForm.title.trim() || savingVideo.value);
+// Diálogo de crear/editar
+const showResourceDialog = ref(false);
+const editingResource = ref(null);
+const showBulkUpload = ref(false);
 
-const resetVideoForm = () => {
-    videoForm.link = '';
-    videoForm.title = '';
-    videoForm.subject = { name: 'General', code: 'general' };
-    videoForm.career = { name: 'Todas', code: 'all' };
-    videoForm.tags = [];
+// Menú de tres puntos
+const resourceMenu = ref(null);
+const menuTarget = ref(null);
+const resourceMenuItems = computed(() => [
+    { label: 'Editar', icon: 'pi pi-pencil', command: () => openEdit(menuTarget.value) },
+    { label: 'Eliminar', icon: 'pi pi-trash', disabled: menuTarget.value?.id === 'intro-maeteca', command: () => askDelete(menuTarget.value) }
+]);
+
+const openResourceMenu = (event, resource) => {
+    menuTarget.value = resource;
+    resourceMenu.value.toggle(event);
 };
 
 const handleOpenAddVideo = () => {
-    resetVideoForm();
-    showAddVideoDialog.value = true;
+    editingResource.value = null;
+    showResourceDialog.value = true;
 };
 
-const removeTag = (tag) => {
-    videoForm.tags = videoForm.tags.filter((item) => item !== tag);
+const openEdit = (resource) => {
+    editingResource.value = resource;
+    showResourceDialog.value = true;
 };
 
-// Sugerencias de materias para el AutoComplete
-const filterSubjects = (event) => {
-    const raw = event?.query ?? (typeof videoForm.subject === 'string' ? videoForm.subject : videoForm.subject?.name ?? '');
-    const query = normalize(raw || '');
-    filteredSubjects.value = subjects.value.filter((subject) => normalize(subject.name).includes(query));
+// Borrado
+const showDeleteDialog = ref(false);
+const deleteTarget = ref(null);
+const deleting = ref(false);
+
+const askDelete = (resource) => {
+    if (!resource) return;
+    deleteTarget.value = resource;
+    showDeleteDialog.value = true;
 };
 
-// Selecciona un video para mostrarlo en el reproductor principal
+const confirmDelete = async () => {
+    const target = deleteTarget.value;
+    if (!target) return;
+    const titulo = target.Titulo || 'Sin título';
+    try {
+        deleting.value = true;
+        const { fileDeleted } = await deleteMaetecaResource(target);
+        toast.add({ severity: 'success', summary: 'Recurso eliminado', detail: `Se eliminó "${titulo}".`, life: 3000 });
+        if (getResourceType(target) === 'pdf' && !fileDeleted) {
+            toast.add({ severity: 'warn', summary: 'Archivo pendiente', detail: 'Se borró el recurso, pero el PDF no se pudo borrar de Storage.', life: 5000 });
+        }
+        if (mainVideo.value?.id === target.id) {
+            mainVideo.value = (await getVideoById('intro-maeteca')) ?? null;
+        }
+        await loadVideos();
+        showDeleteDialog.value = false;
+        deleteTarget.value = null;
+    } catch (error) {
+        toast.add({ severity: 'error', summary: 'Error', detail: error?.message || 'No se pudo eliminar el recurso.', life: 4000 });
+    } finally {
+        deleting.value = false;
+    }
+};
+
+const onResourceSaved = async ({ id } = {}) => {
+    await loadVideos();
+    if (id && mainVideo.value?.id === id) {
+        const fresh = videos.value.find((v) => v.id === id) || (await getVideoById(id));
+        if (fresh) mainVideo.value = fresh;
+    }
+};
+
+const onBulkUploaded = async () => {
+    await loadVideos();
+};
+
+// Selecciona un recurso para mostrarlo en el área principal
 const selectMainVideo = (video) => {
     if (!video) return;
     mainVideo.value = video;
-    // Llevar el viewport al reproductor principal
+    // Llevar el viewport al área principal
     try {
-        const el = document.querySelector('.video-wrapper');
+        const el = document.querySelector('.maeteca-main');
         if (el && typeof el.scrollIntoView === 'function') {
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
@@ -122,48 +153,19 @@ const selectMainVideo = (video) => {
     }
 };
 
-const onSubmitVideo = async () => {
-    if (isSubmitDisabled.value) {
-        toast.add({ severity: 'warn', summary: 'Formulario incompleto', detail: 'Completa la información obligatoria.', life: 3000 });
-        return;
-    }
-
-    try {
-        savingVideo.value = true;
-        await addVideoToMaeteca({
-            Video: videoForm.link.trim(),
-            Titulo: videoForm.title.trim(),
-            Materia: videoForm.subject?.code ?? null,
-            Carrera: videoForm.career?.code ?? null,
-            Relacionado: [...videoForm.tags],
-            Informacion: ''
-        });
-        toast.add({ severity: 'success', summary: 'Video agregado', detail: 'El video se agregó correctamente.', life: 3000 });
-        showAddVideoDialog.value = false;
-        resetVideoForm();
-        await loadVideos();
-    } catch (error) {
-        const msg = error?.message || 'No se pudo agregar el video';
-        toast.add({ severity: 'error', summary: 'Error', detail: msg, life: 4000 });
-    } finally {
-        savingVideo.value = false;
-    }
-};
-
 const loadVideos = async ({ showToast = false } = {}) => {
     try {
         testingRead.value = true;
-    videos.value = await loadMaetecaVideos();
+        videos.value = await loadMaetecaVideos();
         if (showToast) {
             const count = videos.value.length;
             toast.add({
                 severity: 'info',
                 summary: 'Lectura completada',
-                detail: `Se encontraron ${count} videos en la Maeteca.`,
+                detail: `Se encontraron ${count} recursos en la Maeteca.`,
                 life: 4000
             });
         }
-        console.log('Videos obtenidos:', videos.value);
     } catch (error) {
         const msg = error?.message || 'No se pudieron leer los videos';
         if (showToast) {
@@ -183,11 +185,11 @@ onMounted(async () => {
         console.error('Error fetching current user for Maeteca:', error);
         currentUserRole.value = null;
     }
-    // Cargar materias para el AutoComplete del popup
+    // Cargar materias para el diálogo de recursos
     try {
-        subjects.value = await getSubjects();
+        subjects.value = (await getSubjects()) ?? [];
     } catch (e) {
-        console.error('Error cargando materias para AutoComplete:', e);
+        console.error('Error cargando materias:', e);
         subjects.value = [];
     }
     // Cargar video intro desde Firestore
@@ -203,218 +205,103 @@ onMounted(async () => {
     await loadIntroVideo();
     await loadVideos();
 });
-
-const onCreateSamples = async () => {
-    if (!canManageVideos.value) {
-        toast.add({ severity: 'warn', summary: 'Permiso requerido', detail: 'Tu rol no permite cargar videos en la Maeteca.', life: 4000 });
-        return;
-    }
-    try {
-        loadingSamples.value = true;
-        await createSampleVideos();
-        toast.add({ severity: 'success', summary: 'Éxito', detail: 'Videos de ejemplo creados', life: 3000 });
-        await loadVideos();
-    } catch (e) {
-        const msg = e?.message || 'No se pudieron crear los videos de ejemplo';
-        toast.add({ severity: 'error', summary: 'Error', detail: msg, life: 4000 });
-    } finally {
-        loadingSamples.value = false;
-    }
-};
-
-const onTestRead = async () => {
-    await loadVideos({ showToast: true });
-};
-
-function youtubeLink(url){
-    const youtRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/;
-    return youtRegex.test(url);
-}
-
-//Para el preview del video al agregar el link
-function lookPreview(){
-    const url = document.getElementById('video-link').value;
-    if (youtubeLink(url)){
-        //Show preview del video
-        //Mas regex, nunca pense que serviría de algo
-        const videoIdMatch = url.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/);
-        if(videoIdMatch){
-            const videoid = videoIdMatch[1];
-            document.getElementById('preview').innerHTML = `<iframe width="560" height="315" src="https://www.youtube.com/embed/${videoid}" 
-            frameborder="0" allowfullscreen></iframe>`;
-        }else{
-            document.getElementById('preview').innerText = "No se pudo extraer el ID del video.";
-        }
-    }else{
-        document.getElementById('preview').innerText = "¡Solo se permiten links de YouTube!";
-    }
-}
-
 </script>
 
 <template>
     <div class="grid">
         <div class="col-12">
-            
+
                 <!-- Título y Buscador -->
                 <div class="flex justify-content-between flex-column sm:flex-row align-items-start sm:align-items-center mb-5 header-container">
                     <h1 class="text-black text-6xl font-bold mb-2 text-center sm:text-left">Maeteca</h1>
                     <div class="flex align-items-center mt-3 sm:mt-0">
                         <Button
                             v-if="canManageVideos"
+                            icon="pi pi-upload"
+                            class="p-button-rounded mr-2 custom-add-button cruz p-button-lg"
+                            style="font-size: 2rem;"
+                            aria-label="Carga en masa de videos"
+                            v-tooltip.bottom="'Carga en masa de videos'"
+                            @click="showBulkUpload = true"
+                        />
+                        <Button
+                            v-if="canManageVideos"
                             icon="pi pi-plus"
                             class="p-button-rounded mr-2 custom-add-button cruz p-button-lg"
                             style="font-size: 2rem;"
+                            aria-label="Agregar recurso"
+                            v-tooltip.bottom="'Agregar recurso'"
                             @click="handleOpenAddVideo"
                         />
-                        <!-- Botón temporal para probar carga de videos de ejemplo -->
-                        <!-- <Button
-                            v-if="canManageVideos"
-                            label="Cargar ejemplos"
-                            icon="pi pi-database"
-                            class="ml-2"
-                            @click="onCreateSamples"
-                            :disabled="loadingSamples"
-                        /> -->
-                        <!-- <Button
-                            label="Probar lectura"
-                            icon="pi pi-eye"
-                            class="ml-2"
-                            @click="onTestRead"
-                            :disabled="testingRead"
-                        /> -->
                         <!-- buscador movido abajo junto a los filtros -->
                     </div>
                 </div>
 
-                <!-- pop up para agregar video -->
-                <Dialog
-                    v-model:visible="showAddVideoDialog"
-                    modal 
-                    class="add-video-dialog md:w-4"
-                    dismissableMask
-                    :closable="!savingVideo"
-                    @hide="resetVideoForm"
-                >
-                    <template #header>
-                        <div class="dialog-header">
-                            <h2>Agregar video</h2>
-                        </div>
-                    </template>
-                    <div class="dialog-content">
-                        <div class="field-group">
-                            <label for="video-link">Link</label>
-                            <div class="input-with-icon">
-                                <!-- <i class="pi pi-info-circle"></i> -->
-                                <InputText
-                                    id="video-link"
-                                    v-model="videoForm.link"
-                                    placeholder="youtube.com/maeteca/como-usar"
-                                    class="w-full"
-                                />
-                                <Button type="button" class="p-button-text" @click="lookPreview"><i class="pi pi-info-circle"></i></Button>
+                <template v-if="canManageVideos">
+                    <MaetecaResourceDialog
+                        v-model:visible="showResourceDialog"
+                        :resource="editingResource"
+                        :subjects="subjects"
+                        @saved="onResourceSaved"
+                    />
+                    <MaetecaBulkUpload
+                        v-model:visible="showBulkUpload"
+                        :subjects="subjects"
+                        :existing-videos="videos"
+                        @uploaded="onBulkUploaded"
+                    />
+                    <Menu ref="resourceMenu" :model="resourceMenuItems" popup />
+
+                    <!-- Confirmación de borrado -->
+                    <Dialog
+                        v-model:visible="showDeleteDialog"
+                        modal
+                        class="add-video-dialog md:w-4"
+                        :dismissableMask="!deleting"
+                        :closeOnEscape="!deleting"
+                        :closable="!deleting"
+                    >
+                        <template #header>
+                            <div class="dialog-header">
+                                <h2>{{ getResourceType(deleteTarget) === 'pdf' ? '¿Estás seguro que deseas eliminar este recurso?' : '¿Estás seguro que deseas eliminar este video?' }}</h2>
                             </div>
-                        </div>
-                        <div id="preview"></div>
-                        <div class="field-group">
-                            <label for="video-title">Nombre del video</label>
-                            <InputText
-                                id="video-title"
-                                v-model="videoForm.title"
-                                placeholder="¿Cómo usar?"
-                                class="w-full"
-                            />
-                        </div>
-                        <div class="field-row">
-                            <div class="field-group">
-                                <label for="video-subject">Materia</label>
-                                <AutoComplete
-                                    id="video-subject"
-                                    class="w-full"
-                                    v-model="videoForm.subject"
-                                    :suggestions="filteredSubjects"
-                                    @complete="filterSubjects"
-                                    field="name"
-                                    dropdown
-                                    :forceSelection="false"
-                                    placeholder="Buscar materia..."
-                                />
+                        </template>
+                        <p><strong>{{ deleteTarget?.Titulo || 'Sin título' }}</strong></p>
+                        <p class="text-color-secondary">Esta acción no se puede deshacer.</p>
+                        <template #footer>
+                            <div class="flex justify-content-end gap-2">
+                                <Button label="Cancelar" severity="secondary" :disabled="deleting" @click="showDeleteDialog = false" />
+                                <Button label="Eliminar" severity="danger" icon="pi pi-trash" :loading="deleting" @click="confirmDelete" />
                             </div>
-                            <div class="field-group">
-                                <label for="video-career">Carrera</label>
-                                <Dropdown
-                                    id="video-career"
-                                    v-model="videoForm.career"
-                                    :options="videoCareers"
-                                    optionLabel="name"
-                                    placeholder="Todas"
-                                    class="w-full"
-                                />
-                            </div>
-                        </div>
-                        <div class="field-group">
-                            <label>Etiquetas</label>
-                            <div class="tag-collection" v-if="videoForm.tags.length">
-                                <span
-                                    v-for="tag in videoForm.tags"
-                                    :key="tag"
-                                    class="tag-pill"
-                                >
-                                    <span>{{ tagLabelMap[tag] || `#${tag}` }}</span>
-                                    <button type="button" @click="removeTag(tag)" aria-label="Eliminar etiqueta">
-                                        <i class="pi pi-times"></i>
-                                    </button>
-                                </span>
-                            </div>
-                            <MultiSelect
-                                v-model="videoForm.tags"
-                                :options="availableTagOptions"
-                                optionLabel="label"
-                                optionValue="value"
-                                filter
-                                filterPlaceholder="Buscar etiqueta"
-                                placeholder="Selecciona etiquetas"
-                                :class="['w-full tag-multiselect', { 'tag-multiselect--has-selection': videoForm.tags.length }]"
-                            />
-                        </div>
-                    </div>
-                    <template #footer>
-                        <div class="flex justify-content-end gap-2">
-                            <Button
-                                label="Cancelar"
-                                severity="secondary"
-                                @click="showAddVideoDialog = false"
-                                :disabled="savingVideo"
-                            />
-                            <Button
-                                type="button"
-                                label="Agregar"
-                                :loading="savingVideo"
-                                @click="onSubmitVideo"
-                                :disabled="isSubmitDisabled"
-                            />
-                        </div>
-                    </template>
-                </Dialog>
+                        </template>
+                    </Dialog>
+                </template>
 
                 <!-- Contenido Principal -->
                 <div class="flex flex-column xl:flex-row align-items-stretch gap-4 mb-6">
                     <!-- Card Grande de Video -->
                     <div class="flex-1">
-                        <div class="video-wrapper">
-                            <iframe
-                                v-if="mainVideoEmbedUrl"
-                                :src="mainVideoEmbedUrl"
-                                width="560"
-                                height="315"
-                                title="YouTube video player"
-                                frameborder="0"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                referrerpolicy="strict-origin-when-cross-origin"
-                                allowfullscreen
-                            ></iframe>
-                            <div v-else class="video-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;">
-                                <p>No hay video introductorio.</p>
+                        <div class="maeteca-main">
+                            <MaetecaPdfViewer
+                                v-if="getResourceType(mainVideo) === 'pdf' && mainVideo.Archivo"
+                                :url="mainVideo.Archivo"
+                                :title="mainVideo.Titulo || ''"
+                            />
+                            <div v-else class="video-wrapper">
+                                <iframe
+                                    v-if="mainVideoEmbedUrl"
+                                    :src="mainVideoEmbedUrl"
+                                    width="560"
+                                    height="315"
+                                    title="YouTube video player"
+                                    frameborder="0"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                    referrerpolicy="strict-origin-when-cross-origin"
+                                    allowfullscreen
+                                ></iframe>
+                                <div v-else class="video-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;">
+                                    <p>{{ getResourceType(mainVideo) === 'pdf' ? 'Este PDF no tiene archivo.' : mainVideo?.Video ? 'El link de este video no es válido.' : 'No hay video introductorio.' }}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -423,7 +310,13 @@ function lookPreview(){
                     <div class="w-full xl:w-25rem">
                         <div class="mae-card mae-card-info flex flex-column h-full w-full">
                             <div class="mae-card__band band--info flex-none flex align-items-center justify-content-end pr-2">
-                                <Button icon="pi pi-ellipsis-h" class="p-button-text p-button-rounded mae-card__menu-inline" />
+                                <Button
+                                    v-if="canManageVideos && mainVideo"
+                                    icon="pi pi-ellipsis-h"
+                                    class="p-button-text p-button-rounded mae-card__menu-inline"
+                                    aria-label="Opciones del recurso"
+                                    @click="openResourceMenu($event, mainVideo)"
+                                />
                             </div>
                             <div class="mae-card__body flex-1 flex flex-column">
                                 <div class="flex-1">
@@ -458,6 +351,14 @@ function lookPreview(){
                                 <i class="pi pi-search" />
                                 <InputText v-model="searchQuery" placeholder="Buscar" class="custom-search-input" />
                             </span>
+                            <Dropdown
+                                v-model="typeFilter"
+                                :options="typeFilterOptions"
+                                optionLabel="name"
+                                optionValue="code"
+                                class="custom-dropdown w-full md:w-10rem"
+                                aria-label="Filtrar por tipo"
+                            />
                             <!-- filtros ocultos temporalmente
                             <div class="flex align-items-center gap-2 mt-3 sm:mt-0">
                                 <Dropdown v-model="selectedTag" :options="tags" optionLabel="name" placeholder="Etiqueta" class="w-full md:w-10rem custom-dropdown" />
@@ -477,10 +378,28 @@ function lookPreview(){
                             class="mae-card"
                         >
                             <div :class="['mae-card__band', bandColors[index % bandColors.length]]"></div>
-                            <Button icon="pi pi-ellipsis-h" class="p-button-text p-button-rounded mae-card__menu" />
+                            <Button
+                                v-if="canManageVideos"
+                                icon="pi pi-ellipsis-h"
+                                class="p-button-text p-button-rounded mae-card__menu"
+                                aria-label="Opciones del recurso"
+                                @click="openResourceMenu($event, video)"
+                            />
                             <div class="mae-card__body">
                                 <div
-                                    v-if="getVideoThumbnail(video)"
+                                    v-if="getResourceType(video) === 'pdf'"
+                                    class="mae-card__thumbnail mae-card__thumbnail--pdf"
+                                    role="button"
+                                    tabindex="0"
+                                    @click="selectMainVideo(video)"
+                                    @keyup.enter="selectMainVideo(video)"
+                                    @keyup.space="selectMainVideo(video)"
+                                    :aria-label="`Ver ${video.Titulo || 'PDF'}`"
+                                >
+                                    <span class="mae-card__pdf-icon"><i class="pi pi-file-pdf"></i></span>
+                                </div>
+                                <div
+                                    v-else-if="getVideoThumbnail(video)"
                                     class="mae-card__thumbnail"
                                     role="button"
                                     tabindex="0"
@@ -498,7 +417,7 @@ function lookPreview(){
                                         <i class="pi pi-play"></i>
                                     </span>
                                 </div>
-                                <div v-else-if="video.Video" class="mae-card__actions">
+                                <div v-else-if="video.Video && getVideoEmbedUrl(video)" class="mae-card__actions">
                                     <Button
                                         label="Ver video"
                                         icon="pi pi-play"
@@ -506,9 +425,9 @@ function lookPreview(){
                                         @click="selectMainVideo(video)"
                                     />
                                 </div>
-                                <h3 class="mae-card__title">{{ video.Titulo || 'Video sin título' }}</h3>
+                                <h3 class="mae-card__title">{{ video.Titulo || (getResourceType(video) === 'pdf' ? 'PDF sin título' : 'Video sin título') }}</h3>
                                 <p class="mae-card__description">
-                                    {{ video.Informacion || 'Este video no tiene descripción disponible.' }}
+                                    {{ video.Informacion || (getResourceType(video) === 'pdf' ? 'Este PDF no tiene descripción disponible.' : 'Este video no tiene descripción disponible.') }}
                                 </p>
                                 <div class="mae-card__tags" v-if="Array.isArray(video.Relacionado) && video.Relacionado.length">
                                     <Tag
@@ -523,10 +442,10 @@ function lookPreview(){
                     </div>
                     <div v-else class="mae-empty-state">
                         <i class="pi pi-info-circle"></i>
-                        <p>No se encontraron videos en la Maeteca.</p>
+                        <p>No se encontraron recursos en la Maeteca.</p>
                     </div>
                 </div>
-            
+
         </div>
     </div>
 </template>
@@ -748,6 +667,23 @@ function lookPreview(){
     background: var(--surface-card) !important;
 }
 
+
+/* Miniatura de PDF: sin imagen, ícono centrado */
+.mae-card__thumbnail--pdf {
+    background: var(--surface-ground);
+}
+
+.mae-card__pdf-icon {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+    color: var(--text-color-secondary);
+}
+
+/* Estilos del diálogo de confirmación de borrado */
 :deep(.add-video-dialog) {
     width: 420px;
     max-width: 95vw;
@@ -773,195 +709,13 @@ function lookPreview(){
 }
 
 .dialog-header h2 {
-    font-size: 1.75rem;
+    font-size: 1.25rem;
     font-weight: 700;
     color: #2d2d30;
     margin: 0;
 }
 
-.dialog-content {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-    margin-top: 1rem;
-}
-
-.field-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.field-group label {
-    font-weight: 600;
-    color: var(--text-color, #3b3b3e);
-    font-size: 1rem;
-}
-
-.field-row {
-    display: flex;
-    gap: 1rem;
-}
-
-.field-row .field-group {
-    flex: 1;
-}
-
-.input-with-icon {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.input-with-icon .pi {
-    position: absolute;
-    left: 1rem;
-    color: #637292;
-    font-size: 1.15rem;
-}
-
-.input-with-icon .p-inputtext {
-    padding-left: 2.75rem;
-    height: 3.25rem;
-    border-radius: 18px;
-    border: 2px solid var(--surface-border, #d0d7eb);
-    background: var(--surface-card);
-}
-
-.field-group .p-inputtext {
-    height: 3.25rem;
-    border-radius: 18px;
-    border: 2px solid var(--surface-border, #d0d7eb);
-    background: var(--surface-card);
-}
-
-.field-group :deep(.p-dropdown) {
-    height: 3.25rem;
-    border-radius: 18px;
-    border: 2px solid var(--surface-border, #d0d7eb);
-    background: var(--surface-card);
-}
-
-/* Estilo del AutoComplete para que coincida con los otros campos y la flecha quede dentro sin fondo azul */
-.field-group :deep(.p-autocomplete) {
-    width: 100%;
-    position: relative;
-}
-.field-group :deep(.p-autocomplete .p-inputtext) {
-    height: 3.25rem;
-    background: var(--surface-card);
-    color: var(--text-color, #3b3b3e);
-    border: 2px solid var(--surface-border, #d0d7eb);
-    border-radius: 18px;
-    padding-right: 2.75rem; /* espacio para la flecha dentro del campo */
-}
-.field-group :deep(.p-autocomplete .p-autocomplete-dropdown) {
-    position: absolute;
-    right: 0.5rem;
-    top: 50%;
-    transform: translateY(-50%);
-    background: transparent !important; /* sin fondo azul */
-    border: none !important;
-    box-shadow: none !important;
-    color: #637292;
-    width: 2.25rem;
-    height: 2.25rem;
-}
-.field-group :deep(.p-autocomplete .p-autocomplete-dropdown:hover),
-.field-group :deep(.p-autocomplete .p-autocomplete-dropdown:focus) {
-    background: transparent !important;
-    box-shadow: none !important;
-}
-
-.tag-collection {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
-}
-
-.tag-pill {
-    background: linear-gradient(90deg, #4466A7 0%, #51A3AC 100%);
-    color: #fff;
-    border-radius: 999px;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.9rem;
-    font-weight: 600;
-    font-size: 0.95rem;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-}
-
-.tag-pill button {
-    background: transparent;
-    border: none;
-    color: inherit;
-    cursor: pointer;
-    padding: 0;
-    display: flex;
-    align-items: center;
-}
-
-.tag-multiselect :deep(.p-multiselect) {
-    border-radius: 18px;
-    border: 2px solid var(--surface-border, #d0d7eb);
-    min-height: 3rem;
-    background: var(--surface-card);
-}
-
-.tag-multiselect :deep(.p-multiselect-label) {
-    padding: 0.75rem 1rem;
-    min-height: 3rem;
-    display: flex;
-    align-items: center;
-    color: #637292;
-    caret-color: #637292;
-}
-
-.tag-multiselect :deep(.p-multiselect-token) {
-    display: none;
-}
-
-.tag-multiselect--has-selection :deep(.p-multiselect-label) {
-    color: transparent;
-    caret-color: #637292;
-}
-
-.dialog-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-}
-
-.dialog-footer .p-button-text {
-    align-items: center;
-    color: #5f6064;
-    font-weight: 600;
-}
-
-.add-video-submit {
-    background: linear-gradient(90deg, #4466A7 0%, #51A3AC 100%) !important;
-    border: none !important;
-    color: #fff !important;
-    font-weight: 700 !important;
-    padding: 0.75rem 2.5rem !important;
-    border-radius: 18px !important;
-    box-shadow: 0 8px 20px rgba(68, 102, 167, 0.35) !important;
-}
-
-.add-video-submit:disabled {
-    filter: grayscale(0.4);
-    cursor: not-allowed;
-    box-shadow: none !important;
-}
-
 @media (max-width: 640px) {
-    .field-row {
-        flex-direction: column;
-    }
-
     :deep(.add-video-dialog) {
         width: 100%;
     }

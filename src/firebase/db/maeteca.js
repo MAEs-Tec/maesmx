@@ -11,13 +11,21 @@ export function filterVideosByText(videos, text) {
         return title.includes(query) || info.includes(query);
     });
 }
-import { firestoreDB } from "../../main";
+import { firestoreDB, firebaseStorage } from "../../main";
 import {
     getDocs,
     addDoc,
     collection,
-    serverTimestamp
+    serverTimestamp,
+    doc,
+    setDoc,
+    updateDoc,
+    deleteDoc,
+    writeBatch
 } from 'firebase/firestore';
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { extractYoutubeId, validatePdfFile, toSafePdfFileName, MAX_IMPORT_ROWS, MAX_TITLE_LENGTH } from '../../utils/maetecaImport.js';
+export { extractYoutubeId } from '../../utils/maetecaImport.js';
 import { getCurrentUser } from './users';
 import { invalidateCacheTags, withCache } from '../cache/cache';
 import { CACHE_TAGS, CACHE_TTL_MS, cacheKeys } from '../cache/config';
@@ -26,8 +34,7 @@ export const VIDEO_MANAGER_ROLES = ['admin', 'tec', 'coordi'];
 
 function assertVideoPermissions(user) {
     if (!VIDEO_MANAGER_ROLES.includes(user?.role)) {
-        const role = user?.role ?? 'unknown';
-        throw new Error(`Insufficient permissions for role '${role}' to manage Maeteca videos`);
+        throw new Error('Tu rol no permite administrar la Maeteca.');
     }
 }
 
@@ -55,8 +62,12 @@ export async function addVideoToMaeteca(videoData, { invalidate = true } = {}) {
 
         assertVideoPermissions(user);
 
+        if (!extractYoutubeId(videoData?.Video)) throw new Error('El link no es de YouTube.');
+        if (!String(videoData?.Titulo ?? '').trim()) throw new Error('Falta el nombre del video.');
+
         const payload = {
             ...videoData,
+            Tipo: 'video',
             createdBy: { uid: user.uid, role: user.role },
             createdAt: serverTimestamp()
         };
@@ -140,19 +151,166 @@ export const TYPES = [
     { name: 'Libro', code: 'BOOK' }
 ];
 
-// Extrae el id de YouTube desde varias formas de URL
-export function extractYoutubeId(url) {
-    if (!url || typeof url !== 'string') return null;
-    const patterns = [
-        /youtube\.com\/watch\?v=([^&]+)/,
-        /youtube\.com\/embed\/([^?]+)/,
-        /youtu\.be\/([^?]+)/
-    ];
-    for (const p of patterns) {
-        const m = url.match(p);
-        if (m?.[1]) return m[1];
+export const RESOURCE_TYPES = [
+    { name: 'Video', code: 'video' },
+    { name: 'PDF', code: 'pdf' }
+];
+
+export function getResourceType(resource) {
+    return resource?.Tipo === 'pdf' ? 'pdf' : 'video';
+}
+
+function validTitle(value) {
+    const t = String(value ?? '').trim();
+    return t.length > 0 && t.length <= MAX_TITLE_LENGTH ? t : null;
+}
+
+async function requireManager() {
+    const user = await getCurrentUser();
+    if (!user) throw new Error('No authenticated user for write');
+    assertVideoPermissions(user);
+    return user;
+}
+
+export async function addVideosBulk(items) {
+    const user = await requireManager();
+    if (!Array.isArray(items) || items.length === 0) throw new Error('No hay videos para subir.');
+    if (items.length > MAX_IMPORT_ROWS) throw new Error(`Máximo ${MAX_IMPORT_ROWS} videos por carga.`);
+
+    const payloads = items.map((item, i) => {
+        if (!extractYoutubeId(item?.Video)) throw new Error(`Elemento ${i + 1}: El link no es de YouTube.`);
+        const titulo = validTitle(item?.Titulo);
+        if (!titulo) throw new Error(`Elemento ${i + 1}: el nombre del video es obligatorio y de máximo ${MAX_TITLE_LENGTH} caracteres.`);
+        return {
+            Tipo: 'video',
+            Video: item.Video,
+            Titulo: titulo,
+            Materia: item.Materia ?? 'general',
+            Carrera: item.Carrera ?? 'all',
+            Relacionado: Array.isArray(item.Relacionado) ? [...item.Relacionado] : [],
+            Informacion: item.Informacion ?? '',
+            createdBy: { uid: user.uid, role: user.role },
+            createdAt: serverTimestamp()
+        };
+    });
+
+    let created = 0;
+    try {
+        for (let i = 0; i < payloads.length; i += 400) {
+            const chunk = payloads.slice(i, i + 400);
+            const batch = writeBatch(firestoreDB);
+            for (const payload of chunk) {
+                batch.set(doc(collection(firestoreDB, 'videos')), payload);
+            }
+            await batch.commit();
+            created += chunk.length;
+        }
+    } catch (error) {
+        const wrapped = new Error(`Se subieron ${created} de ${items.length} videos antes del error: ${error.message}`);
+        wrapped.created = created;
+        throw wrapped;
+    } finally {
+        if (created > 0) await invalidateVideoCaches();
     }
-    return null;
+    return { created };
+}
+
+export async function addPdfToMaeteca({ file, Titulo, Materia, Carrera, Relacionado, Informacion } = {}) {
+    const user = await requireManager();
+    const fileError = validatePdfFile(file);
+    if (fileError) throw new Error(fileError);
+    const titulo = validTitle(Titulo);
+    if (!titulo) throw new Error(`El nombre es obligatorio y de máximo ${MAX_TITLE_LENGTH} caracteres.`);
+
+    const docRef = doc(collection(firestoreDB, 'videos'));
+    const safeName = toSafePdfFileName(file.name);
+    const path = `maeteca/${docRef.id}/${safeName}`;
+    const fileRef = storageRef(firebaseStorage, path);
+
+    await uploadBytes(fileRef, file, {
+        contentType: 'application/pdf',
+        contentDisposition: `inline; filename="${safeName}"`,
+        cacheControl: 'public, max-age=3600'
+    });
+    try {
+        const url = await getDownloadURL(fileRef);
+        await setDoc(docRef, {
+            Tipo: 'pdf',
+            Archivo: url,
+            ArchivoPath: path,
+            ArchivoNombre: file.name,
+            Titulo: titulo,
+            Informacion: Informacion ?? '',
+            Materia: Materia ?? 'general',
+            Carrera: Carrera ?? 'all',
+            Relacionado: [...(Relacionado ?? [])],
+            createdBy: { uid: user.uid, role: user.role },
+            createdAt: serverTimestamp()
+        });
+    } catch (error) {
+        try {
+            await deleteObject(fileRef);
+        } catch (cleanupError) {
+            console.warn('No se pudo borrar el PDF huérfano:', cleanupError);
+        }
+        throw error;
+    }
+
+    await invalidateVideoCaches();
+    return { id: docRef.id };
+}
+
+export async function updateMaetecaResource(resource, fields) {
+    await requireManager();
+    if (!resource?.id) throw new Error('Recurso inválido.');
+    const input = fields ?? {};
+    const allowed = {};
+
+    if ('Titulo' in input) {
+        const t = validTitle(input.Titulo);
+        if (!t) throw new Error(`El nombre es obligatorio y de máximo ${MAX_TITLE_LENGTH} caracteres.`);
+        allowed.Titulo = t;
+    }
+    if ('Video' in input) {
+        if (getResourceType(resource) !== 'video') throw new Error('Un PDF no tiene link de video.');
+        if (!extractYoutubeId(input.Video)) throw new Error('El link no es de YouTube.');
+        allowed.Video = String(input.Video).trim();
+    }
+    if ('Relacionado' in input) {
+        if (!Array.isArray(input.Relacionado)) throw new Error('Relacionado debe ser una lista.');
+        allowed.Relacionado = [...input.Relacionado];
+    }
+    for (const key of ['Informacion', 'Materia', 'Carrera']) {
+        if (key in input) allowed[key] = input[key];
+    }
+
+    if (Object.keys(allowed).length === 0) return;
+    await updateDoc(doc(firestoreDB, 'videos', resource.id), { ...allowed, updatedAt: serverTimestamp() });
+    await invalidateVideoCaches();
+}
+
+export async function deleteMaetecaResource(resource) {
+    await requireManager();
+    if (!resource?.id) throw new Error('Recurso inválido.');
+    if (resource.id === 'intro-maeteca') throw new Error('El video de introducción no se puede eliminar.');
+
+    await deleteDoc(doc(firestoreDB, 'videos', resource.id));
+
+    let fileDeleted = true;
+    if (resource.ArchivoPath) {
+        try {
+            await deleteObject(storageRef(firebaseStorage, resource.ArchivoPath));
+        } catch (error) {
+            if (error?.code === 'storage/object-not-found') {
+                fileDeleted = true;
+            } else {
+                console.warn('No se pudo borrar el archivo del recurso:', error);
+                fileDeleted = false;
+            }
+        }
+    }
+    await invalidateVideoCaches();
+    return { fileDeleted };
 }
 
 export async function loadMaetecaVideos(options = {}) {
@@ -189,8 +347,7 @@ export function getVideoEmbedUrl(video) {
     const url = typeof video === 'string' ? video : video.Video;
     if (!url) return null;
     const id = extractYoutubeId(url);
-    if (id) return `https://www.youtube.com/embed/${id}`;
-    return url;
+    return id ? `https://www.youtube.com/embed/${id}` : null;
 }
 
 export function getVideoThumbnail(video) {

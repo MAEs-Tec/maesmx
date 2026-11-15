@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "predeploy": ["node scripts/check-deploy-branch.js"],
     "public": "dist",
     "ignore": [
       "firebase.json",
@@ -21,13 +22,16 @@
     ]
   },
   "functions": {
+    "predeploy": ["node scripts/check-deploy-branch.js"],
     "source": "functions"
   },
   "firestore": {
+    "predeploy": ["node scripts/check-deploy-branch.js"],
     "indexes": "firestore.indexes.json",
     "rules": "firestore.rules"
   },
   "storage": {
+    "predeploy": ["node scripts/check-deploy-branch.js"],
     "rules": "storage.rules"
   },
   "emulators": {

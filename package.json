@@ -3,10 +3,16 @@
     "version": "3.8.0",
     "scripts": {
         "dev": "vite",
+        "dev:local": "node scripts/dev-local.js",
+        "emulators": "npx --yes firebase-tools@14.25.0 emulators:start --project demo-maesmx --only auth,firestore,functions,storage",
+        "seed": "node scripts/seed-emulator.js",
         "build": "vite build",
         "deploy": "vite build && firebase deploy",
         "preview": "vite preview",
-        "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore"
+        "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --ignore-path .gitignore",
+        "lint:fix": "npm run lint -- --fix",
+        "test": "node --test tests/*.test.mjs functions/tests/*.test.cjs",
+        "test:emulator": "npx --yes firebase-tools@14.25.0 emulators:exec --project demo-maesmx --only auth,firestore \"node scripts/seed-emulator.js && node --test tests/advisory-requests.integration.test.mjs\""
     },
     "dependencies": {
         "chart.js": "3.3.2",

@@ -1,0 +1,98 @@
+name: Deploy a producción
+
+# Se dispara al fusionar a master. El job de deploy usa el environment
+# "production", que exige la aprobación de un revisor antes de correr.
+# Configuración requerida: docs/pipeline-y-deploy.md
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: deploy
+    needs: verify
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://peer-teaching.web.app
+    env:
+      FIREBASE_TOOLS: firebase-tools@14.25.0
+      FIREBASE_PROJECT: peer-teaching
+      # Configuración web del proyecto (variables del environment, no secretos).
+      VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_DATABASE_URL: ${{ vars.VITE_FIREBASE_DATABASE_URL }}
+      VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+      VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+      VITE_FIREBASE_MEASUREMENT_ID: ${{ vars.VITE_FIREBASE_MEASUREMENT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Comprobar configuración del environment
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          missing=""
+          for name in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_APP_ID FIREBASE_SERVICE_ACCOUNT; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Faltan en el environment production:$missing (ver docs/pipeline-y-deploy.md)"
+            exit 1
+          fi
+          if [ "$VITE_FIREBASE_PROJECT_ID" != "$FIREBASE_PROJECT" ]; then
+            echo "::error::VITE_FIREBASE_PROJECT_ID no coincide con el proyecto de deploy ($FIREBASE_PROJECT)."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+
+      - name: Instalar dependencias
+        run: |
+          npm ci
+          npm ci --prefix functions
+
+      - name: Build
+        run: npm run build
+
+      - name: Credenciales de deploy
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/service-account.json" >> "$GITHUB_ENV"
+
+      # Orden: primero backend (functions, reglas e índices) y al final el front.
+      - name: Deploy de Cloud Functions
+        run: npx --yes "$FIREBASE_TOOLS" deploy --only functions --project "$FIREBASE_PROJECT" --non-interactive
+
+      - name: Deploy de reglas e índices (Firestore y Storage)
+        run: npx --yes "$FIREBASE_TOOLS" deploy --only firestore,storage --project "$FIREBASE_PROJECT" --non-interactive
+
+      - name: Deploy de Hosting
+        run: npx --yes "$FIREBASE_TOOLS" deploy --only hosting --project "$FIREBASE_PROJECT" --non-interactive
+
+      - name: Borrar credenciales
+        if: always()
+        run: rm -f "$RUNNER_TEMP/service-account.json"

@@ -6,7 +6,9 @@
 // acceso. Para saltarla a propósito: ALLOW_DEPLOY_ANY_BRANCH=1.
 const { execSync } = require('child_process');
 
-const ALLOWED_BRANCH = 'dev';
+// Producción sale de master. El camino normal es el workflow de GitHub Actions
+// (.github/workflows/deploy.yml); un deploy local es solo para emergencias.
+const ALLOWED_BRANCH = 'master';
 
 function git(args) {
     return execSync(`git ${args}`, { encoding: 'utf8' }).trim();
@@ -21,7 +23,10 @@ function main() {
     let branch;
     let dirty;
     try {
-        branch = git('rev-parse --abbrev-ref HEAD');
+        // En GitHub Actions el checkout puede quedar en HEAD suelto; la rama real viene en GITHUB_REF_NAME.
+        branch = process.env.GITHUB_ACTIONS === 'true' && process.env.GITHUB_REF_NAME
+            ? process.env.GITHUB_REF_NAME
+            : git('rev-parse --abbrev-ref HEAD');
         // .firebase/ es la caché que el propio CLI reescribe en cada deploy.
         dirty = git('status --porcelain --untracked-files=no -- . ":(exclude).firebase"');
     } catch (error) {

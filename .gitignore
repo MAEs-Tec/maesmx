@@ -10,7 +10,6 @@ lerna-debug.log*
 functions/node_modules
 # dependencies
 /node_modules
-package-lock.json
 yarn.lock
 
 .DS_Store

@@ -164,7 +164,7 @@ const formatName = (name) => {
     <div class="bg-white border-round-3xl p-3">
         <ul class="list-none p-0">
             <li 
-                v-for="(user, index) in users.slice(3)" 
+                v-for="user in users.slice(3)" 
                 :key="user.uid" 
                 :class="[ 
                     'flex justify-between items-center p-2 py-4',  

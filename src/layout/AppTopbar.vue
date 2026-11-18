@@ -19,17 +19,8 @@ onBeforeUnmount(() => {
     unbindOutsideClickListener();
 });
 
-const logoUrl = computed(() => {
-    return `layout/images/${layoutConfig.darkTheme.value ? 'logo-white' : 'logo-dark'}.svg`;
-});
-
 const onTopBarMenuButton = () => {
     topbarMenuActive.value = !topbarMenuActive.value;
-};
-
-const onSettingsClick = () => {
-    topbarMenuActive.value = false;
-    router.push('/documentation');
 };
 
 const onLogOut = () => {

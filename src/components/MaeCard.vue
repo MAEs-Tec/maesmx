@@ -5,8 +5,10 @@ import { Tag } from 'primevue/tag';
 import { Skeleton } from 'primevue/skeleton';
 
 // Props para recibir del padre
-const props = defineProps(['user']);
+defineProps(['user']);
 
+// Lo usan los botones de asistencia comentados en la plantilla.
+// eslint-disable-next-line no-unused-vars
 const checked = ref(null);
 const showDetails = ref(false);
 

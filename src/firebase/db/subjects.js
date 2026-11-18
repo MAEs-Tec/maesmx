@@ -2,8 +2,6 @@ import { firestoreDB } from "../../main";
 import {
     collection,
     getDocs,
-    query,
-    orderBy,
 } from 'firebase/firestore';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { invalidateCacheTags, withCache } from '../cache/cache';
@@ -19,12 +17,18 @@ export async function getSubjects(options = {}) {
             tags: [CACHE_TAGS.SUBJECTS]
         },
         async () => {
-            const subjectsRef = collection(firestoreDB, "schools/tec.mx/subjects");
-            const q = query(subjectsRef, orderBy("name"));
-            const docsSnap = await getDocs(q);
+            // Sin orderBy: Firestore deja fuera los documentos a los que les falta el campo
+            // del orden, y entonces el catálogo salía incompleto. Se ordena aquí.
+            const docsSnap = await getDocs(collection(firestoreDB, "schools/tec.mx/subjects"));
 
             if (!docsSnap.empty) {
-                return docsSnap.docs.map(doc => doc.data());
+                return docsSnap.docs
+                    .map(doc => {
+                        const data = doc.data();
+                        const id = data.id || doc.id;
+                        return { ...data, id, name: data.name || id };
+                    })
+                    .sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
             }
 
             return null;

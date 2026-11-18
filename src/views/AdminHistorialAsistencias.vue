@@ -22,6 +22,8 @@ const formatYesterday = `${year}-${month}-${day}`;
 
 // One day
 const loading = ref(true);
+// Modo de un solo día: desactivado en onMounted, se conserva para reactivarlo.
+// eslint-disable-next-line no-unused-vars
 const selectedDate = ref(formatYesterday); // Loads previous day
 
 // Date range 
@@ -32,6 +34,7 @@ const startDate = ref(formatDate(getSemesterRange(today).start));
 const endDate = ref(formatDate(today)); // Current date of semester, use aux funct
 
 // Arrays for reports
+// eslint-disable-next-line no-unused-vars -- modo de un solo día (ver selectedDate)
 const reports = ref([]);
 const reportRange = ref([]); 
 
@@ -117,6 +120,7 @@ onMounted(async () => {
 });
 
 // Function to load reports for a specific date
+// eslint-disable-next-line no-unused-vars -- modo de un solo día (ver selectedDate)
 const loadDayReport = async (singleDate) => {
   try {
     const reportObject = await getReportByDate(singleDate); // Fetches attendance from that date from firebase 

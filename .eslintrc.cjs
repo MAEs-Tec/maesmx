@@ -25,5 +25,7 @@ module.exports = {
         
     ],
     'prettier/prettier': 'off',
+    // Permite `const { quitar, ...resto } = obj` para omitir una propiedad.
+    'no-unused-vars': ['error', { ignoreRestSiblings: true }],
     }
 };

@@ -273,3 +273,35 @@ test('a registration that lands while computing points is included before awardi
     assert.equal(db.store.get('users/m1').points, 12.5);
     assert.equal(db.store.get('users/m1').advisoryHistoryVersion, 2);
 });
+test('a coordinator on turn gets one notice per new request, not "published" and "can you help" at once', async () => {
+    const db = fakeDb({
+        'schools/tec.mx/subjects/math': { name: 'Mate' }, 'users/student': { name: 'S', role: 'user', campus: 'c1' },
+        'users/coordi1': mae({ role: 'coordi' }), 'users/coordi2': { role: 'coordi', campus: 'c1' }
+    });
+    const { requestId } = await make(db).createAdvisoryRequest({ operationId: 'op1', subjectId: 'math' }, ctx('student'));
+    const events = Object.fromEntries(eventsOf(db, requestId));
+    assert.deepEqual(events['broadcast-0'].recipientKeys, ['coordi1']);
+    assert.deepEqual([...events.created.recipientKeys].sort(), ['coordi2', 'student']);
+});
+test('withdrawing and offering again does not create a second "a MAE can help" event', async () => {
+    const db = fakeDb({ 'advisoryRequests/r1': openRequest(), 'users/student': mae({ role: 'user' }), 'users/m1': mae() });
+    const service = make(db);
+    await service.offerAdvisoryHelp({ requestId: 'r1', location: 'Mesa 1' }, ctx('m1'));
+    await service.withdrawAdvisoryOffer({ requestId: 'r1' }, ctx('m1'));
+    await service.offerAdvisoryHelp({ requestId: 'r1', location: 'Mesa 2' }, ctx('m1'));
+    assert.deepEqual(eventsOf(db).filter(([, value]) => value.type === 'help_offered').map(([name]) => name), ['offer-0-m1']);
+});
+test('only the student or coordination can choose the MAE', async () => {
+    const offer = { name: 'Uno', location: 'Mesa', status: 'active', assignmentVersion: 0 };
+    const db = fakeDb({
+        'advisoryRequests/r1': openRequest({ creatorKey: 'formercoordi' }), 'users/student': mae({ role: 'user' }), 'users/m1': mae(),
+        'users/formercoordi': { role: 'mae', campus: 'c1' }, 'users/othercoordi': { role: 'coordi', campus: 'c2' },
+        'users/coordi1': { role: 'coordi', campus: 'c1' }, 'advisoryRequests/r1/offers/m1': offer
+    });
+    const service = make(db);
+    for (const key of ['formercoordi', 'othercoordi', 'm1']) {
+        await assert.rejects(service.assignAdvisoryRequest({ requestId: 'r1', maeKey: 'm1' }, ctx(key)), error => error.code === 'permission-denied');
+    }
+    await service.assignAdvisoryRequest({ requestId: 'r1', maeKey: 'm1' }, ctx('coordi1'));
+    assert.equal(db.store.get('advisoryRequests/r1').assignedMaeKey, 'm1');
+});

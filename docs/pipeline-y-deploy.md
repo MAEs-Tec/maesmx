@@ -17,7 +17,7 @@ Dos workflows en `.github/workflows/`:
 Un solo job, `ci`, en Ubuntu con Node 22 y Java 21:
 
 1. `npm ci` y `npm ci --prefix functions`.
-2. `npm run lint`. Por ahora es informativo: no bloquea, porque quedan errores heredados en `src/`.
+2. `npm run lint`. Un error de lint hace fallar el check.
 3. `npm test`.
 4. `npm run build`.
 5. `npm run test:emulator`: levanta Auth y Firestore, corre el seed y la prueba de integración.
@@ -56,12 +56,14 @@ En **Settings > Environments > production**:
 - **Secreto `FIREBASE_SERVICE_ACCOUNT`:** el JSON completo de la llave de una cuenta de servicio de deploy.
 - **Variables** (no secretos; son la configuración web pública del proyecto): `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_DATABASE_URL`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`, `VITE_FIREBASE_MEASUREMENT_ID`.
 
-Con GitHub CLI, desde una máquina que tenga el `.env` de producción:
+Con GitHub CLI, desde una máquina que tenga el `.env` de producción. El clon tiene dos remotos (`origin` y `upstream`, la plantilla original), así que `--repo` evita que `gh` elija el equivocado y responda 403:
 
 ```sh
-gh variable set --env production --env-file .env
-gh secret set FIREBASE_SERVICE_ACCOUNT --env production < ruta/a/la-llave.json
+gh variable set --env production --env-file .env --repo MAEs-Tec/maesmx
+gh secret set FIREBASE_SERVICE_ACCOUNT --env production --repo MAEs-Tec/maesmx < ruta/a/la-llave.json
 ```
+
+En PowerShell, `<` no funciona; se usa `Get-Content ruta\a\la-llave.json -Raw | gh secret set ...`. Para no repetir `--repo`, corre una vez `gh repo set-default MAEs-Tec/maesmx`.
 
 El workflow revisa al inicio que nada falte y que `VITE_FIREBASE_PROJECT_ID` sea el proyecto de deploy.
 
@@ -79,7 +81,7 @@ Créala en Google Cloud (**IAM y administración > Cuentas de servicio**) dentro
 | Firebase Hosting Admin | Hosting. |
 | Firebase Viewer | Lectura de la configuración del proyecto que hace el CLI. |
 
-Esta lista no está verificada contra un deploy real del pipeline: Firebase no publica un conjunto mínimo único y cambia con la versión del CLI. Si el primer deploy falla por permisos, el error dice cuál falta; agrégalo y repite. La alternativa simple es el rol **Firebase Admin**, que funciona pero también da acceso de lectura y escritura a los datos.
+Con estos roles corrió bien el primer deploy por pipeline (17 de noviembre de 2026, `firebase-tools` 14.25.0). Firebase no publica un conjunto mínimo único y cambia con la versión del CLI: si un deploy futuro falla por permisos, el error dice cuál falta; agrégalo y repite. La alternativa simple es el rol **Firebase Admin**, que funciona pero también da acceso de lectura y escritura a los datos.
 
 La llave es una credencial de producción: no la guardes en el repo ni la compartas por chat. Si se filtra, bórrala en Google Cloud y genera otra.
 

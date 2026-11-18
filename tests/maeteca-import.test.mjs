@@ -133,15 +133,27 @@ test('parseVideoRows: carrera', () => {
         row({ Link: 'https://youtu.be/bbbbbbbbbbb', Carrera: 'XYZ' })
     ], ctx);
     assert.deepEqual(r.valid.map((v) => v.data.Carrera), ['itc', 'all', 'all']);
-    assert.match(r.invalid[0].errors[0], /La carrera "XYZ" no existe\. Usa Todas, ITC, IMT, IDS\./);
+    assert.match(r.invalid[0].errors[0], /La carrera "XYZ" no existe\. Usa las siglas de la hoja "Carreras" \(Todas, ITC, IMT, IDS\)\./);
+
+    const conNombre = parseVideoRows([row({ Carrera: 'Ingeniería en Mecatrónica' })], {
+        ...ctx,
+        careers: [...careers, { name: 'IMX', code: 'imx', fullName: 'Ingeniería en Mecatrónica' }]
+    });
+    assert.equal(conNombre.valid[0].data.Carrera, 'imx');
 });
 
-test('parseVideoRows: etiquetas', () => {
+test('parseVideoRows: etiquetas existentes y nuevas', () => {
     const ok = parseVideoRows([row({ Etiquetas: '#matematicas, quimica, matematicas' })], ctx);
     assert.deepEqual(ok.valid[0].data.Relacionado, ['matematicas', 'Quimica']);
-    const bad = parseVideoRows([row({ Etiquetas: 'tutorial, inventada' })], ctx);
-    assert.equal(bad.valid.length, 0);
-    assert.deepEqual(bad.invalid[0].errors, ['La etiqueta "inventada" no existe.']);
+    assert.deepEqual(ok.newTags, []);
+
+    const nueva = parseVideoRows([row({ Etiquetas: 'tutorial, #Derivadas  parciales, derivadas parciales' })], ctx);
+    assert.equal(nueva.invalid.length, 0);
+    assert.deepEqual(nueva.valid[0].data.Relacionado, ['tutorial', 'Derivadas parciales']);
+    assert.deepEqual(nueva.newTags, ['Derivadas parciales']);
+
+    const larga = parseVideoRows([row({ Etiquetas: 'x'.repeat(41) })], ctx);
+    assert.deepEqual(larga.invalid[0].errors, [`La etiqueta "${'x'.repeat(41)}" pasa de 40 caracteres.`]);
 });
 
 test('parseVideoRows: duplicados', () => {
@@ -152,7 +164,15 @@ test('parseVideoRows: duplicados', () => {
     const r = parseVideoRows([row({ Link: ytLink(ID) }), row({ Link: ytLink(ID2) })], { ...ctx, existingVideos: existing });
     assert.equal(r.valid.length, 1);
     assert.equal(r.valid[0].rowNumber, 2);
-    assert.deepEqual(r.invalid[0].errors, ['Este video ya está en la Maeteca.']);
+    assert.equal(r.invalid.length, 0);
+    assert.deepEqual(r.updates, [{
+        rowNumber: 3, id: 'b', link: ytLink(ID2),
+        data: { Titulo: 'Euler', Materia: 'general', Carrera: 'all', Relacionado: [] }
+    }]);
+
+    const twice = [{ id: 'x', Video: ytLink(ID) }, { id: 'y', Video: `https://www.youtube.com/watch?v=${ID}` }];
+    const repetido = parseVideoRows([row()], { ...ctx, existingVideos: twice });
+    assert.deepEqual(repetido.invalid[0].errors, ['Este video está 2 veces en la Maeteca. Edítalo desde la página.']);
 
     const dup = parseVideoRows([row(), row()], ctx);
     assert.equal(dup.valid.length, 1);
@@ -174,7 +194,7 @@ test('parseVideoRows: nombre largo y errores acumulados', () => {
     assert.deepEqual(largo.invalid[0].errors, ['El nombre pasa de 120 caracteres.']);
 
     const multi = parseVideoRows([row({ Link: 'nada', 'Nombre del video': '', Materia: 'zzz', Carrera: 'qqq', Etiquetas: 'nope' })], ctx);
-    assert.equal(multi.invalid[0].errors.length, 5);
+    assert.equal(multi.invalid[0].errors.length, 4);
     assert.deepEqual(multi.invalid[0].raw, { link: 'nada', titulo: '', materia: 'zzz', carrera: 'qqq', etiquetas: 'nope' });
 });
 
@@ -211,7 +231,8 @@ test('buildTemplateSheets lists the subject catalog and round-trips through the 
     const careers = [{ name: 'Todas', code: 'all' }, { name: 'ITC', code: 'itc' }];
     const tagOptions = [{ label: '#matematicas', value: 'matematicas' }];
     const sheets = buildTemplateSheets({ subjects, careers, tagOptions });
-    assert.deepEqual(Object.keys(sheets), ['Videos', 'Instrucciones', 'Materias']);
+    assert.deepEqual(Object.keys(sheets), ['Videos', 'Instrucciones', 'Materias', 'Carreras']);
+    assert.deepEqual(sheets.Carreras, [['Siglas', 'Nombre'], ['Todas', 'Todas'], ['ITC', 'ITC']]);
     assert.deepEqual(sheets.Videos, [['Link', 'Nombre del video', 'Materia', 'Carrera', 'Etiquetas']]);
     assert.deepEqual(sheets.Materias, [['Clave', 'Nombre'], ['general', 'General'], ['MA1028', 'Modelación matemática'], ['TC1028', 'Pensamiento computacional']]);
     assert.deepEqual(buildTemplateSheets().Materias, [['Clave', 'Nombre'], ['general', 'General']]);
@@ -235,20 +256,81 @@ test('buildTemplateWorkbook adds dropdowns and the file still parses with xlsx',
     const tagOptions = [{ label: '#matematicas', value: 'matematicas' }];
 
     const workbook = buildTemplateWorkbook(ExcelJS, { subjects, careers, tagOptions });
-    assert.deepEqual(workbook.worksheets.map((w) => w.name), ['Videos', 'Instrucciones', 'Materias']);
+    assert.deepEqual(workbook.worksheets.map((w) => w.name), ['Videos', 'Instrucciones', 'Materias', 'Carreras']);
     const videos = workbook.getWorksheet('Videos');
     assert.deepEqual(videos.getCell('C2').dataValidation.formulae, ['Materias!$B$2:$B$4']);
     assert.equal(videos.getCell('C501').dataValidation.type, 'list');
     assert.equal(videos.getCell('C502').dataValidation, undefined);
-    assert.deepEqual(videos.getCell('D2').dataValidation.formulae, ['"Todas,ITC"']);
+    assert.deepEqual(videos.getCell('D2').dataValidation.formulae, ['Carreras!$A$2:$A$3']);
 
     videos.getRow(2).values = ['https://youtu.be/B9YR-GXGncw', 'Euler', 'Modelación matemática', 'ITC', 'matematicas'];
     const back = XLSX.read(Buffer.from(await workbook.xlsx.writeBuffer()));
-    assert.deepEqual(back.SheetNames, ['Videos', 'Instrucciones', 'Materias']);
+    assert.deepEqual(back.SheetNames, ['Videos', 'Instrucciones', 'Materias', 'Carreras']);
     const empty = XLSX.read(Buffer.from(await buildTemplateWorkbook(ExcelJS, { subjects, careers, tagOptions }).xlsx.writeBuffer()));
     assert.deepEqual(XLSX.utils.sheet_to_json(empty.Sheets.Videos, { defval: '' }), []);
     const result = parse(XLSX.utils.sheet_to_json(back.Sheets.Videos, { defval: '' }), { subjects, careers, tagOptions, existingVideos: [] });
     assert.equal(result.invalid.length, 0);
     assert.equal(result.valid[0].data.Materia, 'MA1028');
     assert.equal(result.valid[0].rowNumber, 2);
+});
+
+test('buildCareerOptions arma la lista desde majors y conserva los códigos en minúsculas', async () => {
+    const { buildCareerOptions } = await import('../src/utils/maetecaImport.js');
+    const majors = [
+        { id: 'IMT', name: 'Ingeniería en Mecatrónica' },
+        { id: 'ITC', name: 'Ingeniería en Tecnologías Computacionales' },
+        { id: 'itc', name: 'Duplicado' },
+        { name: 'Sin siglas' }
+    ];
+    assert.deepEqual(buildCareerOptions(majors), [
+        { name: 'Todas', code: 'all', fullName: 'Todas las carreras' },
+        { name: 'IMT', code: 'imt', fullName: 'Ingeniería en Mecatrónica' },
+        { name: 'ITC', code: 'itc', fullName: 'Ingeniería en Tecnologías Computacionales' }
+    ]);
+    const fallback = buildCareerOptions([], careers);
+    assert.deepEqual(fallback.map((c) => c.code), ['all', 'itc', 'imt', 'ids']);
+});
+
+test('buildTagOptions une la lista base con las etiquetas en uso, sin repetir', async () => {
+    const { buildTagOptions } = await import('../src/utils/maetecaImport.js');
+    const options = buildTagOptions(
+        [{ label: '#matematicas', value: 'matematicas' }],
+        [{ Relacionado: ['Matemáticas', ' #álgebra ', 'tutorial'] }, { Relacionado: ['tutorial'] }, {}]
+    );
+    assert.deepEqual(options.map((o) => o.value), ['álgebra', 'matematicas', 'tutorial']);
+    assert.equal(options.find((o) => o.value === 'tutorial').label, '#tutorial');
+});
+
+test('exportar los videos y volver a subir el archivo no cambia nada; editar una fila la actualiza', async () => {
+    const { buildTemplateSheets, buildCareerOptions } = await import('../src/utils/maetecaImport.js');
+    const XLSX = await import('xlsx');
+    const careerOptions = buildCareerOptions([{ id: 'ITC', name: 'Ingeniería en Tecnologías Computacionales' }]);
+    const videos = [
+        { id: 'v1', Tipo: 'video', Video: ytLink(ID), Titulo: 'Euler', Materia: 'TC1028', Carrera: 'itc', Relacionado: ['tutorial', 'nueva'] },
+        { id: 'v2', Tipo: 'video', Video: ytLink(ID2), Titulo: 'Polinomios', Materia: 'general', Carrera: 'all', Relacionado: [] },
+        { id: 'p1', Tipo: 'pdf', Archivo: 'x.pdf', Titulo: 'PDF' }
+    ];
+    const sheets = buildTemplateSheets({ subjects, careers: careerOptions, tagOptions, videos });
+    assert.deepEqual(sheets.Videos.slice(1), [
+        [ytLink(ID), 'Euler', 'Pensamiento computacional', 'ITC', 'tutorial, nueva'],
+        [ytLink(ID2), 'Polinomios', 'General', 'Todas', '']
+    ]);
+
+    const toRows = (aoa) => {
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Videos');
+        const back = XLSX.read(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+        return XLSX.utils.sheet_to_json(back.Sheets.Videos, { defval: '' });
+    };
+    const opts = { subjects, careers: careerOptions, tagOptions: [...tagOptions, { value: 'nueva' }], existingVideos: videos };
+    const same = parseVideoRows(toRows(sheets.Videos), opts);
+    assert.equal(same.valid.length + same.updates.length + same.invalid.length, 0);
+    assert.deepEqual(same.unchanged.map((u) => u.id), ['v1', 'v2']);
+
+    const edited = sheets.Videos.map((r) => [...r]);
+    edited[2][1] = 'Polinomios y derivadas';
+    edited[2][4] = 'matematicas';
+    const changed = parseVideoRows(toRows(edited), opts);
+    assert.deepEqual(changed.updates.map((u) => [u.id, u.data.Titulo, u.data.Relacionado]), [['v2', 'Polinomios y derivadas', ['matematicas']]]);
+    assert.deepEqual(changed.unchanged.map((u) => u.id), ['v1']);
 });

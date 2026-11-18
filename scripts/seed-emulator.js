@@ -74,7 +74,13 @@ const MAJORS = [
     { id: 'ITC', name: 'Ingeniería en Tecnologías Computacionales', school: 'Ingeniería y Ciencias' },
     { id: 'IMT', name: 'Ingeniería en Mecatrónica', school: 'Ingeniería y Ciencias' },
     { id: 'LAF', name: 'Licenciatura en Finanzas', school: 'Negocios' },
-    { id: 'LNB', name: 'Licenciatura en Nutrición y Bienestar Integral', school: 'Salud' }
+    { id: 'LNB', name: 'Licenciatura en Nutrición y Bienestar Integral', school: 'Salud' },
+    { id: 'IBT', name: 'Ingeniería en Biotecnología', school: 'Ingeniería y Ciencias' },
+    { id: 'IC', name: 'Ingeniería Civil', school: 'Ingeniería y Ciencias' },
+    { id: 'IIS', name: 'Ingeniería Industrial y de Sistemas', school: 'Ingeniería y Ciencias' },
+    { id: 'ARQ', name: 'Arquitectura', school: 'Arquitectura, Arte y Diseño' },
+    { id: 'LAE', name: 'Licenciatura en Estrategia y Transformación de Negocios', school: 'Negocios' },
+    { id: 'LDI', name: 'Licenciatura en Diseño', school: 'Arquitectura, Arte y Diseño' }
 ];
 
 const SUBJECTS = [

@@ -1,18 +1,14 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useToast } from 'primevue/usetoast'
-import {
-    parseVideoRows
-} from '../../utils/maetecaImport.js'
-import {
-    addVideosBulk,
-    VIDEO_CAREERS,
-    AVAILABLE_TAG_OPTIONS
-} from '../../firebase/db/maeteca'
+import { parseVideoRows, MAX_IMPORT_ROWS } from '../../utils/maetecaImport.js'
+import { saveVideosBulk } from '../../firebase/db/maeteca'
 
 const props = defineProps({
     visible: { type: Boolean, default: false },
     subjects: { type: Array, default: null },
+    careers: { type: Array, default: () => [] },
+    tagOptions: { type: Array, default: () => [] },
     existingVideos: { type: Array, default: () => [] }
 })
 
@@ -21,6 +17,7 @@ const emit = defineEmits(['update:visible', 'uploaded'])
 const toast = useToast()
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024
+const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 const fileInput = ref(null)
 const fileName = ref('')
@@ -29,6 +26,7 @@ const errorMessage = ref('')
 const reading = ref(false)
 const uploading = ref(false)
 const buildingTemplate = ref(false)
+const exporting = ref(false)
 
 const dialogVisible = computed({
     get: () => props.visible,
@@ -36,29 +34,34 @@ const dialogVisible = computed({
 })
 
 const validCount = computed(() => result.value?.valid.length ?? 0)
+const updateCount = computed(() => result.value?.updates.length ?? 0)
+const unchangedCount = computed(() => result.value?.unchanged.length ?? 0)
 const invalidCount = computed(() => result.value?.invalid.length ?? 0)
+const writeCount = computed(() => validCount.value + updateCount.value)
+const exportableCount = computed(() =>
+    (props.existingVideos ?? []).filter((v) => v && v.Tipo !== 'pdf' && v.Video).length
+)
 
 const previewRows = computed(() => {
     if (!result.value) return []
-    const valid = result.value.valid.map((v) => ({
-        rowNumber: v.rowNumber,
-        titulo: v.data.Titulo,
-        link: v.data.Video,
-        errors: []
-    }))
-    const invalid = result.value.invalid.map((v) => ({
-        rowNumber: v.rowNumber,
-        titulo: v.raw?.titulo ?? '',
-        link: v.raw?.link ?? '',
-        errors: v.errors
-    }))
-    return [...valid, ...invalid].sort((a, b) => a.rowNumber - b.rowNumber)
+    const row = (rowNumber, titulo, link, status, errors = []) => ({ rowNumber, titulo, link, status, errors })
+    return [
+        ...result.value.valid.map((v) => row(v.rowNumber, v.data.Titulo, v.data.Video, 'new')),
+        ...result.value.updates.map((v) => row(v.rowNumber, v.data.Titulo, v.link, 'update')),
+        ...result.value.unchanged.map((v) => row(v.rowNumber, v.titulo, v.link, 'same')),
+        ...result.value.invalid.map((v) => row(v.rowNumber, v.raw?.titulo ?? '', v.raw?.link ?? '', 'error', v.errors))
+    ].sort((a, b) => a.rowNumber - b.rowNumber)
 })
 
 const summary = computed(() => {
-    const ready = validCount.value === 1 ? 'listo' : 'listos'
-    return `${validCount.value} ${ready}, ${invalidCount.value} con errores`
+    const parts = [`${validCount.value} ${validCount.value === 1 ? 'nuevo' : 'nuevos'}`]
+    if (updateCount.value) parts.push(`${updateCount.value} por actualizar`)
+    if (unchangedCount.value) parts.push(`${unchangedCount.value} sin cambios`)
+    parts.push(`${invalidCount.value} con errores`)
+    return parts.join(', ')
 })
+
+const newTagsText = computed(() => (result.value?.newTags ?? []).map((t) => `#${t}`).join(', '))
 
 const warnText = computed(() =>
     invalidCount.value === 1
@@ -66,9 +69,10 @@ const warnText = computed(() =>
         : `Las ${invalidCount.value} filas con error se omitirán.`
 )
 
-const uploadLabel = computed(() =>
-    validCount.value === 1 ? 'Subir 1 video' : `Subir ${validCount.value} videos`
-)
+const uploadLabel = computed(() => {
+    if (!updateCount.value) return validCount.value === 1 ? 'Subir 1 video' : `Subir ${validCount.value} videos`
+    return writeCount.value === 1 ? 'Guardar 1 video' : `Guardar ${writeCount.value} videos`
+})
 
 function resetState() {
     fileName.value = ''
@@ -85,37 +89,56 @@ watch(
     }
 )
 
-// La plantilla se arma al momento con el catálogo actual de materias.
-// ExcelJS se carga solo aquí porque es pesado; la lectura sigue con xlsx.
+// El archivo se arma al momento con los catálogos actuales. ExcelJS se carga solo
+// aquí porque es pesado; la lectura sigue con xlsx. Con `videos`, sale lleno.
+async function downloadWorkbook({ videos, filename }) {
+    const [{ default: ExcelJS }, { buildTemplateWorkbook }, { saveAs }] = await Promise.all([
+        import('exceljs'),
+        import('../../utils/maetecaTemplate.js'),
+        import('file-saver')
+    ])
+    const workbook = buildTemplateWorkbook(ExcelJS, {
+        subjects: props.subjects ?? [],
+        careers: props.careers,
+        tagOptions: props.tagOptions,
+        videos
+    })
+    const buffer = await workbook.xlsx.writeBuffer()
+    saveAs(new Blob([buffer], { type: XLSX_TYPE }), filename)
+}
+
 async function downloadTemplate() {
     if (buildingTemplate.value) return
     buildingTemplate.value = true
     try {
-        const [{ default: ExcelJS }, { buildTemplateWorkbook }, { saveAs }] = await Promise.all([
-            import('exceljs'),
-            import('../../utils/maetecaTemplate.js'),
-            import('file-saver')
-        ])
-        const workbook = buildTemplateWorkbook(ExcelJS, {
-            subjects: props.subjects ?? [],
-            careers: VIDEO_CAREERS,
-            tagOptions: AVAILABLE_TAG_OPTIONS
-        })
-        const buffer = await workbook.xlsx.writeBuffer()
-        saveAs(
-            new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
-            'plantilla-maeteca-videos.xlsx'
-        )
+        await downloadWorkbook({ filename: 'plantilla-maeteca-videos.xlsx' })
     } catch (error) {
         console.error('Error generando la plantilla:', error)
-        toast.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'No se pudo generar la plantilla.',
-            life: 4000
-        })
+        toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo generar la plantilla.', life: 4000 })
     } finally {
         buildingTemplate.value = false
+    }
+}
+
+async function downloadCurrentVideos() {
+    if (exporting.value) return
+    exporting.value = true
+    try {
+        const date = new Date().toISOString().slice(0, 10)
+        await downloadWorkbook({ videos: props.existingVideos ?? [], filename: `maeteca-videos-${date}.xlsx` })
+        if (exportableCount.value > MAX_IMPORT_ROWS) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Archivo grande',
+                detail: `Hay ${exportableCount.value} videos. Para volver a subirlo, divídelo en archivos de máximo ${MAX_IMPORT_ROWS} filas.`,
+                life: 6000
+            })
+        }
+    } catch (error) {
+        console.error('Error exportando los videos:', error)
+        toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo generar el Excel de los videos.', life: 4000 })
+    } finally {
+        exporting.value = false
     }
 }
 
@@ -154,8 +177,8 @@ async function onFileChange(event) {
         const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
         result.value = parseVideoRows(rows, {
             subjects: props.subjects ?? [],
-            careers: VIDEO_CAREERS,
-            tagOptions: AVAILABLE_TAG_OPTIONS,
+            careers: props.careers,
+            tagOptions: props.tagOptions,
             existingVideos: props.existingVideos ?? []
         })
     } catch (error) {
@@ -165,29 +188,41 @@ async function onFileChange(event) {
     }
 }
 
+function savedDetail(created, updated) {
+    const parts = []
+    if (created) parts.push(created === 1 ? 'se subió 1 video' : `se subieron ${created} videos`)
+    if (updated) parts.push(updated === 1 ? 'se actualizó 1' : `se actualizaron ${updated}`)
+    const text = parts.join(' y ')
+    return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`
+}
+
 async function upload() {
-    if (uploading.value || !validCount.value) return
+    if (uploading.value || !writeCount.value) return
     uploading.value = true
     try {
-        const { created } = await addVideosBulk(result.value.valid.map((v) => v.data))
+        const { created, updated } = await saveVideosBulk({
+            creates: result.value.valid.map((v) => v.data),
+            updates: result.value.updates.map((v) => ({ id: v.id, data: v.data }))
+        })
         toast.add({
             severity: 'success',
-            summary: 'Videos subidos',
-            detail: created === 1 ? 'Se subió 1 video.' : `Se subieron ${created} videos.`,
+            summary: 'Videos guardados',
+            detail: savedDetail(created, updated),
             life: 4000
         })
-        emit('uploaded', created)
+        emit('uploaded', created + updated)
         close()
         resetState()
     } catch (error) {
         toast.add({
             severity: 'error',
             summary: 'Error',
-            detail: error?.message || 'No se pudieron subir los videos.',
+            detail: error?.message || 'No se pudieron guardar los videos.',
             life: 5000
         })
-        if (error?.created > 0) {
-            emit('uploaded', error.created)
+        const saved = (error?.created ?? 0) + (error?.updated ?? 0)
+        if (saved > 0) {
+            emit('uploaded', saved)
             result.value = null
             fileName.value = ''
             errorMessage.value = 'Vuelve a elegir el archivo para ver qué falta.'
@@ -219,11 +254,23 @@ async function upload() {
             <div class="intro">
                 <p class="intro-text">
                     Llena la plantilla con un video por fila y súbela aquí. Máximo 500 videos por archivo.
+                    Para editar los que ya están, descarga los videos actuales, cambia el Excel y vuelve a subirlo.
                 </p>
-                <button type="button" class="template-link" :disabled="buildingTemplate" @click="downloadTemplate">
-                    <i class="pi pi-download"></i>
-                    <span>Descargar plantilla</span>
-                </button>
+                <div class="download-links">
+                    <button type="button" class="template-link" :disabled="buildingTemplate" @click="downloadTemplate">
+                        <i class="pi pi-download"></i>
+                        <span>Descargar plantilla</span>
+                    </button>
+                    <button
+                        type="button"
+                        class="template-link"
+                        :disabled="exporting || !exportableCount"
+                        @click="downloadCurrentVideos"
+                    >
+                        <i :class="exporting ? 'pi pi-spin pi-spinner' : 'pi pi-file-excel'"></i>
+                        <span>Descargar videos actuales ({{ exportableCount }})</span>
+                    </button>
+                </div>
             </div>
 
             <div class="file-picker">
@@ -254,6 +301,7 @@ async function upload() {
                 <Message v-if="invalidCount > 0" severity="warn" :closable="false">
                     {{ warnText }}
                 </Message>
+                <p v-if="newTagsText" class="new-tags">Etiquetas nuevas: {{ newTagsText }}</p>
 
                 <DataTable
                     :value="previewRows"
@@ -273,7 +321,9 @@ async function upload() {
                     </Column>
                     <Column header="Estado" style="min-width: 10rem">
                         <template #body="{ data }">
-                            <Tag v-if="!data.errors.length" severity="success" value="Listo" />
+                            <Tag v-if="data.status === 'new'" severity="success" value="Nuevo" />
+                            <Tag v-else-if="data.status === 'update'" severity="info" value="Se actualiza" />
+                            <span v-else-if="data.status === 'same'" class="text-color-secondary">Sin cambios</span>
                             <ul v-else class="error-list">
                                 <li v-for="(err, i) in data.errors" :key="i" class="text-red-600">
                                     {{ err }}
@@ -296,7 +346,7 @@ async function upload() {
                 <Button
                     :label="uploadLabel"
                     :loading="uploading"
-                    :disabled="!validCount || uploading || reading"
+                    :disabled="!writeCount || uploading || reading"
                     @click="upload"
                 />
             </div>
@@ -363,8 +413,24 @@ async function upload() {
     font-weight: 600;
 }
 
-.template-link:hover {
+.template-link:hover:not(:disabled) {
     text-decoration: underline;
+}
+
+.template-link:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.download-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+}
+
+.new-tags {
+    margin: 0;
+    color: var(--text-color-secondary);
 }
 
 .file-picker {

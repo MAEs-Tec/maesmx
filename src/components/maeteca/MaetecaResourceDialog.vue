@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import {
     extractYoutubeId,
@@ -7,7 +7,10 @@ import {
     resolveSubjectValue,
     GENERAL_SUBJECT,
     MAX_TITLE_LENGTH,
-    normalizeKey
+    MAX_TAG_LENGTH,
+    normalizeKey,
+    cleanTag,
+    resolveTagValue
 } from '@/utils/maetecaImport.js'
 import {
     RESOURCE_TYPES,
@@ -22,7 +25,9 @@ import {
 const props = defineProps({
     visible: { type: Boolean, default: false },
     resource: { type: Object, default: null },
-    subjects: { type: Array, default: null }
+    subjects: { type: Array, default: null },
+    careers: { type: Array, default: () => VIDEO_CAREERS },
+    tagOptions: { type: Array, default: () => AVAILABLE_TAG_OPTIONS }
 })
 const emit = defineEmits(['update:visible', 'saved'])
 
@@ -31,6 +36,8 @@ const saving = ref(false)
 const fileInput = ref(null)
 const fileError = ref('')
 const filteredSubjects = ref([])
+const tagQuery = ref('')
+const tagSuggestions = ref([])
 
 const form = reactive({
     type: 'video',
@@ -50,6 +57,13 @@ const dialogVisible = computed({
 const isEdit = computed(() => !!props.resource)
 const isVideo = computed(() => form.type === 'video')
 const subjectOptions = computed(() => [GENERAL_SUBJECT, ...(props.subjects ?? [])])
+// Si el recurso trae una carrera que ya no está en el catálogo, se conserva como opción.
+const careerOptions = computed(() => {
+    const list = props.careers?.length ? props.careers : VIDEO_CAREERS
+    const current = form.career
+    if (!current || list.some((c) => c.code === current)) return list
+    return [...list, { name: String(current).toUpperCase(), code: current }]
+})
 const previewId = computed(() => extractYoutubeId(form.link))
 const showLinkError = computed(() => form.link.trim() !== '' && !previewId.value)
 
@@ -67,7 +81,7 @@ const isSubmitDisabled = computed(() => {
 
 const selectedTagItems = computed(() =>
     form.tags.map((value) => {
-        const option = AVAILABLE_TAG_OPTIONS.find((o) => o.value === value)
+        const option = props.tagOptions.find((o) => o.value === value)
         return { value, label: option ? option.label : `#${value}` }
     })
 )
@@ -89,6 +103,7 @@ function resetForm() {
     form.career = resource?.Carrera ?? 'all'
     form.tags = [...(resource?.Relacionado ?? [])]
     form.file = null
+    tagQuery.value = ''
     fileError.value = ''
     if (fileInput.value) fileInput.value.value = ''
 }
@@ -135,6 +150,32 @@ function onFileChange(event) {
 
 function removeTag(value) {
     form.tags = form.tags.filter((t) => t !== value)
+}
+
+const hasTag = (value) => form.tags.some((t) => normalizeKey(t) === normalizeKey(value))
+
+// Sugerencias: etiquetas existentes que coinciden y, si lo escrito no existe, la opción de crearla.
+function filterTags(event) {
+    const typed = cleanTag(event.query ?? '')
+    const query = normalizeKey(typed)
+    const matches = props.tagOptions
+        .filter((o) => !hasTag(o.value) && (!query || normalizeKey(o.value).includes(query)))
+        .slice(0, 20)
+        .map((o) => ({ value: o.value, label: o.label || `#${o.value}`, isNew: false }))
+    const exact = props.tagOptions.some((o) => normalizeKey(o.value) === query)
+    const canCreate = typed && !exact && !hasTag(typed) && typed.length <= MAX_TAG_LENGTH
+    // Las existentes van primero para que Enter elija la coincidencia y no cree una parecida.
+    tagSuggestions.value = canCreate
+        ? [...matches, { value: typed, label: `Crear #${typed}`, isNew: true }]
+        : matches
+}
+
+function onTagSelect(event) {
+    const value = resolveTagValue(event.value?.value ?? event.value, props.tagOptions)
+    if (value && !hasTag(value)) form.tags = [...form.tags, value]
+    nextTick(() => {
+        tagQuery.value = ''
+    })
 }
 
 function resolveSubject() {
@@ -334,11 +375,21 @@ async function save() {
                     <Dropdown
                         inputId="resource-career"
                         v-model="form.career"
-                        :options="VIDEO_CAREERS"
+                        :options="careerOptions"
                         optionLabel="name"
                         optionValue="code"
+                        filter
+                        :filterFields="['name', 'fullName']"
+                        filterPlaceholder="Buscar carrera"
                         placeholder="Todas"
-                    />
+                    >
+                        <template #option="{ option }">
+                            <span>{{ option.name }}</span>
+                            <small v-if="option.fullName && option.fullName !== option.name" class="career-full-name">
+                                {{ option.fullName }}
+                            </small>
+                        </template>
+                    </Dropdown>
                 </div>
             </div>
 
@@ -352,17 +403,24 @@ async function save() {
                         </button>
                     </span>
                 </div>
-                <MultiSelect
+                <AutoComplete
                     inputId="resource-tags"
-                    v-model="form.tags"
-                    :options="AVAILABLE_TAG_OPTIONS"
+                    v-model="tagQuery"
+                    :suggestions="tagSuggestions"
                     optionLabel="label"
-                    optionValue="value"
-                    filter
-                    filterPlaceholder="Buscar etiqueta"
-                    placeholder="Selecciona etiquetas"
-                    :class="['w-full', 'tag-multiselect', { 'tag-multiselect--has-selection': form.tags.length }]"
-                />
+                    :delay="100"
+                    autoOptionFocus
+                    completeOnFocus
+                    class="w-full tag-autocomplete"
+                    placeholder="Busca o escribe una etiqueta nueva"
+                    @complete="filterTags"
+                    @item-select="onTagSelect"
+                >
+                    <template #option="{ option }">
+                        <span :class="{ 'tag-option--new': option.isNew }">{{ option.label }}</span>
+                    </template>
+                </AutoComplete>
+                <small class="file-note">Elige una de la lista o escribe una nueva y presiona Enter.</small>
             </div>
         </div>
 
@@ -536,29 +594,18 @@ async function save() {
     align-items: center;
 }
 
-.tag-multiselect :deep(.p-multiselect) {
-    border-radius: 18px;
-    border: 2px solid var(--surface-border, #d0d7eb);
-    min-height: 3rem;
-    background: var(--surface-card);
+.tag-autocomplete :deep(.p-autocomplete-input) {
+    width: 100%;
 }
 
-.tag-multiselect :deep(.p-multiselect-label) {
-    padding: 0.75rem 1rem;
-    min-height: 3rem;
-    display: flex;
-    align-items: center;
-    color: #637292;
-    caret-color: #637292;
+.tag-option--new {
+    font-weight: 600;
 }
 
-.tag-multiselect :deep(.p-multiselect-token) {
-    display: none;
-}
-
-.tag-multiselect--has-selection :deep(.p-multiselect-label) {
-    color: transparent;
-    caret-color: #637292;
+.career-full-name {
+    display: block;
+    color: var(--text-color-secondary);
+    white-space: normal;
 }
 
 .link-preview {

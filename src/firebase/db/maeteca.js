@@ -173,46 +173,79 @@ async function requireManager() {
 }
 
 export async function addVideosBulk(items) {
-    const user = await requireManager();
-    if (!Array.isArray(items) || items.length === 0) throw new Error('No hay videos para subir.');
-    if (items.length > MAX_IMPORT_ROWS) throw new Error(`Máximo ${MAX_IMPORT_ROWS} videos por carga.`);
+    const { created } = await saveVideosBulk({ creates: items });
+    return { created };
+}
 
-    const payloads = items.map((item, i) => {
+// Carga en masa: crea los videos nuevos y actualiza los que ya estaban (por link).
+export async function saveVideosBulk({ creates = [], updates = [] } = {}) {
+    const user = await requireManager();
+    const total = (Array.isArray(creates) ? creates.length : 0) + (Array.isArray(updates) ? updates.length : 0);
+    if (total === 0) throw new Error('No hay videos para subir.');
+    if (total > MAX_IMPORT_ROWS) throw new Error(`Máximo ${MAX_IMPORT_ROWS} videos por carga.`);
+
+    const relacionado = (value) => (Array.isArray(value) ? value.map((t) => String(t).trim()).filter(Boolean) : []);
+    const writes = [];
+    creates.forEach((item, i) => {
         if (!extractYoutubeId(item?.Video)) throw new Error(`Elemento ${i + 1}: El link no es de YouTube.`);
         const titulo = validTitle(item?.Titulo);
         if (!titulo) throw new Error(`Elemento ${i + 1}: el nombre del video es obligatorio y de máximo ${MAX_TITLE_LENGTH} caracteres.`);
-        return {
-            Tipo: 'video',
-            Video: item.Video,
-            Titulo: titulo,
-            Materia: item.Materia ?? 'general',
-            Carrera: item.Carrera ?? 'all',
-            Relacionado: Array.isArray(item.Relacionado) ? [...item.Relacionado] : [],
-            Informacion: item.Informacion ?? '',
-            createdBy: { uid: user.uid, role: user.role },
-            createdAt: serverTimestamp()
-        };
+        writes.push({
+            kind: 'create',
+            ref: doc(collection(firestoreDB, 'videos')),
+            payload: {
+                Tipo: 'video',
+                Video: item.Video,
+                Titulo: titulo,
+                Materia: item.Materia ?? 'general',
+                Carrera: item.Carrera ?? 'all',
+                Relacionado: relacionado(item.Relacionado),
+                Informacion: item.Informacion ?? '',
+                createdBy: { uid: user.uid, role: user.role },
+                createdAt: serverTimestamp()
+            }
+        });
+    });
+    updates.forEach((item, i) => {
+        if (!item?.id) throw new Error(`Actualización ${i + 1}: falta el recurso.`);
+        const titulo = validTitle(item.data?.Titulo);
+        if (!titulo) throw new Error(`Actualización ${i + 1}: el nombre del video es obligatorio y de máximo ${MAX_TITLE_LENGTH} caracteres.`);
+        writes.push({
+            kind: 'update',
+            ref: doc(firestoreDB, 'videos', item.id),
+            payload: {
+                Titulo: titulo,
+                Materia: item.data.Materia ?? 'general',
+                Carrera: item.data.Carrera ?? 'all',
+                Relacionado: relacionado(item.data.Relacionado),
+                updatedAt: serverTimestamp()
+            }
+        });
     });
 
     let created = 0;
+    let updated = 0;
     try {
-        for (let i = 0; i < payloads.length; i += 400) {
-            const chunk = payloads.slice(i, i + 400);
+        for (let i = 0; i < writes.length; i += 400) {
+            const chunk = writes.slice(i, i + 400);
             const batch = writeBatch(firestoreDB);
-            for (const payload of chunk) {
-                batch.set(doc(collection(firestoreDB, 'videos')), payload);
+            for (const write of chunk) {
+                if (write.kind === 'create') batch.set(write.ref, write.payload);
+                else batch.update(write.ref, write.payload);
             }
             await batch.commit();
-            created += chunk.length;
+            created += chunk.filter((w) => w.kind === 'create').length;
+            updated += chunk.filter((w) => w.kind === 'update').length;
         }
     } catch (error) {
-        const wrapped = new Error(`Se subieron ${created} de ${items.length} videos antes del error: ${error.message}`);
+        const wrapped = new Error(`Se guardaron ${created + updated} de ${total} videos antes del error: ${error.message}`);
         wrapped.created = created;
+        wrapped.updated = updated;
         throw wrapped;
     } finally {
-        if (created > 0) await invalidateVideoCaches();
+        if (created + updated > 0) await invalidateVideoCaches();
     }
-    return { created };
+    return { created, updated };
 }
 
 export async function addPdfToMaeteca({ file, Titulo, Materia, Carrera, Relacionado, Informacion } = {}) {

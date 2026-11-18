@@ -2,6 +2,8 @@
 import { ref, computed, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import { getSubjects } from '../firebase/db/subjects';
+import { getMajors } from '../firebase/db/majors';
+import { buildCareerOptions, buildTagOptions } from '../utils/maetecaImport.js';
 import {
     loadMaetecaVideos,
     canUserManageVideos,
@@ -16,6 +18,7 @@ import {
     TYPES,
     // TAGS is the dropdown of simple {name,code}
     TAGS,
+    AVAILABLE_TAG_OPTIONS,
     filterVideosByText
 } from '../firebase/db/maeteca';
 import { getCurrentUser } from '../firebase/db/users';
@@ -47,8 +50,11 @@ const testingRead = ref(false);
 const currentUserRole = ref(null);
 const canManageVideos = computed(() => canUserManageVideos(currentUserRole.value));
 const videos = ref([]);
-// Materias para el diálogo de recursos y la carga en masa
+// Catálogos para el diálogo de recursos y la carga en masa
 const subjects = ref([]);
+const careerOptions = ref(buildCareerOptions([], VIDEO_CAREERS));
+// Etiquetas conocidas: la lista base más las que ya usan los recursos
+const tagOptions = computed(() => buildTagOptions(AVAILABLE_TAG_OPTIONS, videos.value));
 // Buscador global movible
 const searchQuery = ref('');
 
@@ -188,13 +194,19 @@ onMounted(async () => {
         console.error('Error fetching current user for Maeteca:', error);
         currentUserRole.value = null;
     }
-    // Cargar materias para el diálogo de recursos
-    try {
-        subjects.value = (await getSubjects()) ?? [];
-    } catch (e) {
-        console.error('Error cargando materias:', e);
-        subjects.value = [];
-    }
+    // Cargar materias y carreras para el diálogo de recursos y la carga en masa
+    const [subjectList, majorList] = await Promise.all([
+        getSubjects().catch((e) => {
+            console.error('Error cargando materias:', e);
+            return [];
+        }),
+        getMajors().catch((e) => {
+            console.error('Error cargando carreras:', e);
+            return [];
+        })
+    ]);
+    subjects.value = subjectList ?? [];
+    careerOptions.value = buildCareerOptions(majorList ?? [], VIDEO_CAREERS);
     // Cargar video intro desde Firestore
     const loadIntroVideo = async () => {
         try {
@@ -245,11 +257,15 @@ onMounted(async () => {
                         v-model:visible="showResourceDialog"
                         :resource="editingResource"
                         :subjects="subjects"
+                        :careers="careerOptions"
+                        :tag-options="tagOptions"
                         @saved="onResourceSaved"
                     />
                     <MaetecaBulkUpload
                         v-model:visible="showBulkUpload"
                         :subjects="subjects"
+                        :careers="careerOptions"
+                        :tag-options="tagOptions"
                         :existing-videos="videos"
                         @uploaded="onBulkUploaded"
                     />

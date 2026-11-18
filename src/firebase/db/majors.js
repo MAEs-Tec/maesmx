@@ -19,7 +19,10 @@ export async function getMajors(options = {}) {
             const majorsRef = collection(firestoreDB, "schools/tec.mx/majors");
             const docsSnap = await getDocs(majorsRef);
             if (docsSnap) {
-                return docsSnap.docs.map(doc => doc.data());
+                return docsSnap.docs.map(doc => {
+                    const data = doc.data();
+                    return { ...data, id: data.id || doc.id };
+                });
             }
             return null;
         }

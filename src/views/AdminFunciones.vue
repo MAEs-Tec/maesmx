@@ -66,6 +66,8 @@ const confirmDelete = () => {
 };
 
 
+// El botón "Restablecer maes" está comentado en la plantilla a propósito.
+// eslint-disable-next-line no-unused-vars
 const restartMaes = () => {
     confirm.require({
         message: '¿Estás seguro de restablecer los datos de los maes?',

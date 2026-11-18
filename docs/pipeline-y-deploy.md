@@ -17,7 +17,7 @@ Dos workflows en `.github/workflows/`:
 Un solo job, `ci`, en Ubuntu con Node 22 y Java 21:
 
 1. `npm ci` y `npm ci --prefix functions`.
-2. `npm run lint`. Por ahora es informativo: no bloquea, porque quedan errores heredados en `src/`.
+2. `npm run lint`. Un error de lint hace fallar el check.
 3. `npm test`.
 4. `npm run build`.
 5. `npm run test:emulator`: levanta Auth y Firestore, corre el seed y la prueba de integración.

@@ -33,7 +33,7 @@ function ratingBonus(ratings) {
     return valid.length ? round(Math.max(20, Math.min(50, valid.reduce((a, b) => a + b, 0) / valid.length * 10))) : 0;
 }
 
-function createAdvisoryService({ db, admin, functions, now = () => Date.now() }) {
+function createAdvisoryService({ db, functions, now = () => Date.now() }) {
     const requests = db.collection('advisoryRequests');
     const stamp = () => Timestamp.fromMillis(now());
     const fail = (code, message) => { throw new functions.https.HttpsError(code, message); };

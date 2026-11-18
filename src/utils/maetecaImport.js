@@ -8,7 +8,7 @@ export const GENERAL_SUBJECT = Object.freeze({ id: 'general', name: 'General' })
 
 export function normalizeKey(value) {
     return String(value ?? '')
-        .replace(/﻿/g, '')
+        .replace(/\uFEFF/g, '')
         .normalize('NFD')
         .replace(/[̀-ͯ]/g, '')
         .toLowerCase()

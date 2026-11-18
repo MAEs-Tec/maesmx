@@ -46,7 +46,7 @@ const checkLocationAndAttendance = () => {
   const fixedLat = 25.650472; 
   const fixedLon = -100.289667;
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     if (userInfo.value.role == 'admin' || userInfo.value.role == 'coordi' ) {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition((position) => {
@@ -380,7 +380,7 @@ const handleAutoMarkAbsence = async (startTime, uid) => {
             <Column header="Horario" style="min-width: 6rem">
                 <template #body="{ data }">
                     <div class="flex flex-wrap justify-content-evenly column-gap-2 row-gap-2">
-                        <Tag v-for="(value, key) in data.weekSchedule[currentDay]" class="text-md mx-auto py-2 "
+                        <Tag v-for="(value, index) in data.weekSchedule[currentDay]" :key="index" class="text-md mx-auto py-2 "
                             :value="`${value.start} - ${value.end} `"
                             rounded style="min-width: 6rem"/>
                     </div>

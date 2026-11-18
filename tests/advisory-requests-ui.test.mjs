@@ -13,8 +13,8 @@ const names = imports.flatMap(node => node.specifiers.map(item => item.local.nam
 for (const node of [...imports].reverse()) executable = executable.slice(0, node.start) + executable.slice(node.end);
 const factory = new Function(...names, executable.replace('export default', 'return'));
 
-function harness({ failMarkRead = false } = {}) {
-    const messages = [], removed = [], subscriptions = [], navigation = [], reads = [];
+function harness({ failMarkRead = false, role = 'user', soundOn = true } = {}) {
+    const messages = [], removed = [], subscriptions = [], navigation = [], reads = [], bulkReads = [], sounds = [];
     let mount, unmount, authCallback, authStopped = false;
     const services = {
         ...Vue,
@@ -35,13 +35,21 @@ function harness({ failMarkRead = false } = {}) {
         markNotificationRead: async (...args) => {
             reads.push(args);
             if (failMarkRead) throw new Error('offline');
-        }
+        },
+        markNotificationsRead: async (...args) => { bulkReads.push(args); },
+        getClaimsRole: async () => role,
+        ROLE_GROUPS: { mae: ['admin', 'tec', 'coordi', 'subjectCoordi', 'mae', 'publi'] },
+        playNotificationSound: () => sounds.push(Date.now()),
+        unlockNotificationSound: () => {},
+        listenForSoundUnlock: () => () => {},
+        isNotificationSoundOn: () => soundOn,
+        setNotificationSoundOn: () => {}
     };
     const component = factory(...names.map(name => services[name]));
     const state = component.setup({}, { expose() {} });
     mount();
     return {
-        state, messages, removed, subscriptions, navigation, reads,
+        state, messages, removed, subscriptions, navigation, reads, bulkReads, sounds,
         auth: user => authCallback(user), unmount: () => unmount(),
         authStopped: () => authStopped
     };
@@ -112,4 +120,51 @@ test('unmount stops auth and notification listeners and clears request popups', 
     assert.equal(h.authStopped(), true);
     assert.equal(h.subscriptions[0].stopped, true);
     assert.deepEqual(h.removed, ['advisory-requests']);
+});
+
+test('several new notices about the same request show one popup, and staff hear one sound', async () => {
+    const h = harness({ role: 'coordi' });
+    h.auth(student);
+    await new Promise(resolve => setTimeout(resolve));
+    const sub = h.subscriptions[0];
+    sub.next([]);
+    sub.next([notice('help'), notice('created'), notice('other', { requestId: 'request-2' })]);
+    assert.deepEqual(h.messages.map(item => item.data.id), ['help', 'other']);
+    assert.equal(h.sounds.length, 1);
+    sub.next([notice('help'), notice('created'), notice('other', { requestId: 'request-2' })]);
+    assert.equal(h.sounds.length, 1);
+    // A second notice about the same request a moment later, in its own snapshot, stays silent too.
+    sub.next([notice('late-update'), notice('help'), notice('created'), notice('other', { requestId: 'request-2' })]);
+    assert.equal(h.messages.length, 2);
+    assert.equal(h.sounds.length, 1);
+});
+
+test('students get popups without sound, and muted staff hear nothing', async () => {
+    for (const options of [{ role: 'user' }, { role: 'mae', soundOn: false }]) {
+        const h = harness(options);
+        h.auth(student);
+        await new Promise(resolve => setTimeout(resolve));
+        h.subscriptions[0].next([]);
+        h.subscriptions[0].next([notice('new')]);
+        assert.equal(h.messages.length, 1);
+        assert.equal(h.sounds.length, 0);
+    }
+});
+
+test('"Ver todas" marks pending notices as read and opens the list where they appear', async () => {
+    const staff = harness({ role: 'mae' });
+    staff.auth(student);
+    await new Promise(resolve => setTimeout(resolve));
+    staff.subscriptions[0].next([notice('a'), notice('b', { readAt: 1 }), notice('c')]);
+    await staff.state.openAll();
+    assert.deepEqual(staff.bulkReads, [['a01234567', ['a', 'c']]]);
+    assert.deepEqual(staff.navigation, [{ name: 'solicitudAsesoria', query: { tab: 'avisos' } }]);
+
+    const user = harness({ role: 'user' });
+    user.auth(student);
+    await new Promise(resolve => setTimeout(resolve));
+    user.subscriptions[0].next([notice('b', { readAt: 1 })]);
+    await user.state.openAll();
+    assert.deepEqual(user.bulkReads, []);
+    assert.deepEqual(user.navigation, [{ name: 'solicitudAsesoria', query: {} }]);
 });

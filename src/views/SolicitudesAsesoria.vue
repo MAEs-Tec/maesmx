@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { useRoute, useRouter } from 'vue-router';
 import { v4 as uuid } from 'uuid';
-import { getCurrentUser } from '@/firebase/db/users';
+import { getCurrentUser, getUser } from '@/firebase/db/users';
 import { getSubjects } from '@/firebase/db/subjects';
 import { getCampuses } from '@/firebase/db/campuses';
 import { getClaimsRole, ROLE_GROUPS } from '@/auth/roles';
@@ -58,9 +58,10 @@ let historyGeneration = 0;
 const isCoordi = computed(() => ROLE_GROUPS.coordi.includes(role.value));
 const isMae = computed(() => ROLE_GROUPS.mae.includes(role.value));
 const isOwner = computed(() => selected.value?.studentKey === studentKey.value);
-const canManage = computed(() => isOwner.value || selected.value?.creatorKey === studentKey.value || (
-    isCoordi.value && (['admin', 'tec'].includes(role.value) || selected.value?.campus === profile.value?.campus)
-));
+const isCampusCoordi = computed(() => isCoordi.value && (['admin', 'tec'].includes(role.value) || selected.value?.campus === profile.value?.campus));
+const canManage = computed(() => isOwner.value || selected.value?.creatorKey === studentKey.value || isCampusCoordi.value);
+// Elegir al MAE solo lo hace el propio estudiante o coordinación (el servidor aplica la misma regla).
+const canChooseMae = computed(() => isOwner.value || isCampusCoordi.value);
 const activeOffers = computed(() => offers.value.filter(offer => offer.status === 'active' && offer.assignmentVersion === selected.value?.assignmentVersion));
 const myOffer = computed(() => activeOffers.value.find(offer => (offer.maeKey || offer.id) === studentKey.value));
 const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
@@ -135,6 +136,38 @@ function watchDetail() {
     }, fail));
 }
 watch(() => route.params.id, watchDetail);
+// "Ver todas" en los avisos abre /solicitudes?tab=avisos.
+function applyTabFromQuery() {
+    if (route.query.tab === 'avisos' && isMae.value) tab.value = 'invitations';
+    else if (route.query.tab === 'campus' && isCoordi.value) tab.value = 'campus';
+}
+watch(() => route.query.tab, () => { if (profile.value) applyTabFromQuery(); });
+// Nombre del estudiante al escribir su matrícula (solo coordinación publica por otro estudiante).
+const studentLookup = ref(null);
+const studentLookupState = ref('idle');
+let lookupTimer = null;
+let lookupGeneration = 0;
+watch([studentEmail, forAnother], ([value, enabled]) => {
+    clearTimeout(lookupTimer);
+    const current = ++lookupGeneration;
+    studentLookup.value = null;
+    const key = String(value || '').trim().toLowerCase().split('@')[0];
+    if (!enabled || !isCoordi.value || !/^[a-z]\d{8}$/.test(key)) {
+        studentLookupState.value = 'idle';
+        return;
+    }
+    studentLookupState.value = 'loading';
+    lookupTimer = setTimeout(async () => {
+        try {
+            const found = await getUser(key);
+            if (current !== lookupGeneration) return;
+            studentLookup.value = found;
+            studentLookupState.value = found ? 'found' : 'missing';
+        } catch {
+            if (current === lookupGeneration) studentLookupState.value = 'error';
+        }
+    }, 300);
+});
 watch(tab, () => {
     historyGeneration++;
     historyLoading.value = false;
@@ -198,6 +231,7 @@ onMounted(() => {
                     invitations.value = ids.map(id => requestCache.get(id)).filter(Boolean);
                 }, fail));
             }
+            applyTabFromQuery();
             if (route.query.create === '1') {
                 showCreate.value = true;
                 subject.value = subjects.value.find(item => item.id === route.query.subjectId) || null;
@@ -349,10 +383,11 @@ async function loadHistory() {
                     </div>
                     <div v-if="selected.status === 'open' && activeOffers.length" class="mt-4">
                         <h3 class="text-base">{{ canManage ? 'MAEs que pueden apoyar' : 'Mi oferta de apoyo' }}</h3>
+                        <p v-if="canManage && !canChooseMae" class="text-color-secondary text-sm">Solo el estudiante o coordinación pueden elegir al MAE.</p>
                         <ul class="request-list">
                             <li v-for="offer in activeOffers" :key="offer.id" class="offer-row">
                                 <div><strong>{{ offer.name || offer.maeKey || offer.id }}</strong><p class="mb-0">{{ offer.location }}</p></div>
-                                <Button v-if="canManage && selected.status === 'open'" label="Elegir" severity="secondary" :disabled="busy" @click="act(() => assignAdvisoryRequest({ requestId: selected.id, maeKey: offer.maeKey || offer.id }))" />
+                                <Button v-if="canChooseMae && selected.status === 'open'" label="Elegir" severity="secondary" :disabled="busy" @click="act(() => assignAdvisoryRequest({ requestId: selected.id, maeKey: offer.maeKey || offer.id }))" />
                             </li>
                         </ul>
                     </div>
@@ -368,12 +403,17 @@ async function loadHistory() {
             <form class="flex flex-column gap-3" @submit.prevent="create">
                 <div v-if="isCoordi" class="flex align-items-center gap-2">
                     <Checkbox v-model="forAnother" inputId="another-student" binary :disabled="busy" />
-                    <label for="another-student">Publicar por otro estudiante</label>
+                    <label for="another-student">Publicar como coordi, a nombre de otro estudiante</label>
                 </div>
                 <template v-if="isCoordi && forAnother">
                     <label for="request-email">Matrícula o correo institucional del estudiante</label>
                     <InputText id="request-email" v-model="studentEmail" placeholder="A0…@tec.mx" :disabled="busy" required />
-                    <small class="text-color-secondary">No necesita tener cuenta todavía. La solicitud se asociará cuando se registre con ese correo.</small>
+                    <small v-if="studentLookupState === 'loading'" class="text-color-secondary" role="status">Buscando…</small>
+                    <small v-else-if="studentLookupState === 'found'" class="student-found" role="status">
+                        <i class="pi pi-user mr-1" aria-hidden="true"></i>{{ studentLookup.name || studentLookup.email }}<template v-if="studentLookup.career"> · {{ studentLookup.career }}</template>
+                    </small>
+                    <small v-else-if="studentLookupState === 'missing'" class="text-color-secondary" role="status">No hay una cuenta con esa matrícula. La solicitud se asociará cuando se registre con ese correo.</small>
+                    <small v-else class="text-color-secondary">No necesita tener cuenta todavía. La solicitud se asociará cuando se registre con ese correo.</small>
                     <label for="request-campus">Campus donde solicita la asesoría</label>
                     <Dropdown v-model="campus" inputId="request-campus" :options="campuses" optionLabel="name" optionValue="id" filter :disabled="busy" placeholder="Selecciona el campus" />
                 </template>
@@ -406,6 +446,7 @@ async function loadHistory() {
 .request-row small { color: var(--text-color-secondary); }
 .request-row:hover, .request-row.selected { background: var(--surface-hover); }
 .request-row.selected { border-left-color: var(--primary-color); }
+.student-found { color: var(--text-color); font-weight: 500; }
 .offer-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--surface-border); }
 .assignment { padding: 1rem; border: 1px solid var(--surface-border); border-radius: 6px; overflow-wrap: anywhere; }
 @media (max-width: 900px) { .request-columns { grid-template-columns: 1fr; } }

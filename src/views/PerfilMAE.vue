@@ -234,7 +234,12 @@ const getHorasRequeridas = () => {
   }
 }
 
-watch(() => route.params.id, loadProfile);
+// Al salir del perfil el id queda vacío un instante: no se carga ni se reporta error,
+// y se descarta cualquier carga que siga en curso.
+watch(() => route.params.id, (id) => {
+  if (id) loadProfile();
+  else profileLoadId++;
+});
 
 const uploadProfilePicture = async () => {
   if (!selectedFile.value) return;

@@ -132,3 +132,28 @@ test('an older request cannot replace a newer profile', async () => {
     await firstLoad;
     assert.equal(h.state.maeInfo.value.name, 'Latest profile');
 });
+
+test('leaving the profile (empty id) neither loads nor logs "Error al cargar el perfil"', async () => {
+    let watcher;
+    let loads = 0;
+    const h = harness({ uid: 'test-mae', name: 'Test MAE' }, {
+        watch: (source, callback) => {
+            if (typeof source === 'function' && source() === 'test-mae') watcher = callback;
+        },
+        getUserRecord: async () => { loads++; return { uid: 'test-mae', name: 'Test MAE' }; }
+    });
+    const errors = [];
+    const original = console.error;
+    console.error = (...args) => errors.push(args.join(' '));
+    try {
+        await watcher(undefined);
+        await watcher('');
+        assert.equal(loads, 0);
+        await watcher('test-mae');
+        await new Promise(resolve => setTimeout(resolve));
+        assert.ok(loads > 0);
+    } finally {
+        console.error = original;
+    }
+    assert.deepEqual(errors.filter(line => line.includes('Error al cargar el perfil')), []);
+});

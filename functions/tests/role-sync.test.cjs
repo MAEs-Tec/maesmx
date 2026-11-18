@@ -12,11 +12,11 @@ function harness(roles, claims = { role: 'user', otherPermission: true }, error)
         },
         logger: { info() {}, warn() {}, error() {} }
     });
-    return { calls, run: (before = 'user', after = 'mae') => sync({ before: snapshot(before), after: snapshot(after) }, { params: { userId: 'a01723937' } }) };
+    return { calls, run: (before = 'user', after = 'mae') => sync({ before: snapshot(before), after: snapshot(after) }, { params: { userId: 'a00000099' } }) };
 }
 test('promotion synchronizes claims while preserving other permissions', async () => {
     const h = harness(['mae']); await h.run();
-    assert.deepEqual(h.calls, [['lookup', 'a01723937@tec.mx'], ['write', 'auth-id', { role: 'mae', otherPermission: true }]]);
+    assert.deepEqual(h.calls, [['lookup', 'a00000099@tec.mx'], ['write', 'auth-id', { role: 'mae', otherPermission: true }]]);
 });
 test('publicidad receives its own role, not admin', async () => {
     const h = harness(['publi']); await h.run('mae', 'publi');

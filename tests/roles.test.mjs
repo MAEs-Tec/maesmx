@@ -20,13 +20,13 @@ function roleEditor(record, overrides = {}) {
     };
     return { update: exportedFunction(read('../src/firebase/db/users.js'), 'updateUserToMae', services), writes, lookups };
 }
-const input = { matricula: ' A01412408 ', role: { value: 'publi' }, status: { value: 'becario' } };
+const input = { matricula: ' A00000098 ', role: { value: 'publi' }, status: { value: 'becario' } };
 
 test('normalizes matrícula and changes only role and status for an existing MAE', async () => {
-    const data = { uid: 'a01412408', role: 'mae', weekSchedule: {}, subjects: [], badges: [], background: [], points: 230, totalTime: 120, useCoins: 2 };
-    const h = roleEditor({ ref: 'users/a01412408', data });
+    const data = { uid: 'a00000098', role: 'mae', weekSchedule: {}, subjects: [], badges: [], background: [], points: 230, totalTime: 120, useCoins: 2 };
+    const h = roleEditor({ ref: 'users/a00000098', data });
     assert.deepEqual(await h.update(input), { uid: data.uid, role: 'publi', status: 'becario' });
-    assert.deepEqual(h.lookups, ['a01412408']);
+    assert.deepEqual(h.lookups, ['a00000098']);
     assert.deepEqual(h.writes[0].updates, { role: 'publi', status: 'becario' });
 });
 
@@ -51,7 +51,7 @@ test('write permission errors reach the form', async () => {
 });
 
 test('legacy email lookup writes the actual document reference', async () => {
-    const h = roleEditor(null, { getDocs: async () => ({ size: 1, docs: [{ ref: 'legacy-id', data: () => ({ uid: 'a01412408' }) }] }) });
+    const h = roleEditor(null, { getDocs: async () => ({ size: 1, docs: [{ ref: 'legacy-id', data: () => ({ uid: 'a00000098' }) }] }) });
     await h.update(input);
     assert.equal(h.writes[0].ref, 'legacy-id');
 });

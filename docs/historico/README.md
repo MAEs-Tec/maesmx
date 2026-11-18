@@ -6,6 +6,4 @@ Notas de trabajos ya cerrados. Se conservan como contexto; **no describen el est
 |---|---|
 | `PROJECT.md` | Descripción general anterior. La reemplaza [../arquitectura.md](../arquitectura.md). |
 | `EMULATOR_GUIA.md` | Primera guía de emuladores. La reemplaza [../entornos.md](../entornos.md). |
-| `GO_PROD_GUIA.md` | Pasos de la salida a producción de los roles por custom claims. |
-| `ESTADO_PROYECTO.md` | Estado de esa misma migración al cerrarla. |
 | `maeteca-recursos-plan.md` | Plan de la carga masiva y los recursos PDF de Maeteca. |

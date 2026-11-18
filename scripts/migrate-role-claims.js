@@ -5,7 +5,7 @@
 //
 // Uso (desde la raíz del repo maesmx):
 //
-//   GOOGLE_APPLICATION_CREDENTIALS="C:\Users\adolf\Downloads\peer-teaching-firebase-adminsdk-ik5zh-9d0f0e4335.json" \
+//   GOOGLE_APPLICATION_CREDENTIALS="ruta/a/la-llave-de-servicio.json" \
 //   NODE_PATH=functions/node_modules node scripts/migrate-role-claims.js --dry-run
 //
 //   # sin --dry-run escribe de verdad

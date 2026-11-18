@@ -53,17 +53,15 @@ Las funciones usan la API de primera generación (`functions.https.onCall`, `fun
 │   └── tests/               Pruebas de las dos piezas anteriores
 ├── scripts/                 Herramientas de línea de comandos, no forman parte del bundle
 │   ├── check-deploy-branch.js    Guarda de deploy (predeploy de firebase.json)
-│   ├── seed-emulator.js          Usuarios de prueba en emuladores
-│   ├── security-audit.js, exploit-authz.js   Auditoría de reglas contra emuladores
+│   ├── dev-local.js              Entorno local completo (`npm run dev:local`)
+│   ├── seed-emulator.js          Base de prueba para los emuladores
 │   ├── migrate-role-claims.js    Migración puntual de claims desde Firestore
 │   ├── measure-firestore-storage.js, lib/    Medición de almacenamiento de Firestore (solo lectura)
 │   ├── storage-tools/            Utilidad independiente para redimensionar fotos en Storage
 │   └── video-maeteca.ps1         Script auxiliar de video promocional
 ├── tests/                   Pruebas con `node --test` (roles, solicitudes, Maeteca, compresión de imágenes, tamaño de Firestore)
-└── docs/                    Documentación (este archivo, solicitudes de asesoría, plan de Maeteca, diagnóstico de costos)
+└── docs/                    Documentación; notas de trabajos cerrados en docs/historico/
 ```
-
-En la raíz hay además documentos históricos (`ESTADO_PROYECTO.md`, `EMULATOR_GUIA.md`, `GO_PROD_GUIA.md`, `PENTEST_REPORTE.md`, `CHANGELOG.md`) que no se usan como fuente de esta página.
 
 ## 4. Roles y permisos
 

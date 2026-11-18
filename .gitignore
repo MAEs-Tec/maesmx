@@ -59,3 +59,6 @@ brag-output*/
 
 # Config local de Claude Code
 .claude/launch.json
+
+# Planes locales de otros agentes
+.hermes/

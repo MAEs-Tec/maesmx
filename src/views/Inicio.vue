@@ -231,13 +231,13 @@ const guardarEvaluacion = async () => {
       </div>
 
       <div class="flex flex-column md:flex-row md:gap-4   w-full  ">
-        <!-- Recibir asesoria lleva a publicar una solicitud a los MAEs en turno -->
+        <!-- Solicitar asesoría lleva a publicar una solicitud a los MAEs en turno -->
         <Button
           class="p-button-help p-button-lg py-4 w-full md:w-4 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
           :style="{ background: 'linear-gradient(to right, #CC7722, #DAA520)' }"
           @click="router.push('/solicitudes')"
         >
-            Recibir asesoría
+            Solicitar asesoría
             <img src="/assets/calendarOutline.svg" class="ml-4" alt="calendar icon" style="width: 3.0rem; height: 3.0rem;" />
         </Button>
 

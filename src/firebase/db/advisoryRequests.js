@@ -1,7 +1,7 @@
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import {
     collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy,
-    query, serverTimestamp, startAfter, updateDoc, where
+    query, serverTimestamp, startAfter, updateDoc, where, writeBatch
 } from 'firebase/firestore';
 import { firebaseApp, firestoreDB } from '../../main';
 import { invalidateCacheTags } from '../cache/cache';
@@ -94,6 +94,18 @@ export function subscribeNotifications(userKey, next, error) {
 
 export async function markNotificationRead(userKey, id) {
     await updateDoc(doc(firestoreDB, 'advisoryNotifications', userKey, 'items', id), { readAt: serverTimestamp() });
+}
+
+// Marca varios avisos como leídos en lotes; las reglas solo permiten cambiar readAt.
+export async function markNotificationsRead(userKey, ids) {
+    const unique = [...new Set((ids || []).filter(Boolean))];
+    for (let start = 0; start < unique.length; start += 400) {
+        const batch = writeBatch(firestoreDB);
+        unique.slice(start, start + 400).forEach(id => {
+            batch.update(doc(firestoreDB, 'advisoryNotifications', userKey, 'items', id), { readAt: serverTimestamp() });
+        });
+        await batch.commit();
+    }
 }
 
 export async function getAdvisoryRequest(id) {

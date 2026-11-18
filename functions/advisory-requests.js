@@ -64,6 +64,11 @@ function createAdvisoryService({ db, functions, now = () => Date.now() }) {
     function requireManage(who, request) {
         if (!manages(who, request)) fail('permission-denied', 'No puedes gestionar esta solicitud.');
     }
+    // Elegir al MAE solo lo hace el propio estudiante o coordinación (de su campus, o admin/tec).
+    function choosesMae(who, request) {
+        return request.studentKey === who.key ||
+            ['admin', 'tec'].includes(who.role) || (who.role === 'coordi' && who.user.campus === request.campus);
+    }
     function requireOpen(request) {
         if (request.status !== 'open') fail('failed-precondition', 'La solicitud ya no busca asesor.');
     }
@@ -119,6 +124,10 @@ function createAdvisoryService({ db, functions, now = () => Date.now() }) {
         };
         const [all, coordis] = await Promise.all([eligible(request), coordinators(campus)]);
         const matching = all.filter(doc => matchesSubject(doc.data(), request));
+        const helpKeys = (matching.length ? matching : all).map(doc => doc.id);
+        // Quien recibe "¿Puedes apoyar?" no necesita también "Solicitud publicada" de la misma solicitud
+        // (p. ej. una coordi en turno); el estudiante y quien la publica sí lo reciben siempre.
+        const createdKeys = [...participants(request), ...coordis.filter(key => !helpKeys.includes(key))];
         request.broadcastMode = matching.length ? 'subject' : 'all';
         request.broadenAt = Timestamp.fromMillis(now() + 5 * 60 * 1000);
         const ref = requests.doc(crypto.createHash('sha256').update(`${who.key}:${operationId}`).digest('hex'));
@@ -133,8 +142,8 @@ function createAdvisoryService({ db, functions, now = () => Date.now() }) {
             }
             tx.set(lockRef, { requestId: ref.id, studentKey, subjectId: subject.id, updatedAt: stamp() });
             tx.create(ref, request);
-            event(tx, ref, 'created', 'request_created', [...participants(request), ...coordis], 'Solicitud publicada', `Se busca asesoría de ${subject.name}.`);
-            event(tx, ref, 'broadcast-0', 'help_requested', (matching.length ? matching : all).map(doc => doc.id), '¿Puedes apoyar?', `Se busca asesoría de ${subject.name}${topic ? `: ${topic}` : ''}.`);
+            event(tx, ref, 'created', 'request_created', createdKeys, 'Solicitud publicada', `Se busca asesoría de ${subject.name}.`);
+            event(tx, ref, 'broadcast-0', 'help_requested', helpKeys, '¿Puedes apoyar?', `Se busca asesoría de ${subject.name}${topic ? `: ${topic}` : ''}.`);
         });
         return { requestId: ref.id };
     }
@@ -160,7 +169,8 @@ function createAdvisoryService({ db, functions, now = () => Date.now() }) {
                 assignmentVersion: request.assignmentVersion, createdAt: old?.createdAt || stamp(), updatedAt: stamp()
             });
             tx.update(ref, { activeOfferCount: request.activeOfferCount + (alreadyActive ? 0 : 1), updatedAt: stamp() });
-            if (!alreadyActive) event(tx, ref, `offer-${request.assignmentVersion}-${who.key}-${now()}`, 'help_offered', [...participants(request), ...coordis],
+            // Un evento por MAE y ronda: retirar la oferta y volver a ofrecer no repite el aviso.
+            if (!alreadyActive) event(tx, ref, `offer-${request.assignmentVersion}-${who.key}`, 'help_offered', [...participants(request), ...coordis],
                 'Un MAE puede apoyar', `${user.name || who.key} ofrece asesoría de ${request.subject.name}.`);
         });
         return { requestId: ref.id };
@@ -186,7 +196,7 @@ function createAdvisoryService({ db, functions, now = () => Date.now() }) {
         if (!/^[a-z0-9._%+-]+$/.test(maeKey)) fail('invalid-argument', 'maeKey no es valido.');
         await db.runTransaction(async tx => {
             const request = await readRequest(tx, ref);
-            requireManage(who, request);
+            if (!choosesMae(who, request)) fail('permission-denied', 'Solo el estudiante o coordinación pueden elegir al MAE.');
             if (request.status === 'assigned' && request.assignedMaeKey === maeKey) return;
             requireOpen(request);
             const [offerSnap, profile, offersSnap] = await Promise.all([

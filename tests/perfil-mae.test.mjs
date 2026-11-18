@@ -136,7 +136,7 @@ test('an older request cannot replace a newer profile', async () => {
 test('leaving the profile (empty id) neither loads nor logs "Error al cargar el perfil"', async () => {
     let watcher;
     let loads = 0;
-    const h = harness({ uid: 'test-mae', name: 'Test MAE' }, {
+    harness({ uid: 'test-mae', name: 'Test MAE' }, {
         watch: (source, callback) => {
             if (typeof source === 'function' && source() === 'test-mae') watcher = callback;
         },

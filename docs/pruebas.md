@@ -37,7 +37,7 @@ node --test tests/roles.test.mjs
 
 ## Qué corre el pipeline
 
-En cada PR hacia `dev` o `master` y en cada push a `dev`: lint (informativo), `npm test`, `npm run build` y `npm run test:emulator`. Ver [pipeline-y-deploy.md](pipeline-y-deploy.md).
+En cada PR hacia `dev` o `master` y en cada push a `dev`: lint, `npm test`, `npm run build` y `npm run test:emulator`. Ver [pipeline-y-deploy.md](pipeline-y-deploy.md).
 
 ## Agregar una prueba
 
@@ -49,4 +49,3 @@ En cada PR hacia `dev` o `master` y en cada push a `dev`: lint (informativo), `n
 
 - Las reglas de Firestore solo se prueban para solicitudes de asesoría (dentro de la prueba de integración). El resto de `firestore.rules` y todo `storage.rules` no tienen pruebas automáticas.
 - No hay pruebas de extremo a extremo en navegador. La revisión manual se hace con `npm run dev:local` y las cuentas de prueba.
-- El lint todavía reporta errores heredados en `src/`, por eso en el pipeline es informativo.

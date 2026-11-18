@@ -23,7 +23,9 @@ import MaetecaResourceDialog from '@/components/maeteca/MaetecaResourceDialog.vu
 import MaetecaBulkUpload from '@/components/maeteca/MaetecaBulkUpload.vue';
 import MaetecaPdfViewer from '@/components/maeteca/MaetecaPdfViewer.vue';
 
-// Datos de ejemplo para los dropdowns (importados desde la capa de datos)
+// Datos de ejemplo para los dropdowns (importados desde la capa de datos).
+// Los filtros están ocultos temporalmente en la plantilla; se conservan para reactivarlos.
+/* eslint-disable no-unused-vars */
 const selectedTag = ref();
 const tags = TAGS;
 
@@ -35,6 +37,7 @@ const semesters = SEMESTERS;
 
 const selectedType = ref();
 const types = TYPES;
+/* eslint-enable no-unused-vars */
 
 // Colores alternos para bandas de cartas
 const bandColors = ['band--red', 'band--purple', 'band--green'];

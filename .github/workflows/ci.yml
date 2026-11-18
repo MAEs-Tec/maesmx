@@ -42,11 +42,8 @@ jobs:
           npm ci
           npm ci --prefix functions
 
-      # Informativo mientras se limpian los errores heredados de src/.
-      # Cuando `npm run lint` pase en limpio, quitar continue-on-error.
-      - name: Lint (informativo)
+      - name: Lint
         run: npm run lint
-        continue-on-error: true
 
       - name: Pruebas unitarias
         run: npm test

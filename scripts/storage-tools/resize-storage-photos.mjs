@@ -30,7 +30,7 @@ function formatBytes(n) {
 
 // Recompresion de un objeto. Devuelve una fila del reporte.
 async function processFile(file, ctx) {
-    const { bucket, opts, backupDir } = ctx;
+    const { opts, backupDir } = ctx;
     const name = file.name;
     const [meta] = await file.getMetadata();
     const existingMeta = meta.metadata ?? {};

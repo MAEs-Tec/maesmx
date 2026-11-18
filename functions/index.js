@@ -111,7 +111,7 @@ exports.syncUserRoleClaimOnWrite = functions.runWith({ failurePolicy: true })
     .onWrite(createRoleSynchronizer({ db, auth: admin.auth(), logger: functions.logger }));
 
 // Se ejecuta automáticamente el día 1 de cada mes a las 00:00
-exports.cleanupExpiredAnnouncements = functions.pubsub.schedule('0 0 1 * *').timeZone('America/Mexico_City').onRun(async (context) => {
+exports.cleanupExpiredAnnouncements = functions.pubsub.schedule('0 0 1 * *').timeZone('America/Mexico_City').onRun(async () => {
     try {
       const now = new Date();
       const announcementsRef = db.collection('announcements');

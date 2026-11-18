@@ -9,18 +9,33 @@ const loading = ref(true);
 const showDialog = ref(false);
 const isFiltered = ref(false); 
 
+// Los docs de configuración (_type: reveal_config, etc.) viven en la misma colección pero no son asesorías
+const withoutConfigDocs = (list) => (list ?? []).filter(asesoria => !asesoria._type);
+
 const fetchAsesorias = async () => {
     try {
         loading.value = true;
 
         if (startDate.value && endDate.value) {
             const asesoriasData = await getAsesorias(startDate.value, endDate.value);
-            asesorias.value = asesoriasData;
+            asesorias.value = withoutConfigDocs(asesoriasData);
             isFiltered.value = true; 
         } else {
-            asesorias.value = await getAsesorias();
+            asesorias.value = withoutConfigDocs(await getAsesorias());
             isFiltered.value = false; 
         }
+
+        /*
+        // Temp debug to see peerInfo and profilePictureUrl for each asesoria
+        asesorias.value.forEach((asesoria, index) => {
+            console.log(
+                `Asesoria #${index}:`,
+                asesoria.peerInfo,
+                'profilePictureUrl:',
+                asesoria.peerInfo?.profilePictureUrl
+            );
+        });*/
+
     } catch (error) {
         console.error("Error fetching asesorias: ", error);
         asesorias.value = [];
@@ -110,18 +125,19 @@ onMounted(() => {
 
             <Column header="Fecha" field="date">
                 <template #body="{ data }">
-                    <p class="text-sm">{{ new Date(data.date.seconds * 1000).toLocaleDateString() }}</p>
+                    <p class="text-sm">{{ data.date?.seconds ? new Date(data.date.seconds * 1000).toLocaleDateString() : 'Sin fecha' }}</p>
                 </template>
             </Column>
 
+            <!-- Mae profile info -->
             <Column header="Mae" field="maeInfo">
                 <template #body="{ data }">
                     <div class="flex flex-row">
-                        <img v-if="data.peerInfo.profilePictureUrl" :src="data.peerInfo.profilePictureUrl" alt="Foto de perfil" class="border-circle h-3rem w-3rem" />
+                        <img v-if="data.peerInfo?.profilePictureUrl" :src="data.peerInfo?.profilePictureUrl" alt="Foto de perfil" class="border-circle h-3rem w-3rem" />
                         <Skeleton v-else shape="circle" size="3rem"></Skeleton>
                         <span class="flex flex-column ml-4">
-                            <p class="text-sm font-bold">{{ data.peerInfo.name }}</p>
-                            <p class="text-sm">{{ data.peerInfo.uid }}</p>
+                            <p class="text-sm font-bold">{{ data.peerInfo?.name }}</p>
+                            <p class="text-sm">{{ data.peerInfo?.uid }}</p>
                         </span>
                     </div>
                 </template>
@@ -129,22 +145,23 @@ onMounted(() => {
 
             <Column header="Carrera" field="maeInfo">
                 <template #body="{ data }">
-                    <p class="text-sm">{{ data.peerInfo.career }}</p>
+                    <p class="text-sm">{{ data.peerInfo?.career }}</p>
                 </template>
             </Column>
 
+            <!-- Student info -->
             <Column header="Alumno" field="alumnoInfo">
                 <template #body="{ data }">
                     <span class="flex flex-column ml-4">
-                            <p class="text-sm font-bold">{{ data.userInfo.name }}</p>
-                            <p class="text-sm">{{ data.userInfo.uid }}</p>
+                            <p class="text-sm font-bold">{{ data.userInfo?.name }}</p>
+                            <p class="text-sm">{{ data.userInfo?.uid }}</p>
                         </span>
                 </template>
             </Column>
 
             <Column header="Carrera" field="alumnoInfo">
                 <template #body="{ data }">
-                    <p class="text-sm">{{ data.userInfo.career }}</p>
+                    <p class="text-sm">{{ data.userInfo?.career }}</p>
                 </template>
             </Column>
 

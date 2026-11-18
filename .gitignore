@@ -10,7 +10,6 @@ lerna-debug.log*
 functions/node_modules
 # dependencies
 /node_modules
-package-lock.json
 yarn.lock
 
 .DS_Store
@@ -24,6 +23,11 @@ coverage
 
 # Enviorment
 .env
+.env.local
+.env.*.local
+
+# Pentest engagements (evidencia, tokens de prueba, scope)
+engagement-*/
 
 # Editor directories and files
 .vscode/*
@@ -48,3 +52,10 @@ public/themes/nano/
 CLAUDE.md
 TODO.md
 BITACORA.md
+PROPUESTA_LEADERBOARD.md
+brag-output*/
+
+.CLAUDE
+
+# Config local de Claude Code
+.claude/launch.json

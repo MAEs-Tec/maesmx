@@ -1,0 +1,57 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return signedIn() && request.auth.token.get('role', null) is string
+        ? request.auth.token.role
+        : 'user';
+    }
+
+    function hasAnyRole(roles) {
+      return signedIn() && role() in roles;
+    }
+
+    function validImage(maxBytes) {
+      return request.resource.contentType.matches('image/.*')
+        && request.resource.size < maxBytes;
+    }
+
+    match /announcements/{allPaths=**} {
+      allow read: if signedIn();
+      // publi tambien crea anuncios y reemplaza portadas (igual que en firestore.rules)
+      allow create, update: if hasAnyRole(['admin', 'tec', 'coordi', 'publi'])
+        && validImage(5 * 1024 * 1024);
+      allow delete: if hasAnyRole(['admin', 'tec', 'coordi', 'publi']);
+    }
+
+    match /users/{email}/photo {
+      allow read: if signedIn();
+      allow create, update: if signedIn()
+        && request.auth.token.email is string
+        && email.lower() == request.auth.token.email.lower()
+        && validImage(2 * 1024 * 1024);
+      allow delete: if signedIn()
+        && request.auth.token.email is string
+        && email.lower() == request.auth.token.email.lower();
+    }
+
+    match /maeteca/{resourceId}/{fileName} {
+      allow read: if signedIn();
+      allow create: if hasAnyRole(['admin', 'tec', 'coordi'])
+        && fileName.matches('.*\\.pdf$')
+        && request.resource.contentType == 'application/pdf'
+        && request.resource.size > 0
+        && request.resource.size < 10 * 1024 * 1024;
+      allow delete: if hasAnyRole(['admin', 'tec', 'coordi']);
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

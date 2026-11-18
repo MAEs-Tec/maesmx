@@ -23,14 +23,42 @@ const filteredMajors = ref([]); // Store filtered major
 // Helper to normalize y quitar símbolos raros
 const normForMatch = (s) => String(s || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
+// Si una carga falla, la vista sigue con lo demás en vez de quedarse en blanco
+const loadSafely = async (loader, fallback) => {
+    try {
+        return (await loader()) ?? fallback;
+    } catch (error) {
+        console.error('[MaesActivos] Error al cargar datos:', error);
+        return fallback;
+    }
+};
+
 onMounted(async () => {
-    activeMAEs.value = await getUsersWithActiveSession();
-    userInfo.value = await getCurrentUser();
-    subjects.value = await getSubjects();
-    majors.value = await getMajors(); // Get majors
+    const [active, user, loadedSubjects, loadedMajors, loadedMaes] = await Promise.all([
+        loadSafely(() => getUsersWithActiveSession(), []),
+        loadSafely(() => getCurrentUser(), null),
+        loadSafely(() => getSubjects(), []),
+        loadSafely(() => getMajors(), []), // Get majors
+        loadSafely(() => getMaes(), [])
+    ]);
+    activeMAEs.value = active;
+    userInfo.value = user;
+    subjects.value = loadedSubjects;
+    majors.value = loadedMajors;
     filteredMajors.value = majors.value.map(m => `${m.id} - ${m.name}`); // Formato id - nombre carrera
-    maes.value = await getMaes();
+    maes.value = loadedMaes;
 });
+
+// El directorio de MAEs está cacheado (10 min); la sesión activa viene de la consulta fresca
+const activeSessionByUid = computed(() => {
+    const map = new Map();
+    activeMAEs.value.forEach(active => map.set(active.uid, active.activeSession));
+    return map;
+});
+
+const getActiveLocation = (mae) => activeSessionByUid.value.get(mae.uid)?.location || mae.activeSession?.location || '';
+
+const getTodaySlot = (mae) => mae.weekSchedule?.[currentDay.value]?.[0] || null;
 
 const filteredMAEs = computed(() => {
     const selectedSubject = subjectInput.value;
@@ -55,7 +83,7 @@ const filteredMAEs = computed(() => {
      
     return maes.value.filter(mae => {
         // Look for matching subjects
-        const subject = mae.subjects.some(s => s.id === selectedSubject?.id);
+        const subject = (mae.subjects ?? []).some(s => s.id === selectedSubject?.id);
 
         // Look for name 
         let name = false;
@@ -88,7 +116,7 @@ const filteredMAEs = computed(() => {
 });
 
 const sortedMAEs = computed(() => {
-    return filteredMAEs.value.sort((a, b) => {
+    return [...filteredMAEs.value].sort((a, b) => {
         var maeA = isMAEActive(a);
         var maeB = isMAEActive(b);
         if (maeA && !maeB) {
@@ -110,7 +138,7 @@ const isZoomLink = (location) => {
 }
 
 const isMAEActive = (mae) => {
-    return activeMAEs.value.some(active => active.uid === mae.uid);
+    return activeSessionByUid.value.has(mae.uid);
 }
 
 function getDisplayedDay(weekSchedule) {
@@ -186,6 +214,9 @@ const onMajorSelect = () => {
         <h1 class="text-black text-6xl font-bold m-0 sm:text-left" v-else> 
             MAEs activos
         </h1>
+        <router-link :to="{ path: '/solicitudes', query: { create: '1', ...(subjectInput?.id ? { subjectId: subjectInput.id } : {}) } }" class="mt-3">
+            <Button label="Solicitar asesoría" icon="pi pi-plus" severity="secondary" outlined />
+        </router-link>
     </div>
     
     <!-- Buscar entre los maes activos -->
@@ -245,7 +276,7 @@ const onMajorSelect = () => {
     <div class="grid" v-if="sortedMAEs.length > 0">
         <span v-for="mae in sortedMAEs" :key="mae.uid" class="col-12 md:col-6 lg:col-6 xl:col-4">
             <a :href="`#/mae/${mae.uid}`" v-if="isMAEActive(mae)" class="no-blue-link">
-                <div class="p-0 w-full h-full border-round-xl bg-white shadow-1 hover:shadow-3 transition-duration-300 transition-ease-out">
+                <div class="mae-activity-card p-0 w-full h-full border-round-xl bg-white shadow-1 hover:shadow-3 transition-duration-300 transition-ease-out">
                     <!-- Mostrar carta para MAEs activos -->
                     <div class="flex flex-column">
                         <!-- Color de rol -->
@@ -255,7 +286,7 @@ const onMajorSelect = () => {
                         <!-- Contendio de card con info de MAE -->
                         <div class="flex flex-row items-center mt-2 ml-2 p-2">
                             <!-- Foto -->
-                            <img v-if="mae.profilePictureUrl" :src="mae.profilePictureUrl" alt="Foto de perfil" class="border-circle h-5rem w-5rem">
+                            <img v-if="mae.profilePictureUrl" :src="mae.profilePictureUrl" alt="Foto de perfil" loading="lazy" decoding="async" class="border-circle h-5rem w-5rem">
                             <Skeleton v-else shape="circle" size="5rem"></Skeleton>
                             <div class="flex flex-column justify-content-center pl-4 w-full">
                                 <span class="font-bold text-lg text-black-alpha-90 truncate mb-2" style="max-width: 65%; max-height: 38%;  overflow: hidden; white-space: nowrap; text-overflow: ellipsis">{{ mae.name }}</span>
@@ -271,9 +302,9 @@ const onMajorSelect = () => {
                                 </div>
                             </div>
                         </div>
-                        <p v-if="mae.activeSession.location" class="truncate text-center text-lg" style="max-width: 80%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
-                            <template v-if="isZoomLink(mae.activeSession.location)">
-                                <a :href="mae.activeSession.location" target="_blank" rel="noopener noreferrer">
+                        <p v-if="getActiveLocation(mae)" class="truncate text-center text-lg" style="max-width: 80%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
+                            <template v-if="isZoomLink(getActiveLocation(mae))">
+                                <a :href="getActiveLocation(mae)" target="_blank" rel="noopener noreferrer">
                                     <span class="flex flex-row items justify-content-center">
                                         <img src="/assets/link.svg" class="ml-4 mr-2" alt="link icon" style="width: 1.4rem; height: 1.4rem;" />
                                         <p class="underline">Liga de zoom</p>
@@ -283,13 +314,13 @@ const onMajorSelect = () => {
                             <template v-else>
                                 <span class="flex flex-row items justify-content-center">
                                     <img src="/assets/ubicacion.svg" class="ml-4 mr-2" alt="ubicacion icon" style="width: 1.4rem; height: 1.4rem;" />
-                                    <p>{{ mae.activeSession.location }}</p>
+                                    <p>{{ getActiveLocation(mae) }}</p>
                                 </span>
                             </template>
                         </p>
                         <p class="text-lg text-left ml-4 font-bold mb-2">Horario</p>
-                        <Tag v-if="mae.weekSchedule[currentDay]" class="text-lg w-6 ml-4 mb-3 p-2 border-round-3xl mt-0" style="background-color: #69ac51;" 
-                             :value="`${mae.weekSchedule[currentDay][0]['start']} - ${mae.weekSchedule[currentDay][0]['end']} `" />
+                        <Tag v-if="getTodaySlot(mae)" class="text-lg w-6 ml-4 mb-3 p-2 border-round-3xl mt-0" style="background-color: #69ac51;" 
+                             :value="`${getTodaySlot(mae).start} - ${getTodaySlot(mae).end} `" />
                              <p v-else class="text-lg font-bold w-5 ml-4 mb-3 p-2 border-round-3xl mt-0 text-white justify-content-center flex align-items-center" style="background-color: #969696;">
                                 Sin horario
                             </p>
@@ -299,13 +330,13 @@ const onMajorSelect = () => {
 
             <!-- Carta para MAEs inactivos (gris) -->
             <a :href="`#/mae/${mae.uid}`" v-else class="no-blue-link">
-                <div class="p-0 w-full h-full border-round-xl bg-white shadow-1 transition-duration-300 transition-ease-out">
+                <div class="mae-activity-card p-0 w-full h-full border-round-xl bg-white shadow-1 transition-duration-300 transition-ease-out">
                     <div class="flex flex-column">
                         <div class="flex border-round-top-xl h-1rem w-full" v-if="mae.role === 'admin'" style="background-color: #8358CA;"></div>
                         <div class="flex border-round-top-xl h-1rem w-full" v-if="mae.role === 'coordi'" style="background-color: #58AFCA;"></div>
                         <div class="flex border-round-top-xl bg-white h-1rem w-full" v-if="mae.role !== 'coordi' && mae.role !== 'admin'"></div>
                         <div class="flex flex-row items-center mt-2 ml-2 p-2">
-                            <img v-if="mae.profilePictureUrl" :src="mae.profilePictureUrl" alt="Foto de perfil" class="border-circle h-5rem w-5rem opacity-50">
+                            <img v-if="mae.profilePictureUrl" :src="mae.profilePictureUrl" alt="Foto de perfil" loading="lazy" decoding="async" class="border-circle h-5rem w-5rem opacity-50">
                             <Skeleton v-else shape="circle" size="5rem"></Skeleton>
                             <div class="flex flex-column justify-content-center pl-4 w-full">
                                 <span class="font-bold text-lg text-black-alpha-90 truncate mb-2" style="max-width: 65%; max-height: 38%;  overflow: hidden; white-space: nowrap; text-overflow: ellipsis">{{ mae.name }}</span>

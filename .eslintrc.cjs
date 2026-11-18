@@ -7,6 +7,13 @@ module.exports = {
     parserOptions: {
         ecmaVersion: 'latest'
     },
+    overrides: [
+        {
+            // Código que corre en Node (Cloud Functions, scripts y pruebas), no en el navegador.
+            files: ['functions/**', 'scripts/**', 'tests/**'],
+            env: { node: true }
+        }
+    ],
     rules: {
         'vue/multi-word-component-names': 'off',
         'vue/no-reserved-component-names': 'off',

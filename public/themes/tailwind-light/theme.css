@@ -41,6 +41,7 @@
   --surface-overlay:#ffffff;
   --surface-border:#e5e7eb;
   --surface-hover: #f4f4f5;
+  --columna-anuncios: #d2d2d2;
   /* 6366F1 */
   --focus-ring: 0 0 0 1px var(--secondary-color);
   --maskbg: rgba(0, 0, 0, 0.4);

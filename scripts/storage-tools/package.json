@@ -1,0 +1,17 @@
+{
+    "name": "storage-tools",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Herramientas one-shot para Firebase Storage. Aislado del frontend y de functions.",
+    "type": "module",
+    "scripts": {
+        "resize": "node resize-storage-photos.mjs"
+    },
+    "engines": {
+        "node": ">=18.17"
+    },
+    "dependencies": {
+        "firebase-admin": "^12.7.0",
+        "sharp": "^0.33.5"
+    }
+}

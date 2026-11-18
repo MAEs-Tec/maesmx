@@ -3,17 +3,24 @@
     "version": "3.8.0",
     "scripts": {
         "dev": "vite",
+        "dev:local": "node scripts/dev-local.js",
+        "emulators": "npx --yes firebase-tools@14.25.0 emulators:start --project demo-maesmx --only auth,firestore,functions,storage",
+        "seed": "node scripts/seed-emulator.js",
         "build": "vite build",
         "deploy": "vite build && firebase deploy",
         "preview": "vite preview",
-        "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore"
+        "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --ignore-path .gitignore",
+        "lint:fix": "npm run lint -- --fix",
+        "test": "node --test tests/*.test.mjs functions/tests/*.test.cjs",
+        "test:emulator": "npx --yes firebase-tools@14.25.0 emulators:exec --project demo-maesmx --only auth,firestore \"node scripts/seed-emulator.js && node --test tests/advisory-requests.integration.test.mjs\""
     },
     "dependencies": {
         "chart.js": "3.3.2",
+        "exceljs": "^4.4.0",
         "file-saver": "^2.0.5",
         "firebase": "^10.14.1",
         "primeflex": "^3.3.1",
-        "primeicons": "^6.0.1",
+        "primeicons": "^7.0.0",
         "primevue": "^3.30.2",
         "uuid": "^10.0.0",
         "vue": "^3.2.41",

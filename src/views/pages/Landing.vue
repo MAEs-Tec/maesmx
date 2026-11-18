@@ -15,7 +15,7 @@ const toast = useToast();
 const router = useRouter(); 
 
 onMounted(async () => {
-  anuncios.value  = await  getAnnouncements()
+  anuncios.value  = (await  getAnnouncements()) ?? []
   nextAnuncio()
   autoAdvance();
 });
@@ -36,7 +36,7 @@ const scrollToSection = (id) => {
   } else {
     currentIndex.value = 0;
   }
-  currentAnuncio.value = anuncios.value[currentIndex.value];
+  currentAnuncio.value = anuncios.value[currentIndex.value] ?? {};
 };
 
 const prevAnuncio = () => {
@@ -45,7 +45,7 @@ const prevAnuncio = () => {
   } else {
     currentIndex.value = anuncios.value.length - 1; 
   }
-  currentAnuncio.value = anuncios.value[currentIndex.value];
+  currentAnuncio.value = anuncios.value[currentIndex.value] ?? {};
 };
 
 const autoAdvance = () => {
@@ -80,7 +80,7 @@ const goToAsesoria = async (asesoria) => {
         <div class="md:w-10 mx-auto flex p-2" :style="{justifyContent: 'space-between', alignItems: 'center', background: '#EFF3F8'}">
 
             <button class="p-0 m-0 h-100 w-100 bg-transparent border-transparent w-2 md:w-1" @click="scrollToSection('target-start')">
-                <img class="w-full h-full object-cover" src="../../../public/layout/images/logo-maes.svg" alt="logo" />
+                <img class="w-full h-full object-cover" src="/layout/images/logo-maes.svg" alt="logo" />
             </button>
 
             <div class="flex gap-4">
@@ -127,7 +127,7 @@ const goToAsesoria = async (asesoria) => {
                         </h1>
                     </div>
                     <div class="flex-grow flex items-end overflow-hidden">
-                        <img src="../../assets/img/maelanding.png" class="w-full h-full object-cover" />
+                        <img src="../../assets/img/maelanding.webp" class="w-full h-full object-cover" />
                     </div>
                 </div>
             </div>
@@ -184,7 +184,7 @@ const goToAsesoria = async (asesoria) => {
                 <div class="flex-1 text-left">
                     <h2 v-if="currentAnuncio.type === 'Asesoría'" class="text-white text-4xl font-bold text-center m-auto mb-2">Asesorías grupales</h2>
                     <p v-if="currentAnuncio.type === 'Asesoría'" class="font-medium ml-5 text-2xl mb-1" >
-                    Materia: {{ currentAnuncio.subject.name }}
+                    Materia: {{ currentAnuncio.subject?.name ?? currentAnuncio.subject }}
                     </p>
                     <p v-if="currentAnuncio.type === 'Asesoría'" class="font-medium ml-5 text-2xl mb-1">
                     Fecha: {{ formatDate(currentAnuncio.dateTime) }}, {{ formatTime(currentAnuncio.startTime, false) }} - {{ formatTime(currentAnuncio.endTime, true) }}

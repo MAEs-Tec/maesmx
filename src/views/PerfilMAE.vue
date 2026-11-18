@@ -1,19 +1,25 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { useRoute } from 'vue-router';
-import { getUser, updateUserSubjects, updateUserSchedule, getCurrentUser, startActiveSession, 
-  stopActiveSession,updateUserProfilePicture,  countAchievedBadges, 
-  updateUserAchievementBadge, updateUserBackground, updateUserBackgroundImage
-,updatePoints, addBackgroundUsers} from '../firebase/db/users';
+import { useRoute, useRouter } from 'vue-router';
+import { getUser as getUserRecord, updateUserSubjects, updateUserSchedule, getCurrentUser, startActiveSession,
+  stopActiveSession,updateUserProfilePicture,  countAchievedBadges,
+  updateUserAchievementBadge, updateUserBackground, updateUserBackgroundImage,
+  updateUserCareer,
+  addBackgroundUsers } from '../firebase/db/users';
+import { getMajors } from '../firebase/db/majors';
 import { getSubjects } from '../firebase/db/subjects';
-import { addAsesoria, getAsesoriasCountForUserInCurrentSemester,getAsesoriasByUidAndRating,
-  updateAsesoria
+import { addAsesoria, getAsesoriasCountForUserInCurrentSemester, getAsesoriasByUidAndRating,
+  updateAsesoria,
+  updateRatingBonusForMae
  } from '../firebase/db/asesorias';
 import { getStudentReport } from '../firebase/db/attendance';
+import { getAdvisoryRequest, getMatchingRequests, registerRequestedAdvisory } from '../firebase/db/advisoryRequests';
 import { formatDate } from '@/utils/AnunciosUtils';
 import { FilterMatchMode } from 'primevue/api';
 import { useToast } from 'primevue/usetoast';
+import { getErrorDetail } from '@/utils/FirebaseErrors';
 import { uploadFile } from '../firebase/img/users';
+import { useLayout } from '@/layout/composables/layout';
 import {
     getSubjectColor,
     isInSchedule,
@@ -26,11 +32,19 @@ import {
   timeToDecimal 
 } from '@/utils/PerfilUtils';
 
+import { normalizeProfile } from '@/utils/ProfileData';
+
+const getUser = async (uid, options) => normalizeProfile(await getUserRecord(uid, options));
+const isLoading = ref(true);
+const loadError = ref('');
+
 const toast = useToast();
 const route = useRoute();
-const userId = ref(route.path.split('/').pop());
+const router = useRouter();
+const { isDarkTheme } = useLayout();
+const userId = computed(() => route.params.id);
 const maeInfo = ref(null);
-const evalInfo = ref(null);
+const evalInfo = ref([]);
 const userInfo = ref(null);
 const asesoriasCount = ref(0);
 const badgesCount = ref(0);
@@ -68,73 +82,119 @@ const currentStatus = computed(() => {
   return { label: 'Fuera de Horario', severity: 'secondary' };
 });
 
-onMounted(async () => {
- // await addBackgroundUsers();
-  userInfo.value = await getCurrentUser();
-  maeInfo.value = await getUser(route.params.id);
-  asesoriasCount.value = await getAsesoriasCountForUserInCurrentSemester(maeInfo.value.uid);
-  selectedSubjects.value = maeInfo.value.subjects;
-  subjects.value = await getSubjects();
-  newSchedule.value = JSON.parse(JSON.stringify(maeInfo.value.weekSchedule));
-  badgesCount.value = await countAchievedBadges(maeInfo.value.uid);
-  evalInfo.value = await getAsesoriasByUidAndRating(userInfo.value.uid, maeInfo.value.uid);
-  if (asesoriasCount.value >= 1 && maeInfo.value.badges[0].achieved === false) {
-    await updateUserAchievementBadge(maeInfo.value.uid, "1");
-  } 
-  if (asesoriasCount.value >= 10 && maeInfo.value.badges[1].achieved === false) {
-    await updateUserAchievementBadge(maeInfo.value.uid, "2");
-  } 
-  if (asesoriasCount.value >= 30 && maeInfo.value.badges[2].achieved === false) {
-    await updateUserAchievementBadge(maeInfo.value.uid, "3");
-  } 
-  if (asesoriasCount.value >= 50 && maeInfo.value.badges[3].achieved === false) {
-    await updateUserAchievementBadge(maeInfo.value.uid, "4");
-  } 
-  if (asesoriasCount.value >= 100 && maeInfo.value.badges[4].achieved === false) {
-    await updateUserAchievementBadge(maeInfo.value.uid, "5");
-  } 
-  if (asesoriasCount.value >= 200 && maeInfo.value.badges[5].achieved === false) {
-    await updateUserAchievementBadge(maeInfo.value.uid, "6");
-  } 
-  if (asesoriasCount.value >= 500 && maeInfo.value.badges[6].achieved === false) {
-    await updateUserAchievementBadge(maeInfo.value.uid, "7");
-  } 
-  if ( maeInfo.value.profilePictureUrl !== "https://randomuser.me/api/portraits/lego/5.jpg"
-  && maeInfo.value.badges[7].achieved === false
-  ){
-    await updateUserAchievementBadge(maeInfo.value.uid, "8");
+let profileLoadId = 0;
+const loadProfile = async () => {
+  const loadId = ++profileLoadId;
+  const uid = route.params.id;
+  isLoading.value = true;
+  loadError.value = '';
+  maeInfo.value = null;
+  asesoriasCount.value = 0;
+  badgesCount.value = 0;
+  evalInfo.value = [];
+  dataAttendance.value = undefined;
+  try {
+    const currentUser = await getCurrentUser();
+    if (loadId !== profileLoadId) return;
+    if (!currentUser) throw new Error('No hay una sesión activa.');
+    const profile = await getUser(uid, { forceRefresh: true });
+    if (loadId !== profileLoadId) return;
+    userInfo.value = currentUser;
+    maeInfo.value = profile;
+    if (!profile) {
+      loadError.value = 'No encontramos este perfil.';
+      return;
+    }
+    selectedSubjects.value = [...maeInfo.value.subjects];
+    newSchedule.value = JSON.parse(JSON.stringify(maeInfo.value.weekSchedule));
+  } catch (error) {
+    if (loadId !== profileLoadId) return;
+    console.error('Error al cargar el perfil:', error);
+    loadError.value = 'No se pudo cargar el perfil. Intenta de nuevo.';
+    return;
+  } finally {
+    if (loadId === profileLoadId) isLoading.value = false;
   }
-  if ((Math.round((maeInfo.value.totalTime / 60) * 100) / 100) >= 80 && maeInfo.value.badges[8].achieved === false) {
-      await updateUserAchievementBadge(maeInfo.value.uid, "9");
-  }
-  if ( maeInfo.value.badges[11].achieved === false 
-    && maeInfo.value.role == "mae" || asesoriasCount.value >= 1
-  ) {
-    await updateUserAchievementBadge(maeInfo.value.uid, "12");
-  } 
-  if ( maeInfo.value.badges[12].achieved === false 
-    && maeInfo.value.role == "coordi" || maeInfo.value.role == "admin"
-     || maeInfo.value.role == "tec"
-  ) {
-    await updateUserAchievementBadge(maeInfo.value.uid, "13");
-  } 
-  if ( maeInfo.value.badges[13].achieved === false 
-    &&  maeInfo.value.role == "admin"
-     || maeInfo.value.role == "tec"
-  ) {
-    await updateUserAchievementBadge(maeInfo.value.uid, "14");
-  } 
-  if ( maeInfo.value.badges[14].achieved === false 
-    &&  maeInfo.value.role == "publi"
-  ) {
-    await updateUserAchievementBadge(maeInfo.value.uid, "15");
-  } 
-  
-  maeInfo.value = await getUser(route.params.id);
-  badgesCount.value = await countAchievedBadges(maeInfo.value.uid);
-  dataAttendance.value = await getStudentReport(userInfo.value.uid);
 
-})
+  // Statistics and achievements must not prevent editing an empty schedule.
+  const profile = maeInfo.value;
+  const viewerUid = userInfo.value.uid;
+  try {
+    const [availableSubjects, count, evaluations] = await Promise.all([
+      getSubjects(),
+      getAsesoriasCountForUserInCurrentSemester(profile.uid),
+      getAsesoriasByUidAndRating(viewerUid, profile.uid)
+    ]);
+    if (loadId !== profileLoadId) return;
+    subjects.value = availableSubjects;
+    asesoriasCount.value = count;
+    evalInfo.value = evaluations;
+    if (count >= 1 && profile.badges[0]?.achieved === false) {
+      await updateUserAchievementBadge(profile.uid, "1");
+    }
+    if (count >= 10 && profile.badges[1]?.achieved === false) {
+      await updateUserAchievementBadge(profile.uid, "2");
+    }
+    if (count >= 30 && profile.badges[2]?.achieved === false) {
+      await updateUserAchievementBadge(profile.uid, "3");
+    }
+    if (count >= 50 && profile.badges[3]?.achieved === false) {
+      await updateUserAchievementBadge(profile.uid, "4");
+    }
+    if (count >= 100 && profile.badges[4]?.achieved === false) {
+      await updateUserAchievementBadge(profile.uid, "5");
+    }
+    if (count >= 200 && profile.badges[5]?.achieved === false) {
+      await updateUserAchievementBadge(profile.uid, "6");
+    }
+    if (count >= 500 && profile.badges[6]?.achieved === false) {
+      await updateUserAchievementBadge(profile.uid, "7");
+    }
+    if ( profile.profilePictureUrl !== "https://randomuser.me/api/portraits/lego/5.jpg"
+    && profile.badges[7]?.achieved === false
+    ){
+      await updateUserAchievementBadge(profile.uid, "8");
+    }
+    if ((Math.round((profile.totalTime / 60) * 100) / 100) >= 80 && profile.badges[8]?.achieved === false) {
+        await updateUserAchievementBadge(profile.uid, "9");
+    }
+    if ( profile.badges[11]?.achieved === false
+      && (profile.role == "mae" || count >= 1)
+    ) {
+      await updateUserAchievementBadge(profile.uid, "12");
+    }
+    if ( profile.badges[12]?.achieved === false
+      && (profile.role == "coordi" || profile.role == "admin"
+       || profile.role == "tec")
+    ) {
+      await updateUserAchievementBadge(profile.uid, "13");
+    }
+    if ( profile.badges[13]?.achieved === false
+      && (profile.role == "admin" || profile.role == "tec")
+    ) {
+      await updateUserAchievementBadge(profile.uid, "14");
+    }
+    if ( profile.badges[14]?.achieved === false
+      &&  profile.role == "publi"
+    ) {
+      await updateUserAchievementBadge(profile.uid, "15");
+    }
+
+    const [updatedProfile, achievedBadges, attendance] = await Promise.all([
+      getUser(uid), countAchievedBadges(profile.uid), getStudentReport(profile.uid)
+    ]);
+    if (loadId !== profileLoadId) return;
+    maeInfo.value = updatedProfile || profile;
+    badgesCount.value = achievedBadges;
+    dataAttendance.value = attendance;
+  } catch (error) {
+    if (loadId !== profileLoadId) return;
+    console.error('Error al cargar los datos adicionales del perfil:', error);
+    toast.add({ severity: 'warn', summary: 'Perfil cargado parcialmente', detail: 'No se pudieron cargar todos los datos adicionales. Puedes editar tu horario.', life: 5000 });
+  }
+};
+
+onMounted(loadProfile);
 
 const getHorasHorario = () => {
     let hours = 0;
@@ -165,6 +225,13 @@ const getHorasHorario = () => {
 
 
 const getHorasRequeridas = () => {
+  const career = maeInfo.value.career?.toUpperCase();
+  const isMaeOrCoordi = maeInfo.value.role === 'mae' || maeInfo.value.role === 'coordi';
+
+  if (maeInfo.value.status === 'becario' && isMaeOrCoordi && career === 'SLD') {
+    return 1.5;
+  }
+
   if (maeInfo.value.status === "becario" && 
     ((maeInfo.value.role === "mae" || maeInfo.value.role === "coordi") &&
     (maeInfo.value.career.toUpperCase() === "MC" || maeInfo.value.career.toUpperCase() === "LBC" || maeInfo.value.career.toUpperCase() === "LPS"))) {
@@ -182,11 +249,7 @@ const getHorasRequeridas = () => {
   }
 }
 
-watch(route, async (newroute, oldroute) => {
-  maeInfo.value = await getUser(route.params.id);
-  selectedSubjects.value = maeInfo.value.subjects;
-  newSchedule.value = JSON.parse(JSON.stringify(maeInfo.value.weekSchedule));
-})
+watch(() => route.params.id, loadProfile);
 
 const uploadProfilePicture = async () => {
   if (!selectedFile.value) return;
@@ -194,7 +257,11 @@ const uploadProfilePicture = async () => {
   try {
     const url = await uploadFile(selectedFile.value, userInfo.value.email);
     await updateUserProfilePicture(userInfo.value.uid, url); 
-    maeInfo.value = await getUser(route.params.id); 
+    maeInfo.value = await getUser(route.params.id);
+    if (maeInfo.value?.profilePictureUrl) {
+      const sep = maeInfo.value.profilePictureUrl.includes('?') ? '&' : '?';
+      maeInfo.value = { ...maeInfo.value, profilePictureUrl: `${maeInfo.value.profilePictureUrl}${sep}v=${Date.now()}` };
+    }
     toast.add({ severity: 'success', summary: 'Foto actualizada', life: 3000 });
   } catch (error) {
     toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo actualizar la foto de perfil' });
@@ -212,8 +279,8 @@ const filteredSubjects = computed(() => {
     const searchQueryNormalized = searchQuery.value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     return maeInfo.value.subjects.filter(
       subject => {
-        const nameNormalized = subject.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-        const idNormalized = subject.id.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        const nameNormalized = (subject.name || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        const idNormalized = (subject.id || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
         return nameNormalized.includes(searchQueryNormalized) || idNormalized.includes(searchQueryNormalized);
       }
     );
@@ -238,7 +305,8 @@ const saveSubjectChanges = async () => {
    maeInfo.value = await getUser(route.params.id);
    toast.add({ severity: 'success', summary: 'Guardado exitoso', detail: 'Los cambios en tus materias se guardaron con éxito', life: 3000 });
   } catch (error) {
-    toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al tratar de guardar los cambios' });
+    console.error('Error al guardar materias: ', error);
+    toast.add({ severity: 'error', summary: 'No se guardaron tus materias', detail: getErrorDetail(error), life: 8000 });
   }
   showDialogMaterias.value = false;    
 }
@@ -292,8 +360,8 @@ const saveScheduleChanges = async () => {
   }
   if (maeInfo.value.status === "becario" && 
     ((maeInfo.value.role === "mae" || maeInfo.value.role === "coordi") &&
-    hours < 3)) {
-    toast.add({ severity: 'error', summary: 'Error de horas', detail: 'No puedes tener menos de 3 horas asignadas en total', life: 3000 });
+    hours < getHorasRequeridas())) {
+    toast.add({ severity: 'error', summary: 'Error de horas', detail: `No puedes tener menos de ${getHorasRequeridas()} horas asignadas en total`, life: 3000 });
     return;
   } else if (maeInfo.value.status === "becario" && 
            maeInfo.value.role === "publi" && 
@@ -312,9 +380,10 @@ const saveScheduleChanges = async () => {
     maeInfo.value = await getUser(route.params.id);
     toast.add({ severity: 'success', summary: 'Guardado exitoso', detail: 'Los cambios en tu horario se guardaron con éxito', life: 3000 });
   } catch (error) {
-    toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al tratar de guardar los cambios' });
+    console.error('Error al guardar horario: ', error);
+    toast.add({ severity: 'error', summary: 'No se guardó tu horario', detail: getErrorDetail(error), life: 8000 });
   }
-  showDialogHorarios.value = false;  
+  showDialogHorarios.value = false;
 };
 
 const showDialogAsesoria = ref(false);
@@ -334,28 +403,149 @@ const groupedSubjects = computed(() => {
 });
 const showDialogEvaluacion = ref(false);
 const showDialogEditar = ref(false);
+const showDialogCarrera = ref(false);
+const majorsList = ref([]);
+const selectedMajor = ref(null);
+const isSavingCarrera = ref(false);
 const ratingAsesoria = ref(null);
 const comentarioAsesoria = ref('');
 const materiaAsesoria = ref(null);
 const isSavingAsesoria = ref(false);
+const isSavingEval = ref(false);
+const matchingRequests = ref([]);
+const selectedRequest = ref(null);
+const isLoadingRequests = ref(false);
+const requestLoadError = ref('');
+const requestLookupHint = ref('');
+let requestLoadVersion = 0;
 
+const requestOptions = computed(() => matchingRequests.value.map(item => ({
+  ...item,
+  label: `${item.subject?.name || 'Materia'}${item.topic ? ` · ${item.topic}` : ''} · ${item.id.slice(-6)}`
+})));
+
+const openAsesoriaDialog = async (requestId = null) => {
+  const version = ++requestLoadVersion;
+  selectedRequest.value = null;
+  matchingRequests.value = [];
+  requestLoadError.value = '';
+  requestLookupHint.value = '';
+  materiaAsesoria.value = null;
+  showDialogAsesoria.value = true;
+  isLoadingRequests.value = true;
+  try {
+    const studentKey = userInfo.value?.uid;
+    const maeKey = maeInfo.value?.uid;
+    if (!studentKey || !maeKey) throw new Error('No se pudo identificar al estudiante o al MAE.');
+    const candidates = requestId
+      ? [await getAdvisoryRequest(requestId)]
+      : await getMatchingRequests(studentKey, maeKey);
+    if (version !== requestLoadVersion) return;
+    matchingRequests.value = (candidates || []).filter(item => item &&
+      item.studentKey === studentKey && item.assignedMaeKey === maeKey &&
+      (item.status === 'assigned' || (item.status === 'closed' && item.closeReason === 'missing_registration')));
+    if (requestId && matchingRequests.value.length !== 1) {
+      throw new Error('Esta solicitud ya no está pendiente de tu registro con este MAE. Consulta su estado en Solicitudes de asesoría.');
+    }
+    if (matchingRequests.value.length === 1) {
+      selectedRequest.value = requestOptions.value[0];
+      materiaAsesoria.value = selectedRequest.value.subject;
+    }
+  } catch (error) {
+    if (version !== requestLoadVersion) return;
+    if (requestId) {
+      requestLoadError.value = error.message || 'No se pudieron consultar las solicitudes. Intenta de nuevo.';
+    } else {
+      // El registro normal no depende de las solicitudes: solo avisamos.
+      console.warn('No se pudieron consultar las solicitudes pendientes:', error);
+      requestLookupHint.value = 'No pudimos revisar si tienes solicitudes pendientes con este MAE. Puedes registrar tu asesoría normalmente.';
+    }
+  } finally {
+    if (version === requestLoadVersion) isLoadingRequests.value = false;
+  }
+};
+
+watch(selectedRequest, request => {
+  materiaAsesoria.value = request?.subject || null;
+});
+
+watch(() => [route.query?.requestId, route.params.id, isLoading.value], ([requestId, , loading]) => {
+  if (!loading && maeInfo.value && userInfo.value && typeof requestId === 'string') {
+    openAsesoriaDialog(requestId);
+  }
+});
+
+const openCarreraDialog = async () => {
+  if (majorsList.value.length === 0) {
+    majorsList.value = await getMajors();
+  }
+  selectedMajor.value = majorsList.value.find(m => m.id === maeInfo.value.career) || null;
+  showDialogCarrera.value = true;
+};
+
+const guardarCarrera = async () => {
+  if (!selectedMajor.value) {
+    toast.add({ severity: 'warn', summary: 'Selecciona una carrera', detail: 'Debes elegir una carrera para guardar', life: 3000 });
+    return;
+  }
+  isSavingCarrera.value = true;
+  try {
+    const newCareer = selectedMajor.value.id;
+    const newArea = selectedMajor.value.area || maeInfo.value.area;
+    await updateUserCareer(maeInfo.value.uid, newCareer, newArea);
+    maeInfo.value.career = newCareer;
+    maeInfo.value.area = newArea;
+    showDialogCarrera.value = false;
+    toast.add({ severity: 'success', summary: 'Carrera actualizada', detail: 'Tu carrera se actualizó con éxito', life: 3000 });
+  } catch (error) {
+    console.error("Error al guardar carrera:", error);
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al guardar la carrera', life: 5000 });
+  } finally {
+    isSavingCarrera.value = false;
+  }
+};
+
+// Para guardar la asesoría
 const saveAsesoria = async () => {
-  if (isSavingAsesoria.value) return; 
+  if (isSavingAsesoria.value || isLoadingRequests.value || requestLoadError.value || !materiaAsesoria.value) return;
   isSavingAsesoria.value = true; 
   toast.add({ severity: 'info', summary: 'Guardando cambios', detail: 'Se está registrando la asesoría', life: 3000 });
   try {
-    await addAsesoria(maeInfo.value, userInfo.value, materiaAsesoria.value, comentarioAsesoria.value, ratingAsesoria.value); 
-    maeInfo.value = await getUser(route.params.id);
+    if (selectedRequest.value) {
+      await registerRequestedAdvisory({
+        requestId: selectedRequest.value.id,
+        assignmentVersion: selectedRequest.value.assignmentVersion,
+        rating: ratingAsesoria.value,
+        comment: comentarioAsesoria.value
+      });
+    } else {
+      await addAsesoria(maeInfo.value, userInfo.value, materiaAsesoria.value, comentarioAsesoria.value, ratingAsesoria.value);
+    }
     toast.add({ severity: 'success', summary: 'Guardado exitoso', detail: 'La asesoría se registró con éxito', life: 3000 });
+    showDialogAsesoria.value = false;
+    selectedRequest.value = null;
     ratingAsesoria.value = null;
     comentarioAsesoria.value = '';
     materiaAsesoria.value = null;
+    if (route.query?.requestId) {
+      try {
+        const { requestId, ...query } = route.query;
+        await router?.replace({ query });
+      } catch (error) {
+        console.warn('No se pudo limpiar el parámetro requestId:', error);
+      }
+    }
+    // A refresh failure after a successful write must not invite a second registration.
+    try {
+      maeInfo.value = await getUser(route.params.id, { forceRefresh: true });
+      asesoriasCount.value = await getAsesoriasCountForUserInCurrentSemester(maeInfo.value.uid, { forceRefresh: true });
+    } catch (error) {
+      console.warn('La asesoría se guardó, pero no se pudo refrescar el perfil:', error);
+    }
   } catch (error) {
-    toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al tratar de registrar la asesoría' });
+    toast.add({ severity: 'error', summary: 'No se pudo registrar', detail: error.message || 'Ocurrió un error al tratar de registrar la asesoría' });
   } finally{
     isSavingAsesoria.value = false; 
-    showDialogAsesoria.value = false;  
-    asesoriasCount.value = await getAsesoriasCountForUserInCurrentSemester(maeInfo.value.uid);
   }
 }
 
@@ -370,27 +560,22 @@ const startSession = async () => {
     maeInfo.value = await getUser(route.params.id);
     showDialogSession.value = false;
   } catch (error) {
-    toast.add({ severity: 'error', summary: 'Ocurrió un error al tratar de iniciar turno', detail: 'Consulta con un administrador de la página', life: 3000 });
+    toast.add({ severity: 'error', summary: 'No se pudo iniciar tu turno', detail: getErrorDetail(error), life: 8000 });
   }
 }
 
 const stopSession = async () => {
   try {
     const res = await stopActiveSession(userInfo.value.uid);
-    if (!res.activeSessionDeleted) {
-      if (res.timeLimitExceded) {
-        toast.add({ severity: 'error', summary: `Excediste el limite de tiempo de tu turno (${ Math.round((res.differenceInMinutes / 60) * 100) / 100 } horas)`, detail: 'Consulta a un coordi para reponer las horas' });
-      }
-      else {
-        throw new Error("Active session was not deleted");
-      }
+    if (res.timeLimitExceded) {
+      toast.add({ severity: 'error', summary: `Excediste el limite de tiempo de tu turno (${ Math.round((res.differenceInMinutes / 60) * 100) / 100 } horas)`, detail: 'Consulta a un coordi para reponer las horas' });
     } else {
       toast.add({ severity: 'success', summary: 'Se ha cerrado el turno con éxito', detail: `${res.differenceInMinutes} minutos registrados`, life: 3000 });
     }
     userInfo.value = await getCurrentUser();
     maeInfo.value = await getUser(route.params.id);
   } catch (error) {
-    toast.add({ severity: 'error', summary: 'Ocurrió un error al tratar de cerrar turno', detail: 'Consulta con un administrador de la página', life: 3000 });
+    toast.add({ severity: 'error', summary: 'No se pudo cerrar tu turno', detail: getErrorDetail(error), life: 8000 });
   }
 }
 
@@ -464,21 +649,21 @@ const guardarEvaluacion = async () => {
     toast.add({ severity: 'warn', summary: 'Debes llenar la evaluación', detail: 'Selecciona una asesoría antes de guardar', life: 3000 });
     return;
   }
-  
+
+  isSavingEval.value = true;
+  try {
     await updateAsesoria(selectedAsesoria.value, {
       comment: comentarioAsesoria.value,
       rating: ratingAsesoria.value,
     });
-    if(ratingAsesoria.value > 3){
-      await updatePoints(maeInfo.value.uid, ratingAsesoria.value * 5)
-      if(comentarioAsesoria.value !== ""){
-        await updatePoints(maeInfo.value.uid, 25)
-      }
+    if (maeInfo.value?.uid) {
+      await updateRatingBonusForMae(maeInfo.value.uid);
     }
 
     ratingAsesoria.value = null;
     comentarioAsesoria.value = '';
     selectedAsesoria.value = null;
+    showDialogEvaluacion.value = false;
     evalInfo.value = await getAsesoriasByUidAndRating(userInfo.value.uid, maeInfo.value.uid);
     toast.add({
       severity: 'success',
@@ -486,12 +671,23 @@ const guardarEvaluacion = async () => {
       detail: 'La evaluación se registró con éxito',
       life: 3000,
     });
-  
+  } catch (error) {
+    console.error("Error al guardar evaluación:", error);
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al guardar la evaluación: ' + error.message, life: 5000 });
+  } finally {
+    isSavingEval.value = false;
+  }
 };
 
 </script>
 
 <template>
+  <div v-if="isLoading" class="card" role="status">Cargando perfil…</div>
+  <div v-else-if="loadError" class="card" role="alert">
+    <p>{{ loadError }}</p>
+    <Button label="Reintentar" @click="loadProfile" />
+  </div>
+  <template v-if="maeInfo && userInfo">
   <div class="flex border-round-top-xl h-8rem w-full" v-if="maeInfo"
       :style="{
         alignItems: 'center',
@@ -503,13 +699,13 @@ const guardarEvaluacion = async () => {
     
     <div class="sm:flex sm:flex-1 justify-center w-full px-3">
       <div class="relative flex align-items-center justify-content-center mr-4">
-        <img v-if="maeInfo" :src="maeInfo.profilePictureUrl" alt="Foto de perfil" class="border-circle h-10rem w-10rem border-3 border-white mt-8 ml-6">
+        <img v-if="maeInfo" :src="maeInfo.profilePictureUrl" alt="Foto de perfil" :class="['border-circle h-10rem w-10rem border-3 mt-8 ml-6', isDarkTheme ?  'perfil-fixes' : 'border-white' ]">
       </div>
       
     </div>
     <Button 
     v-if="userInfo.uid == userId" 
-            class="p-button-help p-button-sm font-bold flex  border-none border-round-3xl mr-4 mb-6 texto-negro bg-white border-3 border-white"
+            :class="['p-button-help p-button-sm font-bold flex  border-none border-round-3xl mr-4 mb-6 texto-negro bg-white border-3', isDarkTheme ?  'perfil-fixes' : 'border-white' ]"
             :style="{
               padding: '1.2rem 1rem',
               height: '1.5rem',
@@ -519,7 +715,7 @@ const guardarEvaluacion = async () => {
             @click="showDialogEditar = true"
           >
             Editar perfil
-            <img src="/assets/edit.svg" class="ml-2 " alt="store icon" style="width: 1.2rem; height: 1.2rem;" />
+            <i class="pi pi-pencil ml-2" style="font-size: 0.9rem;"></i>
     </Button>
   </div>
 
@@ -551,7 +747,7 @@ const guardarEvaluacion = async () => {
           v-if="userInfo.uid != maeInfo.uid" 
            class="p-button-help p-button-lg w-full  text-white  border-round-3xl text-xl font-bold flex justify-content-center align-items-center border-none	 "
           :style="{ background: 'linear-gradient(to right, #4466A7, #51A3AC)' }"
-          @click="showDialogAsesoria = true"
+          @click="openAsesoriaDialog()"
           :disabled=" isSavingAsesoria" 
         >
             Registrar asesoría
@@ -598,7 +794,7 @@ const guardarEvaluacion = async () => {
           v-if="userInfo.uid != maeInfo.uid" 
            class="p-button-help p-button-lg w-full  text-white  border-round-3xl text-xl font-bold flex justify-content-center align-items-center border-none	 "
           :style="{ background: 'linear-gradient(to right, #4466A7, #51A3AC)' }"
-          @click="showDialogAsesoria = true"
+          @click="openAsesoriaDialog()"
           :disabled=" isSavingAsesoria" 
         >
             Registrar asesoría
@@ -646,7 +842,7 @@ const guardarEvaluacion = async () => {
         <div class="border-round-lg border-gray-300 flex flex-row p-2 shadow-md card  flex flex-column mb-2">
           <span class="flex flex-row justify-content-center text-center ml-2">
             <p class="text-lg font-bold">Mis estadísticas</p>
-            <img src="/assets/est.svg" class="ml-2" alt="mentoring icon" style="width: 1.6rem; height: 1.6rem;" />
+            <i class="pi pi-chart-bar ml-2" style="font-size: 1.2rem;"></i>
           </span>
           <span class="flex flex-row  mb-2">
             <img src="/assets/grad.svg" class="ml-2" alt="mentoring icon" style="width: 1.6rem; height: 1.6rem;" />
@@ -682,7 +878,7 @@ const guardarEvaluacion = async () => {
             <p class="text-lg font-medium ">{{ badgesCount }} / 18</p>
             <i class="pi pi-angle-right text-xl ml-5 mt-1 cursor-pointer" @click="showDialogLogros = true"></i>
           </div>
-          <div class="flex flex-row">
+          <div v-if="maeInfo.badges[0]" class="flex flex-row">
             <img 
                 :src="maeInfo.badges[0].image_url" 
                 alt="Logro 1"
@@ -696,7 +892,7 @@ const guardarEvaluacion = async () => {
                   <p class="text-md font-medium m-0">{{ maeInfo.badges[0].description }}</p>
               </div>
           </div>
-          <div class="flex flex-row">
+          <div v-if="maeInfo.badges[1]" class="flex flex-row">
             <img 
                 :src="maeInfo.badges[1].image_url" 
                 alt="Logro 1"
@@ -718,8 +914,10 @@ const guardarEvaluacion = async () => {
           <div class="grid">
             <div v-for="day in daysArray" class="md:col col-12">
               <div class="text-center p-3 border-round-sm bg-gray-200 text-xl font-bold">{{ day['es'] }}</div>
-                <div v-if="maeInfo.weekSchedule[day['en']]" v-for="(slot, index) in maeInfo.weekSchedule[day['en']]" :key="`${day['en']}-${index}`" 
-                class="text-center p-2 border-round-sm bg-green-500 text-white text-base font-bold mt-2">{{ `${slot['start']} - ${slot['end']}` }}</div>
+                <template v-if="maeInfo.weekSchedule[day.en]?.length">
+                  <div v-for="(slot, index) in maeInfo.weekSchedule[day.en]" :key="`${day.en}-${index}`"
+                    class="text-center p-2 border-round-sm bg-green-500 text-white text-base font-bold mt-2">{{ `${slot.start} - ${slot.end}` }}</div>
+                </template>
                 <div v-else class="text-center p-2 border-round-sm bg-gray-100 text-black text-base font-bold mt-2"> N/A </div>
             </div>
         </div>
@@ -780,11 +978,25 @@ const guardarEvaluacion = async () => {
 </Dialog>
 
   <Dialog v-model:visible="showDialogAsesoria" modal header="Registrar asesoría" class="md:w-4">
+    <p v-if="isLoadingRequests" role="status">Consultando solicitudes pendientes…</p>
+    <div v-if="requestLoadError" role="alert" class="mb-3">
+      <p>{{ requestLoadError }}</p>
+      <Button label="Reintentar" text @click="openAsesoriaDialog(route.query?.requestId || null)" />
+    </div>
+    <p v-if="requestLookupHint" class="text-sm text-color-secondary" role="status">{{ requestLookupHint }}</p>
+    <template v-if="matchingRequests.length">
+      <label for="advisory-request" class="font-bold block mb-2">Solicitud de asesoría</label>
+      <Dropdown inputId="advisory-request" v-model="selectedRequest" :options="requestOptions"
+        optionLabel="label" dataKey="id" placeholder="Selecciona la solicitud atendida"
+        :showClear="!route.query?.requestId" :disabled="isSavingAsesoria || !!route.query?.requestId"
+        class="w-full mb-2" />
+      <p v-if="selectedRequest" class="text-sm">Tu registro confirmará esta solicitud. La materia corresponde al aviso original.</p>
+    </template>
     <p class="font-bold">Materia</p>
-    <Dropdown v-model="materiaAsesoria" :options="groupedSubjects" optionGroupLabel="label" optionGroupChildren="items" filter optionLabel="name" placeholder="Materia" checkmark :highlightOnSelect="false" class="w-12 mb-2" />
+    <Dropdown v-model="materiaAsesoria" :options="groupedSubjects" optionGroupLabel="label" optionGroupChildren="items" filter optionLabel="name" placeholder="Materia" checkmark :highlightOnSelect="false" :disabled="!!selectedRequest || isLoadingRequests || isSavingAsesoria" class="w-12 mb-2" />
     <div class="flex justify-content-end gap-2">
       <Button type="button" label="Cerrar" severity="secondary" @click="showDialogAsesoria = false"></Button>
-      <Button type="button" label="Confirmar registro" :disabled="!(materiaAsesoria !== null)" @click="saveAsesoria"></Button>
+      <Button type="button" label="Confirmar registro" :loading="isSavingAsesoria" :disabled="!materiaAsesoria || isLoadingRequests || !!requestLoadError" @click="saveAsesoria"></Button>
     </div>
   </Dialog>
 
@@ -798,7 +1010,7 @@ const guardarEvaluacion = async () => {
 
   <div class="grid md:ml-8 mt-3">
     <div
-      v-for="(badge) in maeInfo.badges"
+      v-for="(badge) in maeInfo.badges.filter(Boolean)"
       :key="badge.id"
       class="col-11 ml-3 md:col-5 lg:col-3 flex flex-row align-items-center card p-3 md:mx-3 lg:mx-5  h-10rem   border-round shadow-2 hover:shadow-4 transition-shadow duration-200 border-round-xl"
     >
@@ -911,7 +1123,7 @@ const guardarEvaluacion = async () => {
   <template #header>
     <div class="flex align-items-center justify-content-center text-center h-0.5rem m-auto">
       <p class="text-2xl font-bold mr-2 mt-3">Editar perfil </p>
-      <img src="/assets/edit.svg" alt="trophy icon" style="width: 1.6rem; height: 1.6rem;" />
+      <i class="pi pi-pencil" style="font-size: 1.4rem;"></i>
     </div>
   </template>
 
@@ -939,6 +1151,14 @@ const guardarEvaluacion = async () => {
           >
             Horarios
           <img src="/assets/clock.svg" class="ml-4" alt="mentoring icon" style="width: 2.0rem; height: 2.0rem;" />
+      </Button>
+      <Button
+            class="p-button-help p-button-lg w-full mt-3 text-white  border-round-3xl text-xl font-bold flex justify-content-center align-items-center border-none "
+            :style="{ background: 'linear-gradient(to right, #6a44a7, #3ebee7)' }"
+            @click="openCarreraDialog"
+          >
+            Carrera
+          <i class="pi pi-graduation-cap text-lg ml-4 font-bold text-white" style="font-size: 2rem"></i>
       </Button>
     </div>
  
@@ -985,21 +1205,51 @@ const guardarEvaluacion = async () => {
     <div v-else class="text-center p-4">
       <p class="text-gray-600 font-bold">Sin asesorías para evaluar</p>
     </div>
-    <template #footer v-if="evalInfo && evalInfo.length">
-      <div class="flex justify-content-end mt-4">
-        <Button 
-          label="Confirmar" 
-          @click="guardarEvaluacion" 
-           :style="{ background: 'linear-gradient(to right, #44a79b, #69ac51)' }"
-        />
-        <Button 
-          label="Cancelar" 
-          class="p-button-text mr-2" 
-          @click="showDialogEvaluacion = false"
-        />
-       
+    <div v-if="evalInfo && evalInfo.length" class="flex justify-content-end mt-4">
+      <Button
+        label="Confirmar"
+        @click="guardarEvaluacion"
+        :loading="isSavingEval"
+        :disabled="isSavingEval"
+        :style="{ background: 'linear-gradient(to right, #44a79b, #69ac51)' }"
+      />
+      <Button
+        label="Cancelar"
+        class="p-button-text mr-2"
+        @click="showDialogEvaluacion = false"
+      />
+    </div>
+  </Dialog>
+
+  <Dialog v-model:visible="showDialogCarrera" modal class="md:w-4">
+    <template #header>
+      <div class="flex align-items-center justify-content-center text-center h-0.5rem m-auto">
+        <p class="text-2xl font-bold mr-2 mt-3">Cambiar carrera</p>
+        <i class="pi pi-graduation-cap" style="font-size: 1.4rem;"></i>
       </div>
     </template>
+    <p class="font-bold text-lg mb-2">Selecciona tu carrera</p>
+    <Dropdown
+      v-model="selectedMajor"
+      :options="majorsList"
+      optionLabel="name"
+      filter
+      placeholder="Buscar carrera..."
+      class="w-full mb-3"
+    />
+    <p v-if="selectedMajor && selectedMajor.area" class="text-sm text-color-secondary mt-2">
+      Área: <span class="font-semibold">{{ selectedMajor.area }}</span>
+    </p>
+    <div class="flex justify-content-end gap-2 mt-4">
+      <Button label="Cancelar" class="p-button-text" @click="showDialogCarrera = false" />
+      <Button
+        label="Guardar"
+        :loading="isSavingCarrera"
+        :disabled="isSavingCarrera"
+        @click="guardarCarrera"
+        :style="{ background: 'linear-gradient(to right, #6a44a7, #3ebee7)', border: 'none' }"
+      />
+    </div>
   </Dialog>
 
   <Dialog v-model:visible="showDialogSession" modal header="Iniciar turno" class="md:w-4">
@@ -1030,6 +1280,7 @@ const guardarEvaluacion = async () => {
       <Button type="button" label="Subir" :disabled="!selectedFile" @click="uploadProfilePicture"></Button>
     </div>
   </Dialog>
+  </template>
 </template>
 
 <style scoped>

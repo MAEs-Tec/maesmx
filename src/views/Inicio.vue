@@ -1,12 +1,13 @@
 <script setup>
 import { onMounted, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { getCurrentUser, getUser, startActiveSession, stopActiveSession,
-  updatePoints } from '../firebase/db/users';
+import { getCurrentUser, startActiveSession, stopActiveSession } from '../firebase/db/users';
 import { useToast } from 'primevue/usetoast';
+import { getErrorDetail } from '@/utils/FirebaseErrors';
 import { getSubjects } from '../firebase/db/subjects';
-import { addAsesoria,getAsesoriasByUidAndRating,
-  updateAsesoria} from '../firebase/db/asesorias';
+import { addAsesoria, getAsesoriasByUidAndRating,
+  updateAsesoria,
+  updateRatingBonusForMae } from '../firebase/db/asesorias';
 import { getMaesNames } from '@/firebase/db/users';
 import { getAnnouncements } from '@/firebase/db/annoucement'; 
 import {
@@ -21,7 +22,6 @@ const showDialogSession = ref(false);
 const location = ref('Biblioteca Piso 3');
 const router = useRouter(); 
 const showDialogAsesoria = ref(false);
-const showDialogSolicitar = ref(false);
 const ratingAsesoria = ref(null);
 const comentarioAsesoria = ref('');
 const materiaAsesoria = ref(null)
@@ -48,13 +48,14 @@ const anuncios = ref([]);
 const currentAnuncio = ref({});
 const currentIndex = ref(-1);
 const isSavingAsesoria = ref(false);
+const isSavingEval = ref(false);
 const evalInfo = ref(null);
 const showDialogEvaluacion = ref(false);
 
 onMounted(async () => {
   userInfo.value = await getCurrentUser();
   subjects.value = await getSubjects();
-  anuncios.value  = await  getAnnouncements()
+  anuncios.value  = (await  getAnnouncements()) ?? []
   if (userInfo.value) {
     evalInfo.value = await getAsesoriasByUidAndRating(userInfo.value.uid);
   }
@@ -78,25 +79,21 @@ const startSession = async () => {
     userInfo.value = await getCurrentUser();
     showDialogSession.value = false;
   } catch (error) {
-    toast.add({ severity: 'error', summary: 'Ocurrió un error al tratar de iniciar turno', detail: 'Consulta con un administrador de la página', life: 3000 });
+    toast.add({ severity: 'error', summary: 'No se pudo iniciar tu turno', detail: getErrorDetail(error), life: 8000 });
   }
 };
 
 const stopSession = async () => {
   try {
     const res = await stopActiveSession(userInfo.value.uid);
-    if (!res.activeSessionDeleted) {
-      if (res.timeLimitExceded) {
-        toast.add({ severity: 'error', summary: `Excediste el límite de tiempo de tu turno (${Math.round((res.differenceInMinutes / 60) * 100) / 100} horas)`, detail: 'Consulta a un coordinador para reponer las horas' });
-      } else {
-        throw new Error("Active session was not deleted");
-      }
+    if (res.timeLimitExceded) {
+      toast.add({ severity: 'error', summary: `Excediste el límite de tiempo de tu turno (${Math.round((res.differenceInMinutes / 60) * 100) / 100} horas)`, detail: 'Consulta a un coordinador para reponer las horas' });
     } else {
       toast.add({ severity: 'success', summary: 'Se ha cerrado el turno con éxito', detail: `${res.differenceInMinutes} minutos registrados`, life: 3000 });
     }
     userInfo.value = await getCurrentUser();
   } catch (error) {
-    toast.add({ severity: 'error', summary: 'Ocurrió un error al tratar de cerrar turno', detail: 'Consulta con un administrador de la página', life: 3000 });
+    toast.add({ severity: 'error', summary: 'No se pudo cerrar tu turno', detail: getErrorDetail(error), life: 8000 });
   }
 };
 
@@ -107,7 +104,7 @@ const nextAnuncio = () => {
   } else {
     currentIndex.value = 0;
   }
-  currentAnuncio.value = anuncios.value[currentIndex.value];
+  currentAnuncio.value = anuncios.value[currentIndex.value] ?? {};
 };
 
 const prevAnuncio = () => {
@@ -116,7 +113,7 @@ const prevAnuncio = () => {
   } else {
     currentIndex.value = anuncios.value.length - 1; 
   }
-  currentAnuncio.value = anuncios.value[currentIndex.value];
+  currentAnuncio.value = anuncios.value[currentIndex.value] ?? {};
 };
 
 const autoAdvance = () => {
@@ -125,6 +122,7 @@ const autoAdvance = () => {
   }, 5000);
 };
 
+// Adds asesoría desde home 
 const saveAsesoria = async () => {
   if (isSavingAsesoria.value) return; 
   isSavingAsesoria.value = true; 
@@ -191,23 +189,22 @@ const guardarEvaluacion = async () => {
     toast.add({ severity: 'warn', summary: 'Debes llenar la evaluación', detail: 'Selecciona una asesoría antes de guardar', life: 3000 });
     return;
   }
-  
+
+  isSavingEval.value = true;
+  try {
+    const selectedEvaluation = evalInfo.value?.find(asesoria => asesoria.id === selectedAsesoria.value);
     await updateAsesoria(selectedAsesoria.value, {
       comment: comentarioAsesoria.value,
       rating: ratingAsesoria.value,
     });
-    if(ratingAsesoria.value > 3){
-      if (userInfo.value && userInfo.value.uid) {
-         await updatePoints(userInfo.value.uid, ratingAsesoria.value * 5)
-         if(comentarioAsesoria.value !== ""){
-           await updatePoints(userInfo.value.uid, 25)
-         }
-      }
+    if (selectedEvaluation?.peerInfo?.uid) {
+      await updateRatingBonusForMae(selectedEvaluation.peerInfo.uid);
     }
 
     ratingAsesoria.value = null;
     comentarioAsesoria.value = '';
     selectedAsesoria.value = null;
+    showDialogEvaluacion.value = false;
     evalInfo.value = await getAsesoriasByUidAndRating(userInfo.value.uid);
     toast.add({
       severity: 'success',
@@ -215,7 +212,12 @@ const guardarEvaluacion = async () => {
       detail: 'La evaluación se registró con éxito',
       life: 3000,
     });
-  
+  } catch (error) {
+    console.error("Error al guardar evaluación:", error);
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Ocurrió un error al guardar la evaluación: ' + error.message, life: 5000 });
+  } finally {
+    isSavingEval.value = false;
+  }
 };
 
 </script>
@@ -229,18 +231,18 @@ const guardarEvaluacion = async () => {
       </div>
 
       <div class="flex flex-column md:flex-row md:gap-4   w-full  ">
-         <!-- <Button
-          class="p-button-help p-button-lg py-4 w-full md:w-5 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
+        <!-- Recibir asesoria lleva a publicar una solicitud a los MAEs en turno -->
+        <Button
+          class="p-button-help p-button-lg py-4 w-full md:w-4 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
           :style="{ background: 'linear-gradient(to right, #CC7722, #DAA520)' }"
-          @click="showDialogSolicitar = true"
-          :disabled=" isSavingAsesoria" 
+          @click="router.push('/solicitudes')"
         >
-            Solicitar asesoría
+            Recibir asesoría
             <img src="/assets/calendarOutline.svg" class="ml-4" alt="calendar icon" style="width: 3.0rem; height: 3.0rem;" />
-        </Button> -->
+        </Button>
 
         <Button
-          class="p-button-help p-button-lg py-4 w-full md:w-5 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
+          class="p-button-help p-button-lg py-4 w-full md:w-4 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
           :style="{ background: 'linear-gradient(to right, #4466A7, #51A3AC)' }"
           @click="showDialogAsesoria = true"
           :disabled=" isSavingAsesoria" 
@@ -251,7 +253,7 @@ const guardarEvaluacion = async () => {
 
         
           <Button
-            class="p-button-help p-button-lg py-4 w-full md:w-5 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
+            class="p-button-help p-button-lg py-4 w-full md:w-4 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
             :style="{ background: 'linear-gradient(to right, #44A79b, #69ac51)' }"
             @click="showDialogEvaluacion = true"
             :disabled=" isSavingAsesoria" 
@@ -321,7 +323,7 @@ const guardarEvaluacion = async () => {
           <div class="flex-1 text-left">
             <h2 v-if="currentAnuncio.type === 'Asesoría'" class="text-white text-3xl font-bold text-center m-auto mb-2">Asesorías grupales</h2>
             <p v-if="currentAnuncio.type === 'Asesoría'" class="font-medium ml-5 text-xl mb-1" >
-              Materia: {{ currentAnuncio.subject.name }}
+              Materia: {{ currentAnuncio.subject?.name ?? currentAnuncio.subject }}
             </p>
             <p v-if="currentAnuncio.type === 'Asesoría'" class="font-medium ml-5 text-xl mb-1">
               Fecha: {{ formatDate(currentAnuncio.dateTime) }}, {{ formatTime(currentAnuncio.startTime, false) }} - {{ formatTime(currentAnuncio.endTime, true) }}
@@ -364,7 +366,7 @@ const guardarEvaluacion = async () => {
   </div>
 
   <Dialog v-model:visible="showDialogSession" modal header="Iniciar turno" class="md:w-4">
-    <label for="location">Por favor indica donde te encuentras</label>
+    <label for="location" class="block mb-2">Por favor indica donde te encuentras</label>
     <InputText id="text" v-model="location" placeholder="Biblioteca Piso 3" class="w-full mb-4"/>
     <div class="flex justify-content-end gap-2">
       <Button type="button" label="Cerrar" severity="secondary" @click="showDialogSession = false"></Button>
@@ -372,6 +374,7 @@ const guardarEvaluacion = async () => {
     </div>
   </Dialog>
   
+  <!-- Popup para registrar asesoría -->
   <Dialog v-model:visible="showDialogAsesoria" modal header="Registrar asesoría" class="md:w-4">
     
     <p class="font-bold">Mae</p>
@@ -389,28 +392,6 @@ const guardarEvaluacion = async () => {
     <div class="flex justify-content-end gap-2">
       <Button type="button" label="Cerrar" severity="secondary" @click="showDialogAsesoria = false"></Button>
       <Button type="button" label="Confirmar registro" :disabled="!(materiaAsesoria !== null)" @click="saveAsesoria"></Button>
-    </div>
-  </Dialog>
-
-  <Dialog v-model:visible="showDialogSolicitar" modal header="Solicitar asesoría" class="md:w-4">
-    
-    <p class="font-medium">
-      <b>¡Gracias por tu interés en recibir una asesoría con MAEs!</b><br>
-      Las asesorías se imparten en Espacio MAE en la Biblioteca Piso 3, y estamos disponibles de Lunes a Viernes de 9am a 6pm.<br>
-      <br>
-      <b>En esta misma página puedes consultar:</b><br>
-      - En "MAEs activos", los MAEs que están disponibles en este momento y las materias que imparten.<br>
-      - En "Horarios", los días y horas en que habrá MAEs para la materia que necesites.<br>
-      <br>
-      <span class="font-bold">Importante:</span><br>
-      Por el momento, las asesorías <b>no se agendan ni se apartan</b>.<br>
-      Para recibir una, solo necesitas acudir al Espacio MAE y acercarte con un MAE disponible en ese momento.<br>
-      <br>
-      <b>Gracias por tu comprensión.</b>
-    </p>
-
-    <div class="flex justify-content-end gap-2">
-      <Button type="button" label="Cerrar" severity="secondary" @click="showDialogSolicitar = false"></Button>
     </div>
   </Dialog>
 
@@ -454,21 +435,20 @@ const guardarEvaluacion = async () => {
     <div v-else class="text-center p-4">
       <p class="text-gray-600 font-bold">Sin asesorías para evaluar</p>
     </div>
-    <template #footer v-if="evalInfo && evalInfo.length">
-      <div class="flex justify-content-end mt-4">
-        <Button 
-          label="Confirmar" 
-          @click="guardarEvaluacion" 
-           :style="{ background: 'linear-gradient(to right, #44a79b, #69ac51)' }"
-        />
-        <Button 
-          label="Cancelar" 
-          class="p-button-text mr-2" 
-          @click="showDialogEvaluacion = false"
-        />
-       
-      </div>
-    </template>
+    <div v-if="evalInfo && evalInfo.length" class="flex justify-content-end mt-4">
+      <Button
+        label="Confirmar"
+        @click="guardarEvaluacion"
+        :loading="isSavingEval"
+        :disabled="isSavingEval"
+        :style="{ background: 'linear-gradient(to right, #44a79b, #69ac51)' }"
+      />
+      <Button
+        label="Cancelar"
+        class="p-button-text mr-2"
+        @click="showDialogEvaluacion = false"
+      />
+    </div>
   </Dialog>
 
 </template>

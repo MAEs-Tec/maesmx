@@ -24,8 +24,8 @@ import {
     writeBatch
 } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { extractYoutubeId, validatePdfFile, toSafePdfFileName, MAX_IMPORT_ROWS, MAX_TITLE_LENGTH } from '../../utils/maetecaImport.js';
-export { extractYoutubeId } from '../../utils/maetecaImport.js';
+import { extractYoutubeId, extractKahootId, validatePdfFile, toSafePdfFileName, MAX_IMPORT_ROWS, MAX_TITLE_LENGTH } from '../../utils/maetecaImport.js';
+export { extractYoutubeId, extractKahootId, getKahootEmbedUrl } from '../../utils/maetecaImport.js';
 import { getCurrentUser } from './users';
 import { invalidateCacheTags, withCache } from '../cache/cache';
 import { CACHE_TAGS, CACHE_TTL_MS, cacheKeys } from '../cache/config';
@@ -153,11 +153,14 @@ export const TYPES = [
 
 export const RESOURCE_TYPES = [
     { name: 'Video', code: 'video' },
-    { name: 'PDF', code: 'pdf' }
+    { name: 'PDF', code: 'pdf' },
+    { name: 'Kahoot', code: 'kahoot' }
 ];
 
 export function getResourceType(resource) {
-    return resource?.Tipo === 'pdf' ? 'pdf' : 'video';
+    if (resource?.Tipo === 'pdf') return 'pdf';
+    if (resource?.Tipo === 'kahoot') return 'kahoot';
+    return 'video';
 }
 
 function validTitle(value) {
@@ -293,6 +296,27 @@ export async function addPdfToMaeteca({ file, Titulo, Materia, Carrera, Relacion
     return { id: docRef.id };
 }
 
+export async function addKahootToMaeteca({ Kahoot, Titulo, Materia, Carrera, Relacionado, Informacion } = {}) {
+    const user = await requireManager();
+    if (!extractKahootId(Kahoot)) throw new Error('El link no es de un kahoot válido.');
+    const titulo = validTitle(Titulo);
+    if (!titulo) throw new Error(`El nombre es obligatorio y de máximo ${MAX_TITLE_LENGTH} caracteres.`);
+
+    const docRef = await addDoc(collection(firestoreDB, 'videos'), {
+        Tipo: 'kahoot',
+        Kahoot: String(Kahoot).trim(),
+        Titulo: titulo,
+        Informacion: Informacion ?? '',
+        Materia: Materia ?? 'general',
+        Carrera: Carrera ?? 'all',
+        Relacionado: [...(Relacionado ?? [])],
+        createdBy: { uid: user.uid, role: user.role },
+        createdAt: serverTimestamp()
+    });
+    await invalidateVideoCaches();
+    return { id: docRef.id };
+}
+
 export async function updateMaetecaResource(resource, fields) {
     await requireManager();
     if (!resource?.id) throw new Error('Recurso inválido.');
@@ -305,9 +329,14 @@ export async function updateMaetecaResource(resource, fields) {
         allowed.Titulo = t;
     }
     if ('Video' in input) {
-        if (getResourceType(resource) !== 'video') throw new Error('Un PDF no tiene link de video.');
+        if (getResourceType(resource) !== 'video') throw new Error('Este recurso no tiene link de video.');
         if (!extractYoutubeId(input.Video)) throw new Error('El link no es de YouTube.');
         allowed.Video = String(input.Video).trim();
+    }
+    if ('Kahoot' in input) {
+        if (getResourceType(resource) !== 'kahoot') throw new Error('Este recurso no es un kahoot.');
+        if (!extractKahootId(input.Kahoot)) throw new Error('El link no es de un kahoot válido.');
+        allowed.Kahoot = String(input.Kahoot).trim();
     }
     if ('Relacionado' in input) {
         if (!Array.isArray(input.Relacionado)) throw new Error('Relacionado debe ser una lista.');

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import { getSubjects } from '../firebase/db/subjects';
 import { getMajors } from '../firebase/db/majors';
@@ -71,6 +71,32 @@ const displayedVideos = computed(() =>
 // Recurso principal (intro) cargado desde documento 'intro-maeteca'
 const mainVideo = ref(null);
 const mainType = computed(() => getResourceType(mainVideo.value));
+
+// Kahoot: su embed es una tarjeta que no se estira. A 600 px de ancho queda en ~16:9,
+// así que se dibuja a ese tamaño y se escala para llenar el mismo recuadro que un video.
+// Si el recuadro es más angosto (celular), escalar haría el texto ilegible: se usa su alto natural.
+const KAHOOT_BASE_WIDTH = 600;
+const mainWrapper = ref(null);
+const mainWrapperWidth = ref(0);
+const kahootScaled = computed(() => mainType.value === 'kahoot' && mainWrapperWidth.value >= KAHOOT_BASE_WIDTH);
+const kahootFrameStyle = computed(() =>
+    kahootScaled.value
+        ? {
+              width: `${KAHOOT_BASE_WIDTH}px`,
+              height: `${(KAHOOT_BASE_WIDTH * 9) / 16}px`,
+              transform: `scale(${mainWrapperWidth.value / KAHOOT_BASE_WIDTH})`,
+              transformOrigin: 'top left'
+          }
+        : null
+);
+watch(mainWrapper, (el, _old, onCleanup) => {
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => {
+        mainWrapperWidth.value = entry.contentRect.width;
+    });
+    observer.observe(el);
+    onCleanup(() => observer.disconnect());
+});
 const mainVideoEmbedUrl = computed(() => {
     if (mainType.value === 'pdf') return null;
     if (mainType.value === 'kahoot') return getKahootEmbedUrl(mainVideo.value?.Kahoot) || null;
@@ -317,10 +343,11 @@ onMounted(async () => {
                                 :url="mainVideo.Archivo"
                                 :title="mainVideo.Titulo || ''"
                             />
-                            <div v-else class="video-wrapper">
+                            <div v-else ref="mainWrapper" class="video-wrapper" :class="{ 'video-wrapper--kahoot': mainType === 'kahoot' && !kahootScaled }">
                                 <iframe
                                     v-if="mainVideoEmbedUrl"
                                     :src="mainVideoEmbedUrl"
+                                    :style="kahootFrameStyle"
                                     width="560"
                                     height="315"
                                     :title="mainType === 'kahoot' ? 'Kahoot' : 'YouTube video player'"
@@ -523,6 +550,14 @@ onMounted(async () => {
     overflow: hidden;
     border-radius: 20px;
     max-height: 287px;
+}
+
+/* Kahoot en recuadro angosto (celular): alto natural de su tarjeta en vez de 16:9.
+   En recuadros anchos se escala dentro del 16:9 (ver kahootFrameStyle). */
+.video-wrapper--kahoot {
+    padding-top: 0;
+    height: 470px;
+    max-height: none;
 }
 
 .video-wrapper iframe {

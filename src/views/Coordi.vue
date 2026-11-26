@@ -342,11 +342,11 @@ const handleAutoMarkAbsence = async (startTime, uid) => {
     <div class="sm:flex sm:justify-content-between mb-2 sm:mb-5">
         <h1 class="text-black text-6xl font-bold text-center m-0 sm:text-left">Asistencia</h1>
         <div class="flex gap-2">
-            <Button @click="showDialogReponer = true" label="Reponer asistencia" icon="pi pi-calendar-plus" size="large" class="max-h-full w-full sm:w-fit" />
-            <Button @click="showDialogRegister = true" label="Agregar horas" icon="pi pi-pencil" size="large" class="max-h-full w-full sm:w-fit" />
+            <Button data-tour="coordi-reponer" @click="showDialogReponer = true" label="Reponer asistencia" icon="pi pi-calendar-plus" size="large" class="max-h-full w-full sm:w-fit" />
+            <Button data-tour="coordi-horas" @click="showDialogRegister = true" label="Agregar horas" icon="pi pi-pencil" size="large" class="max-h-full w-full sm:w-fit" />
         </div>
     </div>
-    <div class="card mb-0">
+    <div class="card mb-0" data-tour="coordi-tabla">
 
         <DataTable :value="maes" paginator :rows="50" dataKey="id" 
             :loading="loading" class="border-round-xl"

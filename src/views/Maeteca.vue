@@ -236,6 +236,7 @@ onMounted(async () => {
                             class="p-button-rounded mr-2 custom-add-button cruz p-button-lg"
                             style="font-size: 2rem;"
                             aria-label="Carga en masa de videos"
+                            data-tour="maeteca-masa"
                             v-tooltip.bottom="'Carga en masa de videos'"
                             @click="showBulkUpload = true"
                         />
@@ -245,6 +246,7 @@ onMounted(async () => {
                             class="p-button-rounded mr-2 custom-add-button cruz p-button-lg"
                             style="font-size: 2rem;"
                             aria-label="Agregar recurso"
+                            data-tour="maeteca-agregar"
                             v-tooltip.bottom="'Agregar recurso'"
                             @click="handleOpenAddVideo"
                         />
@@ -300,7 +302,7 @@ onMounted(async () => {
                 <div class="flex flex-column xl:flex-row align-items-stretch gap-4 mb-6">
                     <!-- Card Grande de Video -->
                     <div class="flex-1">
-                        <div class="maeteca-main">
+                        <div class="maeteca-main" data-tour="maeteca-principal">
                             <MaetecaPdfViewer
                                 v-if="getResourceType(mainVideo) === 'pdf' && mainVideo.Archivo"
                                 :url="mainVideo.Archivo"
@@ -365,7 +367,7 @@ onMounted(async () => {
                 <div class="mt-5">
                     <div class="flex justify-content-between flex-column sm:flex-row align-items-start sm:align-items-center mb-4">
                         <h2 class="text-2xl font-normal m-0 selection-title">Nuestra selección para ti</h2>
-                        <div class="flex align-items-center gap-2 mt-3 sm:mt-0">
+                        <div class="flex align-items-center gap-2 mt-3 sm:mt-0" data-tour="maeteca-buscar">
                             <span class="p-input-icon-left" style="width:100%;">
                                 <i class="pi pi-search" />
                                 <InputText v-model="searchQuery" placeholder="Buscar" class="custom-search-input" />
@@ -390,7 +392,7 @@ onMounted(async () => {
                     </div>
 
                     <!-- Cards de Selección -->
-                    <div v-if="displayedVideos.length" class="mae-cards-grid">
+                    <div v-if="displayedVideos.length" class="mae-cards-grid" data-tour="maeteca-tarjetas">
                         <div
                             v-for="(video, index) in displayedVideos"
                             :key="video.id || index"

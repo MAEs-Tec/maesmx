@@ -142,7 +142,7 @@ export function buildMenuForRole(role, uid) {
         model.push({
             label: 'MAE',
             items: [
-                { label: 'Mi perfil', icon: 'pi pi-fw pi-user-edit', to: `/mae/${uid}` },
+                { label: 'Mi perfil', icon: 'pi pi-fw pi-user-edit', to: `/mae/${uid}`, tour: 'menu:/mae' },
                 { label: 'Leaderboard', icon: 'pi pi-fw pi-star', to: '/leaderboard' },
                 { label: 'Mis asesorías', icon: 'pi pi-fw pi-book', to: '/misasesorias' },
                 { label: 'Mis evaluaciones', icon: 'pi pi-fw pi-heart', to: '/misevaluaciones' },

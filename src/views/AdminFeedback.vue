@@ -8,7 +8,7 @@ const items = ref([]);
 const loading = ref(true);
 const typeFilter = ref('all');
 const statusFilter = ref('open');
-const expanded = ref({});
+const expanded = ref([]); // PrimeVue 3.30: expandedRows es un arreglo de filas
 
 const typeOptions = [{ code: 'all', name: 'Todos' }, ...FEEDBACK_TYPES.map((t) => ({ code: t.code, name: t.code === 'fallo' ? 'Fallos' : 'Sugerencias' }))];
 const statusOptions = [{ code: 'open', name: 'Pendientes' }, { code: 'all', name: 'Todos' }, ...FEEDBACK_STATUSES];

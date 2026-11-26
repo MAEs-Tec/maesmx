@@ -1,6 +1,6 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
-const { Timestamp } = require('firebase-admin/firestore');
+const { Timestamp, FieldValue } = require('firebase-admin/firestore');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -18,6 +18,20 @@ exports.deliverAdvisoryNotification = functions.runWith({ failurePolicy: true })
     .onCreate(advisoryService.dispatchEvent);
 exports.broadenAdvisoryRequests = functions.pubsub.schedule('every 1 minutes')
     .timeZone('America/Mexico_City').onRun(advisoryService.broadenPending);
+
+// Sugerencias y fallos: copia en Firestore + issue público (sin datos personales) en GitHub.
+// El token es un secreto de Firebase: firebase functions:secrets:set GITHUB_FEEDBACK_TOKEN
+const { createFeedbackService } = require('./feedback');
+const feedbackService = createFeedbackService({
+    db,
+    HttpsError: functions.https.HttpsError,
+    FieldValue,
+    getToken: () => process.env.GITHUB_FEEDBACK_TOKEN,
+    repo: process.env.FEEDBACK_GITHUB_REPO || 'MAEs-Tec/maesmx',
+    logger: functions.logger
+});
+exports.submitFeedback = functions.runWith({ secrets: ['GITHUB_FEEDBACK_TOKEN'] })
+    .https.onCall((data, context) => feedbackService.submit(data || {}, context));
 
 // --- helpers de roles / autenticación ---
 function assertAuthenticated(context) {

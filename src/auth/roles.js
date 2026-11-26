@@ -123,7 +123,8 @@ export function buildMenuForRole(role, uid) {
     if (ROLE_GROUPS.techAdmin.includes(role)) {
         const adminItems = [
             { label: 'Usuarios', icon: 'pi pi-fw pi-users', to: '/admin/usuarios' },
-            { label: 'Materias', icon: 'pi pi-fw pi-pencil', to: '/admin/materias' }
+            { label: 'Materias', icon: 'pi pi-fw pi-pencil', to: '/admin/materias' },
+            { label: 'Sugerencias', icon: 'pi pi-fw pi-inbox', to: '/admin/sugerencias' }
         ];
 
         if (role === ROLES.ADMIN) {
@@ -142,7 +143,7 @@ export function buildMenuForRole(role, uid) {
         model.push({
             label: 'MAE',
             items: [
-                { label: 'Mi perfil', icon: 'pi pi-fw pi-user-edit', to: `/mae/${uid}` },
+                { label: 'Mi perfil', icon: 'pi pi-fw pi-user-edit', to: `/mae/${uid}`, tour: 'menu:/mae' },
                 { label: 'Leaderboard', icon: 'pi pi-fw pi-star', to: '/leaderboard' },
                 { label: 'Mis asesorías', icon: 'pi pi-fw pi-book', to: '/misasesorias' },
                 { label: 'Mis evaluaciones', icon: 'pi pi-fw pi-heart', to: '/misevaluaciones' },

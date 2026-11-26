@@ -142,6 +142,14 @@ const router = createRouter({
                     }
                 },
                 {
+                    path: '/admin/sugerencias',
+                    name: 'adminsugerencias',
+                    component: () => import('@/views/AdminFeedback.vue'),
+                    meta: {
+                        roles: ['admin', 'tec']
+                    }
+                },
+                {
                     path: '/admin/materias',
                     name: 'adminmaterias',
                     component: () => import('@/views/AdminSubjects.vue'),

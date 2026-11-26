@@ -285,6 +285,7 @@ async function seedMaeteca() {
         'intro-maeteca': { ...base, Tipo: 'video', Titulo: 'Bienvenida a la Maeteca', Informacion: 'Recurso principal de la Maeteca (dato de prueba).', Video: 'https://www.youtube.com/watch?v=WUvTyaaNkzM', Materia: 'general', Relacionado: ['maeteca'] },
         'seed-video-algebra': { ...base, Tipo: 'video', Titulo: 'Vectores, ¿qué son?', Informacion: 'Introducción visual a los vectores.', Video: 'https://www.youtube.com/watch?v=fNk_zzaMoSs', Materia: 'MA1002', Carrera: 'itc', Relacionado: ['álgebra'] },
         'seed-video-redes': { ...base, Tipo: 'video', Titulo: '¿Qué es una red neuronal?', Informacion: 'Explicación visual para empezar.', Video: 'https://www.youtube.com/watch?v=aircAruvnKk', Materia: 'TC1001', Carrera: 'itc', Relacionado: ['programación'] },
+        'seed-kahoot-ejemplo': { ...base, Tipo: 'kahoot', Titulo: 'Kahoot de ejemplo', Informacion: 'Kahoot público para probar el iframe.', Kahoot: 'https://create.kahoot.it/details/18a9f19e-0eb1-4ab4-a592-5fe5451a7c71', Materia: 'general', Relacionado: [] },
         'seed-pdf-ejemplo': { ...base, Tipo: 'pdf', Titulo: 'Formulario de ejemplo', Informacion: 'PDF de muestra para probar el visor.', Archivo: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf', ArchivoPath: 'maeteca/seed-pdf-ejemplo/formulario.pdf', ArchivoNombre: 'formulario.pdf', Materia: 'MA1001', Relacionado: [] }
     };
     const batch = db.batch();

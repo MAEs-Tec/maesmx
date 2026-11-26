@@ -2,10 +2,27 @@
 import { getAuth, signOut } from "firebase/auth";
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useLayout } from '@/layout/composables/layout';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import RequestNotifications from '@/components/RequestNotifications.vue';
+import { useTutorial, resetTutorialSession } from '@/tutorial/useTutorial';
+import FeedbackDialog from '@/components/FeedbackDialog.vue';
+
+const showFeedback = ref(false);
 
 const { layoutConfig, onMenuToggle, toggleDarkMode, isDarkTheme } = useLayout();
+const route = useRoute();
+const { startMenuTour, startPageTour, hasPageTour } = useTutorial();
+const tutorialMenu = ref(null);
+const tutorialItems = computed(() => [
+    {
+        label: 'Guía de esta página',
+        icon: 'pi pi-map',
+        disabled: !hasPageTour(route.name),
+        command: () => startPageTour(route.name)
+    },
+    { label: 'Recorrido del menú', icon: 'pi pi-bars', command: () => startMenuTour() }
+]);
+const toggleTutorialMenu = (event) => tutorialMenu.value?.toggle(event);
 
 const outsideClickListener = ref(null);
 const topbarMenuActive = ref(false);
@@ -26,6 +43,7 @@ const onTopBarMenuButton = () => {
 const onLogOut = () => {
     const auth = getAuth();
     topbarMenuActive.value = false;
+    resetTutorialSession();
 
     signOut(auth).then(() => {
         router.push('/');
@@ -82,6 +100,27 @@ const isOutsideClicked = (event) => {
         </button>
 
         <RequestNotifications class="ml-auto" />
+        <button
+            class="p-link layout-topbar-button feedback-button"
+            data-tour="feedback-button"
+            aria-label="Sugerencias y fallos"
+            v-tooltip.bottom="'Sugerencias y fallos'"
+            @click="showFeedback = true"
+        >
+            <i class="pi pi-lightbulb"></i>
+        </button>
+        <FeedbackDialog v-model:visible="showFeedback" />
+        <button
+            class="p-link layout-topbar-button tutorial-button"
+            data-tour="tutorial-button"
+            aria-label="Ayuda y tutoriales"
+            aria-haspopup="true"
+            v-tooltip.bottom="'Ayuda'"
+            @click="toggleTutorialMenu"
+        >
+            <i class="pi pi-question-circle"></i>
+        </button>
+        <Menu ref="tutorialMenu" :model="tutorialItems" :popup="true" style="min-width: 14rem" />
         <button class="p-link layout-topbar-menu-button layout-topbar-button" @click="onTopBarMenuButton()">
             <i class="pi pi-ellipsis-v"></i>
         </button>
@@ -116,10 +155,19 @@ const isOutsideClicked = (event) => {
         margin-left: auto !important;
         flex-shrink: 0;
     }
+    .layout-topbar .tutorial-button,
+    .layout-topbar .feedback-button {
+        order: 3;
+        flex-shrink: 0;
+    }
     .layout-topbar .layout-topbar-menu-button {
         order: 4;
         flex-shrink: 0;
     }
+}
+.layout-topbar .tutorial-button i,
+.layout-topbar .feedback-button i {
+    font-size: 1.5rem;
 }
 @media (max-width: 575px) {
     .layout-topbar .layout-topbar-logo span { display: none; }

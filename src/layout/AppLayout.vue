@@ -4,10 +4,15 @@ import AppTopbar from './AppTopbar.vue';
 import AppFooter from './AppFooter.vue';
 import AppSidebar from './AppSidebar.vue';
 import { useLayout } from '@/layout/composables/layout';
+import { useTutorial } from '@/tutorial/useTutorial';
 
 const { layoutConfig, layoutState, isSidebarActive } = useLayout();
+const { maybeStartMenuTour } = useTutorial();
 
 onMounted(() => {
+    // Recorrido del menú la primera vez (usuario nuevo o con rol nuevo).
+    maybeStartMenuTour().catch((error) => console.warn('No se pudo iniciar el tutorial:', error));
+
     if (layoutConfig.darkTheme.value) {
         const themeLink = document.getElementById('theme-css');
         if (themeLink) {
@@ -60,6 +65,8 @@ const unbindOutsideClickListener = () => {
 const isOutsideClicked = (event) => {
     const sidebarEl = document.querySelector('.layout-sidebar');
     const topbarEl = document.querySelector('.layout-menu-button');
+    // Los clics en el globo del tutorial no deben cerrar el menú que se está explicando.
+    if (event.target?.closest?.('.driver-popover, .driver-overlay')) return false;
 
     return !(sidebarEl.isSameNode(event.target) || sidebarEl.contains(event.target) || topbarEl.isSameNode(event.target) || topbarEl.contains(event.target));
 };

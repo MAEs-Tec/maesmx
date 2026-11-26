@@ -123,7 +123,8 @@ export function buildMenuForRole(role, uid) {
     if (ROLE_GROUPS.techAdmin.includes(role)) {
         const adminItems = [
             { label: 'Usuarios', icon: 'pi pi-fw pi-users', to: '/admin/usuarios' },
-            { label: 'Materias', icon: 'pi pi-fw pi-pencil', to: '/admin/materias' }
+            { label: 'Materias', icon: 'pi pi-fw pi-pencil', to: '/admin/materias' },
+            { label: 'Sugerencias', icon: 'pi pi-fw pi-inbox', to: '/admin/sugerencias' }
         ];
 
         if (role === ROLES.ADMIN) {

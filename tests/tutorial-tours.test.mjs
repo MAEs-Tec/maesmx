@@ -41,7 +41,8 @@ test('buildMenuSteps: saludo, un paso por opción del menú y el botón de ayuda
     assert.match(steps[0].popover.title, /Hola, Ana/);
     assert.equal(steps[0].element, undefined);
     const items = MENU_SECTIONS.find((s) => s.key === 'menu-estudiante').items;
-    assert.equal(steps.length, items.length + 2);
+    assert.equal(steps.length, items.length + 3);
+    assert.equal(steps.at(-2).element, '[data-tour="feedback-button"]');
     assert.equal(steps[1].element, '[data-tour="menu:/inicio"]');
     assert.equal(steps.at(-1).element, '[data-tour="tutorial-button"]');
 });
@@ -84,7 +85,7 @@ test('guías de página: filtran por rol y apuntan a data-tour que existen en la
 
     const views = {
         inicio: 'Inicio', solicitudAsesoria: 'SolicitudesAsesoria', maeteca: 'Maeteca',
-        misasesorias: 'Asesorias', coordi: 'Coordi', adminusuarios: 'AdminUsers'
+        misasesorias: 'Asesorias', coordi: 'Coordi', adminusuarios: 'AdminUsers', adminsugerencias: 'AdminFeedback'
     };
     assert.deepEqual(Object.keys(PAGE_TOURS).sort(), Object.keys(views).sort());
     for (const [route, view] of Object.entries(views)) {
@@ -93,6 +94,21 @@ test('guías de página: filtran por rol y apuntan a data-tour que existen en la
             const id = step.element.match(/data-tour="([^"]+)"/)[1];
             assert.ok(source.includes(`data-tour="${id}"`), `${view}.vue no tiene data-tour="${id}"`);
         }
+    }
+});
+
+test('la guía de Sugerencias (GitHub, datos de quien envía) es solo para admin y tec', () => {
+    assert.equal(buildPageSteps('adminsugerencias', 'admin').length, 4);
+    assert.equal(buildPageSteps('adminsugerencias', 'tec').length, 4);
+    for (const role of ['user', 'mae', 'coordi', 'subjectCoordi', 'publi', 'exmae', undefined]) {
+        assert.deepEqual(buildPageSteps('adminsugerencias', role), [], `rol ${role}`);
+    }
+    const menu = (role) => buildMenuSteps(role).map((s) => s.element);
+    assert.ok(menu('admin').includes('[data-tour="menu:/admin/sugerencias"]'));
+    assert.ok(menu('tec').includes('[data-tour="menu:/admin/sugerencias"]'));
+    for (const role of ['user', 'mae', 'coordi', 'publi']) {
+        assert.ok(!menu(role).includes('[data-tour="menu:/admin/sugerencias"]'), `rol ${role}`);
+        assert.ok(menu(role).includes('[data-tour="feedback-button"]'), 'el botón para enviar sí es para todos');
     }
 });
 

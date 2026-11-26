@@ -40,6 +40,7 @@ export const MENU_SECTIONS = [
         items: [
             { to: '/admin/usuarios', title: 'Usuarios', text: 'Todos los usuarios: rol, asesorías, horas, horario y materias. Se puede exportar a Excel.' },
             { to: '/admin/materias', title: 'Materias', text: 'El catálogo de materias que se ofrecen.' },
+            { to: '/admin/sugerencias', title: 'Sugerencias', text: 'Las ideas y fallos que mandan los usuarios, con su issue de GitHub. Aquí les cambias el estado.' },
             { to: '/admin/asesorias', title: 'Asesorías', text: 'Todas las asesorías registradas.', roles: ['admin'] },
             { to: '/admin/funciones', title: 'Funciones', text: 'Tareas de mantenimiento del sistema. Úsalas con cuidado.', roles: ['admin'] },
             { to: '/admin/dashboard', title: 'Dashboard', text: 'Indicadores generales de uso.', roles: ['admin'] },
@@ -132,6 +133,15 @@ export function buildMenuSteps(role, { keys = null, firstName = '' } = {}) {
     }
 
     steps.push({
+        element: '[data-tour="feedback-button"]',
+        popover: {
+            title: '¿Una idea o algo falla?',
+            description: 'Escríbenos desde aquí. Lo leemos y nos ayuda a mejorar MAE.',
+            side: 'bottom',
+            align: 'end'
+        }
+    });
+    steps.push({
         element: '[data-tour="tutorial-button"]',
         popover: {
             title: '¿Dudas en una página?',
@@ -190,6 +200,17 @@ export const PAGE_TOURS = {
             { element: '[data-tour="coordi-tabla"]', title: 'MAEs', text: 'La asistencia de cada MAE. Toca la matrícula para ver su perfil.' }
         ]
     },
+    // Solo admin/tec: la página y sus datos (quién envió, issues de GitHub) son de administración.
+    adminsugerencias: {
+        title: 'Sugerencias',
+        roles: TECH_ADMIN,
+        steps: [
+            { element: '[data-tour="sugerencias-filtros"]', title: 'Filtros', text: 'Elige sugerencias o fallos y el estado. Por defecto ves solo las pendientes (nuevo y en revisión).' },
+            { element: '[data-tour="sugerencias-tabla"]', title: 'Mensajes', text: 'Cada fila es un envío. La flecha de la izquierda muestra el texto completo y quién lo mandó (nombre y correo, que no salen en GitHub).' },
+            { element: '[data-tour="sugerencias-github"]', title: 'Issue en GitHub', text: 'Liga al issue público que se abrió, sin datos personales. Si sale un ícono naranja, no se pudo abrir: pasa el mouse para ver por qué (por ejemplo, token vencido).' },
+            { element: '[data-tour="sugerencias-estado"]', title: 'Estado', text: 'Márcalo en revisión, hecho o descartado. Se guarda al momento y queda quién lo cambió.' }
+        ]
+    },
     adminusuarios: {
         title: 'Usuarios',
         steps: [
@@ -207,7 +228,9 @@ export function hasPageTour(routeName) {
 export function buildPageSteps(routeName, role) {
     if (!hasPageTour(routeName)) return [];
     const effectiveRole = role ?? 'user';
-    return PAGE_TOURS[routeName].steps
+    const tour = PAGE_TOURS[routeName];
+    if (tour.roles && !tour.roles.includes(effectiveRole)) return [];
+    return tour.steps
         .filter((step) => !step.roles || step.roles.includes(effectiveRole))
         .map((step) => ({
             element: step.element,

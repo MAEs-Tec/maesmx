@@ -5,6 +5,9 @@ import { useLayout } from '@/layout/composables/layout';
 import { useRoute, useRouter } from 'vue-router';
 import RequestNotifications from '@/components/RequestNotifications.vue';
 import { useTutorial, resetTutorialSession } from '@/tutorial/useTutorial';
+import FeedbackDialog from '@/components/FeedbackDialog.vue';
+
+const showFeedback = ref(false);
 
 const { layoutConfig, onMenuToggle, toggleDarkMode, isDarkTheme } = useLayout();
 const route = useRoute();
@@ -98,6 +101,16 @@ const isOutsideClicked = (event) => {
 
         <RequestNotifications class="ml-auto" />
         <button
+            class="p-link layout-topbar-button feedback-button"
+            data-tour="feedback-button"
+            aria-label="Sugerencias y fallos"
+            v-tooltip.bottom="'Sugerencias y fallos'"
+            @click="showFeedback = true"
+        >
+            <i class="pi pi-lightbulb"></i>
+        </button>
+        <FeedbackDialog v-model:visible="showFeedback" />
+        <button
             class="p-link layout-topbar-button tutorial-button"
             data-tour="tutorial-button"
             aria-label="Ayuda y tutoriales"
@@ -142,7 +155,8 @@ const isOutsideClicked = (event) => {
         margin-left: auto !important;
         flex-shrink: 0;
     }
-    .layout-topbar .tutorial-button {
+    .layout-topbar .tutorial-button,
+    .layout-topbar .feedback-button {
         order: 3;
         flex-shrink: 0;
     }
@@ -151,7 +165,8 @@ const isOutsideClicked = (event) => {
         flex-shrink: 0;
     }
 }
-.layout-topbar .tutorial-button i {
+.layout-topbar .tutorial-button i,
+.layout-topbar .feedback-button i {
     font-size: 1.5rem;
 }
 @media (max-width: 575px) {

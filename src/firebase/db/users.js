@@ -293,6 +293,13 @@ export async function updateUserInfo(userId, userInfo) {
     return result;
 }
 
+// Marca recorridos guiados como vistos ({ 'tutorials.menu-mae': 1, ... }; ver src/tutorial/tours.js).
+export async function markTutorialsSeen(userId, update) {
+    if (!userId || !update || !Object.keys(update).length) return;
+    await updateDoc(doc(firestoreDB, "users", userId), update);
+    await invalidateUserCaches(userId);
+}
+
 export async function updateUserCareer(userId, career, area) {
     const userRef = doc(firestoreDB, "users", userId);
     return await updateDoc(userRef, { career, area });

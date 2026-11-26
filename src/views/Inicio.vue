@@ -236,6 +236,7 @@ const guardarEvaluacion = async () => {
           class="p-button-help p-button-lg py-4 w-full md:w-4 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
           :style="{ background: 'linear-gradient(to right, #CC7722, #DAA520)' }"
           @click="router.push('/solicitudes')"
+          data-tour="inicio-solicitar"
         >
             Solicitar asesoría
             <img src="/assets/calendarOutline.svg" class="ml-4" alt="calendar icon" style="width: 3.0rem; height: 3.0rem;" />
@@ -245,6 +246,7 @@ const guardarEvaluacion = async () => {
           class="p-button-help p-button-lg py-4 w-full md:w-4 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
           :style="{ background: 'linear-gradient(to right, #4466A7, #51A3AC)' }"
           @click="showDialogAsesoria = true"
+          data-tour="inicio-registrar"
           :disabled=" isSavingAsesoria" 
         >
             Registrar asesoría
@@ -256,6 +258,7 @@ const guardarEvaluacion = async () => {
             class="p-button-help p-button-lg py-4 w-full md:w-4 text-white  border-round-3xl  mb-3 text-2xl font-bold flex justify-content-center align-items-center border-none	"
             :style="{ background: 'linear-gradient(to right, #44A79b, #69ac51)' }"
             @click="showDialogEvaluacion = true"
+            data-tour="inicio-evaluar"
             :disabled=" isSavingAsesoria" 
           >
               Evaluar asesoría
@@ -278,6 +281,7 @@ const guardarEvaluacion = async () => {
                 class="p-button-help p-button-lg py-4 w-full md:w-5 text-white  border-round-3xl  mb-5 text-2xl font-bold flex justify-content-center align-items-center border-none	"
                 :style="{ background: 'linear-gradient(to right, #4466A7, #A073BB)' }"
                 @click="stopSession"
+                data-tour="inicio-turno"
             >
                 Finalizar turno
                 <img src="/assets/end.svg" class="ml-4" alt="mentoring icon" style="width: 3.0rem; height: 3.0rem;" />
@@ -288,13 +292,14 @@ const guardarEvaluacion = async () => {
                 class="p-button-help p-button-lg py-4 w-full md:w-5 text-white  border-round-3xl  mb-5 text-2xl font-bold flex justify-content-center align-items-center border-none	"
                 :style="{ background: 'linear-gradient(to right, #A74497, #D8899C)',  }"
                 @click="showDialogSession = true"
+                data-tour="inicio-turno"
             >
                 Iniciar turno
                 <img src="/assets/start.svg" class="ml-4" alt="mentoring icon" style="width: 3.0rem; height: 3.0rem;" />
             </Button>
       </div>
     
-      <div class="flex flex-wrap border-round-3xl text-white md:h-16rem" :style="{ background: 'linear-gradient(to right, #779AC4, #29AB93)' }">
+      <div data-tour="inicio-anuncios" class="flex flex-wrap border-round-3xl text-white md:h-16rem" :style="{ background: 'linear-gradient(to right, #779AC4, #29AB93)' }">
         <div class="relative w-full md:w-4 border-round-left-3xl">
           <span class="overlay">
             <Button

@@ -314,16 +314,16 @@ async function loadHistory() {
                 <h1 class="text-2xl mb-2">Solicitudes de asesoría</h1>
                 <p class="text-color-secondary m-0">Encuentra a un MAE disponible y da seguimiento a tu asesoría.</p>
             </div>
-            <Button label="Solicitar asesoría" icon="pi pi-plus" :disabled="loading || !profile" @click="openCreate" />
+            <Button label="Solicitar asesoría" icon="pi pi-plus" :disabled="loading || !profile" @click="openCreate" data-tour="solicitudes-nueva" />
         </header>
         <p v-if="loading" role="status">Cargando solicitudes…</p>
         <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
         <div v-if="profile" class="request-columns">
             <section class="card">
                 <div class="flex flex-wrap gap-2 mb-3" aria-label="Filtrar solicitudes">
-                    <Button label="Mis solicitudes" :outlined="tab !== 'mine'" severity="secondary" @click="tab = 'mine'" />
-                    <Button v-if="isMae" label="Avisos recibidos" :outlined="tab !== 'invitations'" severity="secondary" @click="tab = 'invitations'" />
-                    <Button v-if="isCoordi" label="Mi campus" :outlined="tab !== 'campus'" severity="secondary" @click="tab = 'campus'" />
+                    <Button data-tour="solicitudes-mias" label="Mis solicitudes" :outlined="tab !== 'mine'" severity="secondary" @click="tab = 'mine'" />
+                    <Button v-if="isMae" data-tour="solicitudes-avisos" label="Avisos recibidos" :outlined="tab !== 'invitations'" severity="secondary" @click="tab = 'invitations'" />
+                    <Button v-if="isCoordi" data-tour="solicitudes-campus" label="Mi campus" :outlined="tab !== 'campus'" severity="secondary" @click="tab = 'campus'" />
                 </div>
                 <p v-if="!currentRequests.length" class="text-color-secondary">No hay solicitudes en esta lista.</p>
                 <ul class="request-list">

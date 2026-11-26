@@ -281,6 +281,21 @@ service cloud.firestore {
       allow create, update, delete: if isContentManager();
     }
 
+    // === FEEDBACK (sugerencias y fallos) ===
+    // Se crea solo desde la función submitFeedback. Admin/tec las leen y cambian su estado.
+    match /feedback/{feedbackId} {
+      allow read: if isTechAdmin();
+      allow update: if isTechAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'statusBy', 'statusAt'])
+        && request.resource.data.status in ['nuevo', 'en_revision', 'hecho', 'descartado'];
+      allow create, delete: if false;
+    }
+
+    // Contador de envíos por hora: solo lo usa la función.
+    match /feedbackRate/{userId} {
+      allow read, write: if false;
+    }
+
     // === BOT_FLAGS / DISCORD (uso interno admin) ===
     match /bot_flags/{flagId} {
       allow read, write: if isAdmin();

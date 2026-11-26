@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import { getSubjects } from '../firebase/db/subjects';
 import { getMajors } from '../firebase/db/majors';
@@ -10,6 +10,7 @@ import {
     getVideoThumbnail,
     getVideoById,
     getVideoEmbedUrl,
+    getKahootEmbedUrl,
     getResourceType,
     deleteMaetecaResource,
     RESOURCE_TYPES,
@@ -69,7 +70,41 @@ const displayedVideos = computed(() =>
 
 // Recurso principal (intro) cargado desde documento 'intro-maeteca'
 const mainVideo = ref(null);
-const mainVideoEmbedUrl = computed(() => (getResourceType(mainVideo.value) === 'pdf' ? null : getVideoEmbedUrl(mainVideo.value) || null));
+const mainType = computed(() => getResourceType(mainVideo.value));
+
+// Kahoot: su embed es una tarjeta que no se estira. A 600 px de ancho queda en ~16:9,
+// así que se dibuja a ese tamaño y se escala para llenar el mismo recuadro que un video.
+// Si el recuadro es más angosto (celular), escalar haría el texto ilegible: se usa su alto natural.
+const KAHOOT_BASE_WIDTH = 600;
+const mainWrapper = ref(null);
+const mainWrapperWidth = ref(0);
+const kahootScaled = computed(() => mainType.value === 'kahoot' && mainWrapperWidth.value >= KAHOOT_BASE_WIDTH);
+const kahootFrameStyle = computed(() =>
+    kahootScaled.value
+        ? {
+              width: `${KAHOOT_BASE_WIDTH}px`,
+              height: `${(KAHOOT_BASE_WIDTH * 9) / 16}px`,
+              transform: `scale(${mainWrapperWidth.value / KAHOOT_BASE_WIDTH})`,
+              transformOrigin: 'top left'
+          }
+        : null
+);
+watch(mainWrapper, (el, _old, onCleanup) => {
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => {
+        mainWrapperWidth.value = entry.contentRect.width;
+    });
+    observer.observe(el);
+    onCleanup(() => observer.disconnect());
+});
+const mainVideoEmbedUrl = computed(() => {
+    if (mainType.value === 'pdf') return null;
+    if (mainType.value === 'kahoot') return getKahootEmbedUrl(mainVideo.value?.Kahoot) || null;
+    return getVideoEmbedUrl(mainVideo.value) || null;
+});
+// Etiquetas por tipo para textos de respaldo
+const typeNoun = (resource) => ({ pdf: 'PDF', kahoot: 'kahoot', video: 'video' })[getResourceType(resource)];
+const typeTitle = (resource) => ({ pdf: 'PDF', kahoot: 'Kahoot', video: 'Video' })[getResourceType(resource)];
 
 // Diálogo de crear/editar
 const showResourceDialog = ref(false);
@@ -236,6 +271,7 @@ onMounted(async () => {
                             class="p-button-rounded mr-2 custom-add-button cruz p-button-lg"
                             style="font-size: 2rem;"
                             aria-label="Carga en masa de videos"
+                            data-tour="maeteca-masa"
                             v-tooltip.bottom="'Carga en masa de videos'"
                             @click="showBulkUpload = true"
                         />
@@ -245,6 +281,7 @@ onMounted(async () => {
                             class="p-button-rounded mr-2 custom-add-button cruz p-button-lg"
                             style="font-size: 2rem;"
                             aria-label="Agregar recurso"
+                            data-tour="maeteca-agregar"
                             v-tooltip.bottom="'Agregar recurso'"
                             @click="handleOpenAddVideo"
                         />
@@ -282,7 +319,7 @@ onMounted(async () => {
                     >
                         <template #header>
                             <div class="dialog-header">
-                                <h2>{{ getResourceType(deleteTarget) === 'pdf' ? '¿Estás seguro que deseas eliminar este recurso?' : '¿Estás seguro que deseas eliminar este video?' }}</h2>
+                                <h2>{{ getResourceType(deleteTarget) === 'video' ? '¿Estás seguro que deseas eliminar este video?' : '¿Estás seguro que deseas eliminar este recurso?' }}</h2>
                             </div>
                         </template>
                         <p><strong>{{ deleteTarget?.Titulo || 'Sin título' }}</strong></p>
@@ -300,27 +337,34 @@ onMounted(async () => {
                 <div class="flex flex-column xl:flex-row align-items-stretch gap-4 mb-6">
                     <!-- Card Grande de Video -->
                     <div class="flex-1">
-                        <div class="maeteca-main">
+                        <div class="maeteca-main" data-tour="maeteca-principal">
                             <MaetecaPdfViewer
                                 v-if="getResourceType(mainVideo) === 'pdf' && mainVideo.Archivo"
                                 :url="mainVideo.Archivo"
                                 :title="mainVideo.Titulo || ''"
                             />
-                            <div v-else class="video-wrapper">
+                            <div v-else ref="mainWrapper" class="video-wrapper" :class="{ 'video-wrapper--kahoot': mainType === 'kahoot' && !kahootScaled }">
                                 <iframe
                                     v-if="mainVideoEmbedUrl"
                                     :src="mainVideoEmbedUrl"
+                                    :style="kahootFrameStyle"
                                     width="560"
                                     height="315"
-                                    title="YouTube video player"
+                                    :title="mainType === 'kahoot' ? 'Kahoot' : 'YouTube video player'"
                                     frameborder="0"
                                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                                     referrerpolicy="strict-origin-when-cross-origin"
                                     allowfullscreen
                                 ></iframe>
                                 <div v-else class="video-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;">
-                                    <p>{{ getResourceType(mainVideo) === 'pdf' ? 'Este PDF no tiene archivo.' : mainVideo?.Video ? 'El link de este video no es válido.' : 'No hay video introductorio.' }}</p>
+                                    <p>{{ mainType === 'pdf' ? 'Este PDF no tiene archivo.' : mainType === 'kahoot' ? 'El link de este kahoot no es válido.' : mainVideo?.Video ? 'El link de este video no es válido.' : 'No hay video introductorio.' }}</p>
                                 </div>
+                            </div>
+                            <div v-if="mainType === 'kahoot' && mainVideo?.Kahoot" class="kahoot-open">
+                                <a :href="mainVideoEmbedUrl || mainVideo.Kahoot" target="_blank" rel="noopener">
+                                    <i class="pi pi-external-link"></i> Abrir en Kahoot
+                                </a>
+                                <small>Si no carga aquí, el kahoot puede ser privado.</small>
                             </div>
                         </div>
                     </div>
@@ -365,7 +409,7 @@ onMounted(async () => {
                 <div class="mt-5">
                     <div class="flex justify-content-between flex-column sm:flex-row align-items-start sm:align-items-center mb-4">
                         <h2 class="text-2xl font-normal m-0 selection-title">Nuestra selección para ti</h2>
-                        <div class="flex align-items-center gap-2 mt-3 sm:mt-0">
+                        <div class="flex align-items-center gap-2 mt-3 sm:mt-0" data-tour="maeteca-buscar">
                             <span class="p-input-icon-left" style="width:100%;">
                                 <i class="pi pi-search" />
                                 <InputText v-model="searchQuery" placeholder="Buscar" class="custom-search-input" />
@@ -390,7 +434,7 @@ onMounted(async () => {
                     </div>
 
                     <!-- Cards de Selección -->
-                    <div v-if="displayedVideos.length" class="mae-cards-grid">
+                    <div v-if="displayedVideos.length" class="mae-cards-grid" data-tour="maeteca-tarjetas">
                         <div
                             v-for="(video, index) in displayedVideos"
                             :key="video.id || index"
@@ -416,6 +460,21 @@ onMounted(async () => {
                                     :aria-label="`Ver ${video.Titulo || 'PDF'}`"
                                 >
                                     <span class="mae-card__pdf-icon"><i class="pi pi-file-pdf"></i></span>
+                                </div>
+                                <div
+                                    v-else-if="getResourceType(video) === 'kahoot'"
+                                    class="mae-card__thumbnail mae-card__thumbnail--pdf"
+                                    role="button"
+                                    tabindex="0"
+                                    @click="selectMainVideo(video)"
+                                    @keyup.enter="selectMainVideo(video)"
+                                    @keyup.space="selectMainVideo(video)"
+                                    :aria-label="`Abrir ${video.Titulo || 'kahoot'}`"
+                                >
+                                    <span class="mae-card__pdf-icon mae-card__kahoot-icon">
+                                        <i class="pi pi-question-circle"></i>
+                                        <span>Kahoot</span>
+                                    </span>
                                 </div>
                                 <div
                                     v-else-if="getVideoThumbnail(video)"
@@ -444,9 +503,9 @@ onMounted(async () => {
                                         @click="selectMainVideo(video)"
                                     />
                                 </div>
-                                <h3 class="mae-card__title">{{ video.Titulo || (getResourceType(video) === 'pdf' ? 'PDF sin título' : 'Video sin título') }}</h3>
+                                <h3 class="mae-card__title">{{ video.Titulo || `${typeTitle(video)} sin título` }}</h3>
                                 <p class="mae-card__description">
-                                    {{ video.Informacion || (getResourceType(video) === 'pdf' ? 'Este PDF no tiene descripción disponible.' : 'Este video no tiene descripción disponible.') }}
+                                    {{ video.Informacion || `Este ${typeNoun(video)} no tiene descripción disponible.` }}
                                 </p>
                                 <div class="mae-card__tags" v-if="Array.isArray(video.Relacionado) && video.Relacionado.length">
                                     <Tag
@@ -493,6 +552,14 @@ onMounted(async () => {
     max-height: 287px;
 }
 
+/* Kahoot en recuadro angosto (celular): alto natural de su tarjeta en vez de 16:9.
+   En recuadros anchos se escala dentro del 16:9 (ver kahootFrameStyle). */
+.video-wrapper--kahoot {
+    padding-top: 0;
+    height: 470px;
+    max-height: none;
+}
+
 .video-wrapper iframe {
     position: absolute;
     top: 0;
@@ -503,6 +570,28 @@ onMounted(async () => {
     height: 100%;
     border: 0;
     border-radius: 20px; /* Solo el iframe tiene bordes redondeados */
+}
+
+.kahoot-open {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.kahoot-open small {
+    color: var(--text-color-secondary);
+}
+
+.mae-card__kahoot-icon {
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.mae-card__kahoot-icon span {
+    font-size: 0.9rem;
+    font-weight: 600;
 }
 
 .cruz{

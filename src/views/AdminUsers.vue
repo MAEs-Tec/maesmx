@@ -185,10 +185,11 @@ checkUserRole();
             :loading="exporting"
             :disabled="loading || tableUsers.length === 0"
             aria-label="Exportar la lista de usuarios a Excel"
+            data-tour="usuarios-exportar"
             @click="exportUsersToExcel"
         />
     </div>
-    <div class="card mb-0">
+    <div class="card mb-0" data-tour="usuarios-tabla">
 
     <!-- TODO: Adjust row sizing -->
     <!-- TODO: implement responsive resizing -->

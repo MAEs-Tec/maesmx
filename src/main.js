@@ -211,7 +211,7 @@ app.component('VirtualScroller', VirtualScroller);
 
 // Firebase config
 import { initializeApp } from "firebase/app";
-import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import { getFirestore, initializeFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
 import { getAuth, connectAuthEmulator } from "firebase/auth";
 import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
@@ -227,8 +227,19 @@ const firebaseConfig = {
     measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
+// Emuladores detrás del mismo origen que el front (p. ej. un túnel HTTPS para
+// probar desde el celular): Vite reenvía Firestore y Auth a los emuladores
+// (ver vite.config.js). Solo con VITE_USE_EMULATOR=true y VITE_EMULATOR_PROXY=true.
+const emulatorProxy = import.meta.env.VITE_USE_EMULATOR === 'true' && import.meta.env.VITE_EMULATOR_PROXY === 'true';
+
 export const firebaseApp = initializeApp(firebaseConfig);
-export const firestoreDB = getFirestore(firebaseApp);
+export const firestoreDB = emulatorProxy
+    ? initializeFirestore(firebaseApp, {
+          host: window.location.host,
+          ssl: window.location.protocol === 'https:',
+          experimentalForceLongPolling: true
+      })
+    : getFirestore(firebaseApp);
 export const firebaseStorage = getStorage(firebaseApp);
 export const auth = getAuth(firebaseApp);
 
@@ -238,10 +249,21 @@ export const auth = getAuth(firebaseApp);
 // lanza `firebase emulators:start`. Los puertos son los de `firebase.json`.
 if (import.meta.env.VITE_USE_EMULATOR === 'true') {
     const storagePort = Number(import.meta.env.VITE_STORAGE_EMULATOR_PORT || 9199);
-    connectFirestoreEmulator(firestoreDB, 'localhost', 8080);
-    connectAuthEmulator(auth, 'http://localhost:9099');
-    connectFunctionsEmulator(getFunctions(firebaseApp), 'localhost', 5001);
+    if (emulatorProxy) {
+        connectAuthEmulator(auth, window.location.origin, { disableWarnings: true });
+    } else {
+        connectFirestoreEmulator(firestoreDB, 'localhost', 8080);
+        connectAuthEmulator(auth, 'http://localhost:9099');
+    }
+    const functions = getFunctions(firebaseApp);
+    connectFunctionsEmulator(functions, 'localhost', 5001);
     connectStorageEmulator(firebaseStorage, 'localhost', storagePort);
+    if (emulatorProxy) {
+        // El SDK fija http://host:puerto para estos dos; se reescriben al mismo origen.
+        functions.emulatorOrigin = `${window.location.origin}/functions-emulator`;
+        firebaseStorage.host = window.location.host;
+        firebaseStorage._protocol = window.location.protocol.replace(':', '');
+    }
     console.log(`[emulators] conectado a Firestore:8080, Auth:9099, Functions:5001, Storage:${storagePort}`);
 }
 

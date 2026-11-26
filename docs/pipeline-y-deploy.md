@@ -80,10 +80,28 @@ Créala en Google Cloud (**IAM y administración > Cuentas de servicio**) dentro
 | Cloud Datastore Index Admin | Índices de Firestore. |
 | Firebase Hosting Admin | Hosting. |
 | Firebase Viewer | Lectura de la configuración del proyecto que hace el CLI. |
+| Secret Manager Admin | Conectar el secreto `GITHUB_FEEDBACK_TOKEN` con la función `submitFeedback` (agregado el 25 de noviembre de 2026). |
 
 Con estos roles corrió bien el primer deploy por pipeline (17 de noviembre de 2026, `firebase-tools` 14.25.0). Firebase no publica un conjunto mínimo único y cambia con la versión del CLI: si un deploy futuro falla por permisos, el error dice cuál falta; agrégalo y repite. La alternativa simple es el rol **Firebase Admin**, que funciona pero también da acceso de lectura y escritura a los datos.
 
 La llave es una credencial de producción: no la guardes en el repo ni la compartas por chat. Si se filtra, bórrala en Google Cloud y genera otra.
+
+### Secreto `GITHUB_FEEDBACK_TOKEN` (sugerencias y fallos)
+
+La función `submitFeedback` abre un issue en `MAEs-Tec/maesmx` por cada sugerencia o fallo que mandan los usuarios (sin su nombre ni correo; esos datos se quedan en la colección `feedback` de Firestore). Usa un token de GitHub guardado como secreto de Firebase. **Si el secreto no existe, el deploy de functions falla**, así que hay que crearlo antes del primer deploy que incluya esta función.
+
+1. En GitHub, crea un *fine-grained personal access token* (**Settings > Developer settings > Personal access tokens > Fine-grained tokens**) con acceso solo al repositorio `MAEs-Tec/maesmx` y el permiso **Issues: Read and write**. Ponle fecha de vencimiento y anótala para renovarlo.
+2. Guárdalo en Firebase desde una terminal con sesión en el proyecto (te lo pide sin mostrarlo en pantalla):
+
+   ```powershell
+   npx --yes firebase-tools@14.25.0 functions:secrets:set GITHUB_FEEDBACK_TOKEN --project peer-teaching
+   ```
+
+3. La cuenta de servicio de deploy necesita además el rol **Secret Manager Admin** (el CLI le da acceso al secreto a la función al desplegar).
+
+Para renovar el token, repite el paso 2 y vuelve a desplegar las funciones. Si el token vence o falta, las sugerencias se siguen guardando en Firestore con `issueError` y se ven en **Administrador > Sugerencias**; solo deja de abrirse el issue.
+
+En el emulador no hace falta: sin token, la función guarda la sugerencia y anota que GitHub no está configurado. Para probar el issue en local, crea `functions/.secret.local` (ignorado por git) con `GITHUB_FEEDBACK_TOKEN=...` usando un token de prueba.
 
 ### Reglas de ramas
 

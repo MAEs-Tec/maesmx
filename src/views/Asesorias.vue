@@ -99,7 +99,7 @@ const filterSubjects = () => {
         <h1 class="text-black text-6xl font-bold mb-5 text-center sm:text-left">Mis asesorías </h1>
     </div>
 
-    <div class="w-full mb-5 ">
+    <div class="w-full mb-5 " data-tour="asesorias-filtros">
         <div class="flex lg:flex-row  flex-column"> 
             <AutoComplete 
                 class="md:w-5 w-full mr-3 mb-2"
@@ -131,7 +131,7 @@ const filterSubjects = () => {
         <p class="text-lg">Sin asesorías</p>
     </div>
 
-    <div v-else class="flex flex-wrap gap-6">
+    <div v-else class="flex flex-wrap gap-6" data-tour="asesorias-lista">
         <div 
             v-for="asesoria in filterAsesorias" 
             :key="asesoria.id" 

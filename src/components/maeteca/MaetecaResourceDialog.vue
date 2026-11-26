@@ -3,6 +3,7 @@ import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import {
     extractYoutubeId,
+    getKahootEmbedUrl,
     validatePdfFile,
     resolveSubjectValue,
     GENERAL_SUBJECT,
@@ -17,6 +18,7 @@ import {
     getResourceType,
     addVideoToMaeteca,
     addPdfToMaeteca,
+    addKahootToMaeteca,
     updateMaetecaResource,
     VIDEO_CAREERS,
     AVAILABLE_TAG_OPTIONS
@@ -56,6 +58,7 @@ const dialogVisible = computed({
 
 const isEdit = computed(() => !!props.resource)
 const isVideo = computed(() => form.type === 'video')
+const isKahoot = computed(() => form.type === 'kahoot')
 const subjectOptions = computed(() => [GENERAL_SUBJECT, ...(props.subjects ?? [])])
 // Si el recurso trae una carrera que ya no está en el catálogo, se conserva como opción.
 const careerOptions = computed(() => {
@@ -66,6 +69,8 @@ const careerOptions = computed(() => {
 })
 const previewId = computed(() => extractYoutubeId(form.link))
 const showLinkError = computed(() => form.link.trim() !== '' && !previewId.value)
+const kahootEmbedUrl = computed(() => getKahootEmbedUrl(form.link))
+const showKahootError = computed(() => form.link.trim() !== '' && !kahootEmbedUrl.value)
 
 const fileSizeLabel = computed(() =>
     form.file ? `${(form.file.size / (1024 * 1024)).toFixed(1)} MB` : ''
@@ -75,6 +80,7 @@ const isSubmitDisabled = computed(() => {
     if (saving.value) return true
     if (!form.title.trim()) return true
     if (isVideo.value && !previewId.value) return true
+    if (isKahoot.value && !kahootEmbedUrl.value) return true
     if (!isEdit.value && form.type === 'pdf' && !form.file) return true
     return false
 })
@@ -97,7 +103,7 @@ function resetForm() {
     }
 
     form.type = resource ? getResourceType(resource) : 'video'
-    form.link = resource?.Video ?? ''
+    form.link = resource?.Tipo === 'kahoot' ? (resource?.Kahoot ?? '') : (resource?.Video ?? '')
     form.title = resource?.Titulo ?? ''
     form.subject = subject
     form.career = resource?.Carrera ?? 'all'
@@ -120,6 +126,7 @@ watch(
     () => form.type,
     () => {
         fileError.value = ''
+        if (!isEdit.value) form.link = ''
     }
 )
 
@@ -215,7 +222,8 @@ async function save() {
         if (isEdit.value) {
             await updateMaetecaResource(props.resource, {
                 ...base,
-                ...(isVideo.value ? { Video: form.link.trim() } : {})
+                ...(isVideo.value ? { Video: form.link.trim() } : {}),
+                ...(isKahoot.value ? { Kahoot: form.link.trim() } : {})
             })
             emit('saved', { id: props.resource.id, action: 'updated' })
             toast.add({
@@ -235,6 +243,15 @@ async function save() {
                 severity: 'success',
                 summary: 'Recurso agregado',
                 detail: 'El video se agregó a la Maeteca.',
+                life: 3000
+            })
+        } else if (isKahoot.value) {
+            const { id } = await addKahootToMaeteca({ Kahoot: form.link.trim(), ...base, Informacion: '' })
+            emit('saved', { id, action: 'created' })
+            toast.add({
+                severity: 'success',
+                summary: 'Recurso agregado',
+                detail: 'El kahoot se agregó a la Maeteca.',
                 life: 3000
             })
         } else {
@@ -311,6 +328,31 @@ async function save() {
                     ></iframe>
                 </div>
                 <small v-else-if="showLinkError" class="text-red-600">Solo se permiten links de YouTube.</small>
+            </div>
+
+            <div v-else-if="isKahoot" class="field-group">
+                <label for="resource-kahoot">Link del kahoot</label>
+                <div class="input-with-icon">
+                    <i
+                        class="pi pi-info-circle"
+                        v-tooltip.top="'Pega el link del kahoot (create.kahoot.it/details/…) o el código de inserción. Debe ser público o no listado.'"
+                    ></i>
+                    <InputText
+                        id="resource-kahoot"
+                        v-model="form.link"
+                        class="w-full"
+                        placeholder="create.kahoot.it/details/…"
+                    />
+                </div>
+                <div v-if="kahootEmbedUrl" class="link-preview">
+                    <iframe :src="kahootEmbedUrl" title="Vista previa del kahoot" allowfullscreen></iframe>
+                </div>
+                <small v-else-if="showKahootError" class="text-red-600">
+                    No se encontró el ID del kahoot. Los links de juego con PIN no se pueden insertar.
+                </small>
+                <small v-if="kahootEmbedUrl" class="file-note">
+                    Si la vista previa sale en blanco, el kahoot es privado: cámbialo a público o no listado en Kahoot.
+                </small>
             </div>
 
             <div v-else-if="!isEdit" class="field-group">

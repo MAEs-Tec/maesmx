@@ -55,6 +55,37 @@ export function extractYoutubeId(url) {
     return candidate && YOUTUBE_ID.test(candidate) ? candidate : null;
 }
 
+// Kahoot: se guarda el link original y se muestra con embed.kahoot.it/<uuid>.
+// Solo los kahoots públicos o no listados cargan dentro del iframe.
+const KAHOOT_HOSTS = new Set(['kahoot.it', 'create.kahoot.it', 'embed.kahoot.it', 'play.kahoot.it', 'kahoot.com']);
+const KAHOOT_UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+export function extractKahootId(url) {
+    if (typeof url !== 'string') return null;
+    let text = url.trim();
+    if (!text) return null;
+    // Acepta también el código <iframe src="..."> que da Kahoot al compartir.
+    const src = text.match(/src\s*=\s*["']([^"']+)["']/i);
+    if (src) text = src[1].trim();
+    if (!/^https?:\/\//i.test(text)) text = `https://${text}`;
+    let parsed;
+    try {
+        parsed = new URL(text);
+    } catch {
+        return null;
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (!KAHOOT_HOSTS.has(host)) return null;
+    const fromQuery = parsed.searchParams.get('quizId') ?? '';
+    const match = fromQuery.match(KAHOOT_UUID) ?? parsed.pathname.match(KAHOOT_UUID);
+    return match ? match[0].toLowerCase() : null;
+}
+
+export function getKahootEmbedUrl(url) {
+    const id = extractKahootId(url);
+    return id ? `https://embed.kahoot.it/${id}` : null;
+}
+
 export function resolveSubjectValue(input, subjects) {
     const key = normalizeKey(input);
     if (!key || key === 'general') return 'general';

@@ -5,6 +5,8 @@ import {
     MAX_IMPORT_ROWS,
     MAX_PDF_BYTES,
     extractYoutubeId,
+    extractKahootId,
+    getKahootEmbedUrl,
     parseVideoRows,
     validatePdfFile,
     toSafePdfFileName
@@ -333,4 +335,26 @@ test('exportar los videos y volver a subir el archivo no cambia nada; editar una
     const changed = parseVideoRows(toRows(edited), opts);
     assert.deepEqual(changed.updates.map((u) => [u.id, u.data.Titulo, u.data.Relacionado]), [['v2', 'Polinomios y derivadas', ['matematicas']]]);
     assert.deepEqual(changed.unchanged.map((u) => u.id), ['v1']);
+});
+
+test('extractKahootId acepta links y código de inserción de Kahoot', () => {
+    const K = '18a9f19e-0eb1-4ab4-a592-5fe5451a7c71';
+    assert.equal(extractKahootId(`https://create.kahoot.it/details/${K}`), K);
+    assert.equal(extractKahootId(`https://create.kahoot.it/details/repaso-algebra/${K}`), K);
+    assert.equal(extractKahootId(`create.kahoot.it/details/${K.toUpperCase()}`), K);
+    assert.equal(extractKahootId(`https://kahoot.it/challenge/?quizId=${K}`), K);
+    assert.equal(extractKahootId(`https://embed.kahoot.it/${K}`), K);
+    assert.equal(extractKahootId(`<iframe src="https://embed.kahoot.it/${K}" width="100%"></iframe>`), K);
+    assert.equal(getKahootEmbedUrl(`https://create.kahoot.it/details/${K}`), `https://embed.kahoot.it/${K}`);
+});
+
+test('extractKahootId rechaza PINs, otros dominios y basura', () => {
+    const K = '18a9f19e-0eb1-4ab4-a592-5fe5451a7c71';
+    assert.equal(extractKahootId('https://kahoot.it/?pin=1234567'), null);
+    assert.equal(extractKahootId('https://kahoot.it/challenge/01234567'), null);
+    assert.equal(extractKahootId(`https://evil.example/${K}`), null);
+    assert.equal(extractKahootId(`https://kahoot.it.evil.example/${K}`), null);
+    assert.equal(extractKahootId(''), null);
+    assert.equal(extractKahootId(null), null);
+    assert.equal(getKahootEmbedUrl('no es un link'), null);
 });

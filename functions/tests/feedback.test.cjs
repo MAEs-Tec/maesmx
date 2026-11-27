@@ -9,7 +9,9 @@ class HttpsError extends Error {
     }
 }
 
-// Firestore mínimo en memoria: doc().set/update, runTransaction con get/set.
+const DELETE = Symbol('delete');
+
+// Firestore mínimo en memoria: doc().set/update (con FieldValue.delete), runTransaction con get/set.
 function fakeDb() {
     const data = new Map();
     let auto = 0;
@@ -18,7 +20,11 @@ function fakeDb() {
         path: `${collection}/${id}`,
         get: async () => ({ exists: data.has(`${collection}/${id}`), data: () => data.get(`${collection}/${id}`) }),
         set: async (value) => data.set(`${collection}/${id}`, { ...value }),
-        update: async (value) => data.set(`${collection}/${id}`, { ...data.get(`${collection}/${id}`), ...value })
+        update: async (value) => {
+            const next = { ...data.get(`${collection}/${id}`), ...value };
+            for (const [k, v] of Object.entries(next)) if (v === DELETE) delete next[k];
+            data.set(`${collection}/${id}`, next);
+        }
     });
     return {
         data,
@@ -39,7 +45,7 @@ function harness({ token = 'tkn', response = { status: 201, ok: true, body: { nu
     const service = createFeedbackService({
         db,
         HttpsError,
-        FieldValue: { serverTimestamp: () => 'SERVER_TIME' },
+        FieldValue: { serverTimestamp: () => 'SERVER_TIME', delete: () => DELETE },
         getToken: () => token,
         repo: 'MAEs-Tec/maesmx',
         now: () => clock.time,
@@ -121,7 +127,7 @@ test('sin token o con GitHub caído el mensaje se guarda igual, con issueError',
     const c = await forbidden.service.submit(valid, context());
     assert.equal(forbidden.calls.length, 2);
     assert.ok(!('labels' in forbidden.calls[1].payload), 'el reintento va sin etiquetas');
-    assert.match(forbidden.db.data.get(`feedback/${c.id}`).issueError, /403/);
+    assert.match(forbidden.db.data.get(`feedback/${c.id}`).issueError, /no tiene permiso/);
 });
 
 test(`máximo ${MAX_PER_HOUR} envíos por hora por usuario`, async () => {
@@ -133,4 +139,44 @@ test(`máximo ${MAX_PER_HOUR} envíos por hora por usuario`, async () => {
     // Pasada la hora se libera.
     clock.time += 3600000;
     await service.submit(valid, context());
+});
+
+test('el 410 de GitHub (issues desactivados) se explica en español', async () => {
+    const { githubError } = require('../feedback');
+    assert.match(githubError(410), /issues están desactivados/);
+    assert.match(githubError(401), /token/);
+    assert.equal(githubError(500), 'GitHub respondió 500.');
+    const h = harness({ response: { status: 410, ok: false } });
+    const r = await h.service.submit(valid, context());
+    assert.match(h.db.data.get(`feedback/${r.id}`).issueError, /desactivados/);
+});
+
+test('reintentar: solo admin/tec, abre el issue con el mismo texto público y limpia el error', async () => {
+    const h = harness({ response: [{ status: 410, ok: false }, { status: 201, ok: true, body: { number: 9, html_url: 'https://github.com/o/r/issues/9' } }] });
+    const { id } = await h.service.submit(valid, context());
+    assert.ok(h.db.data.get(`feedback/${id}`).issueError);
+
+    await assert.rejects(h.service.retryIssue({ id }, context()), { code: 'permission-denied' });
+    await assert.rejects(h.service.retryIssue({ id }, {}), { code: 'unauthenticated' });
+    await assert.rejects(h.service.retryIssue({ id: '../x' }, context({ role: 'admin' })), { code: 'invalid-argument' });
+    await assert.rejects(h.service.retryIssue({ id: 'noexiste' }, context({ role: 'admin' })), { code: 'not-found' });
+
+    const r = await h.service.retryIssue({ id }, context({ role: 'tec', email: 'a00000002@tec.mx' }));
+    assert.deepEqual(r, { id, issueUrl: 'https://github.com/o/r/issues/9', issueNumber: 9 });
+    const saved = h.db.data.get(`feedback/${id}`);
+    assert.equal(saved.issueNumber, 9);
+    assert.ok(!('issueError' in saved));
+    // El reintento usa el rol de quien envió (user), no el de quien reintenta, y no lleva datos personales.
+    const payload = h.calls.at(-1).payload;
+    assert.match(payload.body, /\*\*Rol de quien lo envía:\*\* user/);
+    assert.ok(!payload.body.includes('a00000006') && !payload.body.includes('Elena'));
+    // Si ya tiene issue, no abre otro.
+    await h.service.retryIssue({ id }, context({ role: 'admin' }));
+    assert.equal(h.calls.length, 2);
+});
+
+test('reintentar cuando GitHub sigue fallando devuelve el motivo', async () => {
+    const h = harness({ response: { status: 410, ok: false } });
+    const { id } = await h.service.submit(valid, context());
+    await assert.rejects(h.service.retryIssue({ id }, context({ role: 'admin' })), { code: 'unavailable', message: /desactivados/ });
 });

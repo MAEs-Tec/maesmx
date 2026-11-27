@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { useToast } from 'primevue/usetoast';
-import { FEEDBACK_STATUSES, FEEDBACK_TYPES, listFeedback, updateFeedbackStatus } from '@/firebase/db/feedback';
+import { FEEDBACK_STATUSES, FEEDBACK_TYPES, listFeedback, retryFeedbackIssue, updateFeedbackStatus } from '@/firebase/db/feedback';
 
 const toast = useToast();
 const items = ref([]);
@@ -39,6 +39,22 @@ async function load() {
         toast.add({ severity: 'error', summary: 'Error', detail: error?.message || 'No se pudieron cargar las sugerencias.', life: 5000 });
     } finally {
         loading.value = false;
+    }
+}
+
+const retrying = ref(null);
+
+async function retry(item) {
+    retrying.value = item.id;
+    try {
+        const { issueUrl, issueNumber } = await retryFeedbackIssue(item.id);
+        Object.assign(item, { issueUrl, issueNumber, issueError: null });
+        toast.add({ severity: 'success', summary: 'Issue abierto', detail: `Se abrió el issue #${issueNumber}.`, life: 4000 });
+    } catch (error) {
+        item.issueError = error?.message || item.issueError;
+        toast.add({ severity: 'error', summary: 'No se pudo abrir el issue', detail: error?.message || 'Intenta de nuevo más tarde.', life: 6000 });
+    } finally {
+        retrying.value = null;
     }
 }
 
@@ -98,11 +114,23 @@ onMounted(load);
                     <small class="block text-color-secondary">{{ data.role }} · {{ formatDate(data.createdAt) }}</small>
                 </template>
             </Column>
-            <Column style="width: 5rem">
+            <Column style="width: 8rem">
                 <template #header><span data-tour="sugerencias-github">GitHub</span></template>
                 <template #body="{ data }">
                     <a v-if="data.issueUrl" :href="data.issueUrl" target="_blank" rel="noopener">#{{ data.issueNumber }}</a>
-                    <i v-else-if="data.issueError" class="pi pi-exclamation-circle text-orange-500" v-tooltip.top="data.issueError" aria-label="Sin issue"></i>
+                    <span v-else-if="data.issueError" class="flex align-items-center gap-1">
+                        <i class="pi pi-exclamation-circle text-orange-500" v-tooltip.top="data.issueError" aria-label="Sin issue"></i>
+                        <Button
+                            label="Reintentar"
+                            text
+                            size="small"
+                            class="p-1"
+                            :loading="retrying === data.id"
+                            :disabled="!!retrying"
+                            :aria-label="`Reintentar el issue de ${data.title}`"
+                            @click="retry(data)"
+                        />
+                    </span>
                     <span v-else class="text-color-secondary">—</span>
                 </template>
             </Column>

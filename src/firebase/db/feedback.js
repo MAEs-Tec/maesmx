@@ -31,6 +31,13 @@ export async function submitFeedback({ type, title, body, page }) {
     return result.data;
 }
 
+// Admin/tec: vuelve a intentar el issue de GitHub de un envío que se guardó sin él.
+export async function retryFeedbackIssue(id) {
+    const callable = httpsCallable(getFunctions(firebaseApp), 'retryFeedbackIssue');
+    const result = await callable({ id });
+    return result.data;
+}
+
 export async function listFeedback({ max = 300 } = {}) {
     const snapshot = await getDocs(query(collection(firestoreDB, 'feedback'), orderBy('createdAt', 'desc'), limit(max)));
     return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));

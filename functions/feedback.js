@@ -114,9 +114,26 @@ function createFeedbackService({ db, HttpsError, FieldValue, getToken, repo, fet
             const { labels: _labels, ...withoutLabels } = issue;
             response = await request(withoutLabels);
         }
-        if (!response.ok) return { error: `GitHub respondió ${response.status}.` };
+        if (!response.ok) return { error: githubError(response.status) };
         const created = await response.json();
         return { number: created.number, url: created.html_url };
+    }
+
+    // Intenta abrir el issue y deja el resultado en el documento (issueNumber/issueUrl o issueError).
+    async function attachIssue(ref, feedback, role) {
+        let issue;
+        try {
+            issue = await openIssue(buildIssue(feedback, { id: ref.id, role }));
+        } catch (error) {
+            issue = { error: `No se pudo contactar a GitHub: ${error.message}` };
+        }
+        if (issue.error) {
+            logger.warn('Feedback guardado sin issue', { id: ref.id, error: issue.error });
+            await ref.update({ issueError: issue.error });
+            return null;
+        }
+        await ref.update({ issueNumber: issue.number, issueUrl: issue.url, issueError: FieldValue.delete() });
+        return issue.url;
     }
 
     async function submit(data, context) {
@@ -141,22 +158,44 @@ function createFeedbackService({ db, HttpsError, FieldValue, getToken, repo, fet
             createdAt: FieldValue.serverTimestamp()
         });
 
-        let issue;
-        try {
-            issue = await openIssue(buildIssue(feedback, { id: ref.id, role }));
-        } catch (error) {
-            issue = { error: `No se pudo contactar a GitHub: ${error.message}` };
-        }
-        if (issue.error) {
-            logger.warn('Feedback guardado sin issue', { id: ref.id, error: issue.error });
-            await ref.update({ issueError: issue.error });
-            return { id: ref.id, issueUrl: null };
-        }
-        await ref.update({ issueNumber: issue.number, issueUrl: issue.url });
-        return { id: ref.id, issueUrl: issue.url };
+        const issueUrl = await attachIssue(ref, feedback, role);
+        return { id: ref.id, issueUrl };
     }
 
-    return { submit };
+    // Admin/tec: vuelve a intentar el issue de un envío que se guardó sin él (token vencido, issues desactivados…).
+    async function retryIssue(data, context) {
+        if (!context.auth) throw new HttpsError('unauthenticated', 'Inicia sesión.');
+        if (!ADMIN_ROLES.includes(context.auth.token?.role)) throw new HttpsError('permission-denied', 'Solo admin y tec pueden reintentar.');
+        const id = String(data?.id ?? '');
+        if (!/^[A-Za-z0-9]{1,64}$/.test(id)) throw new HttpsError('invalid-argument', 'Sugerencia inválida.');
+        const ref = db.collection('feedback').doc(id);
+        const snap = await ref.get();
+        if (!snap.exists) throw new HttpsError('not-found', 'La sugerencia ya no existe.');
+        const saved = snap.data();
+        if (saved.issueUrl) return { id, issueUrl: saved.issueUrl, issueNumber: saved.issueNumber };
+        // Mismo texto público que al enviarlo: solo campos validados, sin nombre ni correo.
+        const feedback = { type: saved.type, title: saved.title, body: saved.body, page: saved.page || '', userAgent: saved.userAgent || '' };
+        if (!TYPES[feedback.type]) throw new HttpsError('failed-precondition', 'La sugerencia guardada no tiene un tipo válido.');
+        const issueUrl = await attachIssue(ref, feedback, saved.role || 'user');
+        if (!issueUrl) {
+            const after = (await ref.get()).data();
+            throw new HttpsError('unavailable', after?.issueError || 'GitHub no respondió.');
+        }
+        const after = (await ref.get()).data();
+        return { id, issueUrl, issueNumber: after?.issueNumber ?? null };
+    }
+
+    return { submit, retryIssue };
 }
 
-module.exports = { createFeedbackService, validateFeedback, buildIssue, cleanPage, neutralizeMentions, TYPES, STATUSES, MAX_PER_HOUR };
+const ADMIN_ROLES = ['admin', 'tec'];
+
+// Mensajes en español para los fallos más comunes de la API de issues.
+function githubError(status) {
+    if (status === 410) return 'Los issues están desactivados en el repositorio de GitHub.';
+    if (status === 401) return 'El token de GitHub no es válido o venció.';
+    if (status === 403 || status === 404) return 'El token de GitHub no tiene permiso para crear issues en el repositorio.';
+    return `GitHub respondió ${status}.`;
+}
+
+module.exports = { createFeedbackService, githubError, validateFeedback, buildIssue, cleanPage, neutralizeMentions, TYPES, STATUSES, MAX_PER_HOUR };

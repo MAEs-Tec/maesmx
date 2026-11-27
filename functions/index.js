@@ -32,6 +32,8 @@ const feedbackService = createFeedbackService({
 });
 exports.submitFeedback = functions.runWith({ secrets: ['GITHUB_FEEDBACK_TOKEN'] })
     .https.onCall((data, context) => feedbackService.submit(data || {}, context));
+exports.retryFeedbackIssue = functions.runWith({ secrets: ['GITHUB_FEEDBACK_TOKEN'] })
+    .https.onCall((data, context) => feedbackService.retryIssue(data || {}, context));
 
 // --- helpers de roles / autenticación ---
 function assertAuthenticated(context) {

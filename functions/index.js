@@ -34,6 +34,10 @@ exports.submitFeedback = functions.runWith({ secrets: ['GITHUB_FEEDBACK_TOKEN'] 
     .https.onCall((data, context) => feedbackService.submit(data || {}, context));
 exports.retryFeedbackIssue = functions.runWith({ secrets: ['GITHUB_FEEDBACK_TOKEN'] })
     .https.onCall((data, context) => feedbackService.retryIssue(data || {}, context));
+// Al cambiar el estado en la página, el issue se cierra (Hecho/Descartado) o se reabre.
+exports.syncFeedbackIssueState = functions.runWith({ secrets: ['GITHUB_FEEDBACK_TOKEN'] })
+    .firestore.document('feedback/{feedbackId}')
+    .onUpdate((change) => feedbackService.syncIssueState(change));
 
 // --- helpers de roles / autenticación ---
 function assertAuthenticated(context) {

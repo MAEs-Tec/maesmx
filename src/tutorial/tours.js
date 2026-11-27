@@ -208,7 +208,7 @@ export const PAGE_TOURS = {
             { element: '[data-tour="sugerencias-filtros"]', title: 'Filtros', text: 'Elige sugerencias o fallos y el estado. Por defecto ves solo las pendientes (nuevo y en revisión).' },
             { element: '[data-tour="sugerencias-tabla"]', title: 'Mensajes', text: 'Cada fila es un envío. La flecha de la izquierda muestra el texto completo y quién lo mandó (nombre y correo, que no salen en GitHub).' },
             { element: '[data-tour="sugerencias-github"]', title: 'Issue en GitHub', text: 'Liga al issue público que se abrió, sin datos personales. Si sale un ícono naranja, no se pudo abrir: pasa el mouse para ver por qué (por ejemplo, token vencido).' },
-            { element: '[data-tour="sugerencias-estado"]', title: 'Estado', text: 'Márcalo en revisión, hecho o descartado. Se guarda al momento y queda quién lo cambió.' }
+            { element: '[data-tour="sugerencias-estado"]', title: 'Estado', text: 'Márcalo en revisión, hecho o descartado. Se guarda al momento, queda quién lo cambió y el issue de GitHub se cierra (hecho o descartado) o se reabre.' }
         ]
     },
     adminusuarios: {

@@ -117,7 +117,15 @@ onMounted(load);
             <Column style="width: 8rem">
                 <template #header><span data-tour="sugerencias-github">GitHub</span></template>
                 <template #body="{ data }">
-                    <a v-if="data.issueUrl" :href="data.issueUrl" target="_blank" rel="noopener">#{{ data.issueNumber }}</a>
+                    <span v-if="data.issueUrl" class="flex align-items-center gap-1">
+                        <a :href="data.issueUrl" target="_blank" rel="noopener">#{{ data.issueNumber }}</a>
+                        <i
+                            v-if="data.issueSyncError"
+                            class="pi pi-exclamation-circle text-orange-500"
+                            v-tooltip.top="`El estado no se pasó a GitHub: ${data.issueSyncError}`"
+                            aria-label="Estado sin sincronizar con GitHub"
+                        ></i>
+                    </span>
                     <span v-else-if="data.issueError" class="flex align-items-center gap-1">
                         <i class="pi pi-exclamation-circle text-orange-500" v-tooltip.top="data.issueError" aria-label="Sin issue"></i>
                         <Button

@@ -93,26 +93,27 @@ function createFeedbackService({ db, HttpsError, FieldValue, getToken, repo, fet
         });
     }
 
+    function github(path, method, payload) {
+        return fetchImpl(`https://api.github.com/repos/${repo}/issues${path}`, {
+            method,
+            headers: {
+                Authorization: `Bearer ${getToken()}`,
+                Accept: 'application/vnd.github+json',
+                'X-GitHub-Api-Version': '2022-11-28',
+                'Content-Type': 'application/json',
+                'User-Agent': 'maesmx-feedback'
+            },
+            body: JSON.stringify(payload)
+        });
+    }
+
     async function openIssue(issue) {
-        const token = getToken();
-        if (!token) return { error: 'GitHub no configurado (falta GITHUB_FEEDBACK_TOKEN).' };
-        const request = (payload) =>
-            fetchImpl(`https://api.github.com/repos/${repo}/issues`, {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    Accept: 'application/vnd.github+json',
-                    'X-GitHub-Api-Version': '2022-11-28',
-                    'Content-Type': 'application/json',
-                    'User-Agent': 'maesmx-feedback'
-                },
-                body: JSON.stringify(payload)
-            });
-        let response = await request(issue);
+        if (!getToken()) return { error: 'GitHub no configurado (falta GITHUB_FEEDBACK_TOKEN).' };
+        let response = await github('', 'POST', issue);
         // Sin permiso para etiquetas (o etiqueta inválida): se reintenta sin ellas.
         if (response.status === 422 || response.status === 403) {
             const { labels: _labels, ...withoutLabels } = issue;
-            response = await request(withoutLabels);
+            response = await github('', 'POST', withoutLabels);
         }
         if (!response.ok) return { error: githubError(response.status) };
         const created = await response.json();
@@ -185,8 +186,48 @@ function createFeedbackService({ db, HttpsError, FieldValue, getToken, repo, fet
         return { id, issueUrl, issueNumber: after?.issueNumber ?? null };
     }
 
-    return { submit, retryIssue };
+    // Trigger de feedback/{id}: cuando admin/tec cambia el estado en la página, el issue sigue:
+    // Hecho → cerrado (completed), Descartado → cerrado (not planned), Nuevo/En revisión → abierto.
+    // Si GitHub falla, el estado en la app se queda y el motivo se guarda en issueSyncError.
+    async function syncIssueState(change) {
+        if (!change.before.exists || !change.after.exists) return null;
+        const before = change.before.data();
+        const after = change.after.data();
+        if (!after.issueNumber) return null;
+        const target = ISSUE_STATE[after.status ?? 'nuevo'];
+        const previous = ISSUE_STATE[before.status ?? 'nuevo'];
+        if (!target || (previous && previous.state === target.state && previous.reason === target.reason)) return null;
+
+        let error = null;
+        if (!getToken()) {
+            error = 'GitHub no configurado (falta GITHUB_FEEDBACK_TOKEN).';
+        } else {
+            const payload = target.state === 'closed' ? { state: 'closed', state_reason: target.reason } : { state: 'open' };
+            try {
+                const response = await github(`/${after.issueNumber}`, 'PATCH', payload);
+                if (!response.ok) error = githubError(response.status);
+            } catch (e) {
+                error = `No se pudo contactar a GitHub: ${e.message}`;
+            }
+        }
+        if (error) {
+            logger.warn('No se sincronizó el estado del issue', { id: change.after.id, issue: after.issueNumber, error });
+            await change.after.ref.update({ issueSyncError: error });
+        } else if (after.issueSyncError) {
+            await change.after.ref.update({ issueSyncError: FieldValue.delete() });
+        }
+        return null;
+    }
+
+    return { submit, retryIssue, syncIssueState };
 }
+
+const ISSUE_STATE = {
+    nuevo: { state: 'open', reason: null },
+    en_revision: { state: 'open', reason: null },
+    hecho: { state: 'closed', reason: 'completed' },
+    descartado: { state: 'closed', reason: 'not_planned' }
+};
 
 const ADMIN_ROLES = ['admin', 'tec'];
 
@@ -194,7 +235,7 @@ const ADMIN_ROLES = ['admin', 'tec'];
 function githubError(status) {
     if (status === 410) return 'Los issues están desactivados en el repositorio de GitHub.';
     if (status === 401) return 'El token de GitHub no es válido o venció.';
-    if (status === 403 || status === 404) return 'El token de GitHub no tiene permiso para crear issues en el repositorio.';
+    if (status === 403 || status === 404) return 'El token de GitHub no tiene permiso para crear o editar issues en el repositorio.';
     return `GitHub respondió ${status}.`;
 }
 

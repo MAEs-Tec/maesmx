@@ -101,6 +101,8 @@ La función `submitFeedback` abre un issue en `MAEs-Tec/maesmx` por cada sugeren
 
 Para renovar el token, repite el paso 2 y vuelve a desplegar las funciones. Si el token vence o falta, las sugerencias se siguen guardando en Firestore con `issueError` y se ven en **Administrador > Sugerencias**; solo deja de abrirse el issue.
 
+El mismo token lo usa `syncFeedbackIssueState`: cuando un admin o tec cambia el estado en **Administrador > Sugerencias**, el issue se cierra (Hecho → *completed*, Descartado → *not planned*) o se reabre (Nuevo, En revisión). Si GitHub falla, el estado se queda en la app y el motivo se guarda en `issueSyncError`, que la página muestra junto al número del issue. Cerrar un issue desde GitHub no cambia el estado en la app.
+
 En el emulador no hace falta: sin token, la función guarda la sugerencia y anota que GitHub no está configurado. Para probar el issue en local, crea `functions/.secret.local` (ignorado por git) con `GITHUB_FEEDBACK_TOKEN=...` usando un token de prueba.
 
 ### Reglas de ramas

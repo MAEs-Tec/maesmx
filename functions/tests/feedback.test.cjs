@@ -180,3 +180,58 @@ test('reintentar cuando GitHub sigue fallando devuelve el motivo', async () => {
     const { id } = await h.service.submit(valid, context());
     await assert.rejects(h.service.retryIssue({ id }, context({ role: 'admin' })), { code: 'unavailable', message: /desactivados/ });
 });
+
+// Simula el change de un trigger onUpdate sobre feedback/{id} ya guardado en el fake db.
+function statusChange(db, id, from, to) {
+    const ref = db.collection('feedback').doc(id);
+    const base = db.data.get(`feedback/${id}`);
+    const after = { ...base, status: to };
+    db.data.set(`feedback/${id}`, after);
+    return {
+        before: { exists: true, data: () => ({ ...base, status: from }) },
+        after: { exists: true, id, ref, data: () => after }
+    };
+}
+
+test('cambiar el estado cierra o reabre el issue en GitHub', async () => {
+    const h = harness({ response: { status: 201, ok: true, body: { number: 7, html_url: 'https://github.com/o/r/issues/7' } } });
+    const { id } = await h.service.submit(valid, context());
+
+    await h.service.syncIssueState(statusChange(h.db, id, 'nuevo', 'descartado'));
+    let call = h.calls.at(-1);
+    assert.equal(call.url, 'https://api.github.com/repos/MAEs-Tec/maesmx/issues/7');
+    assert.equal(call.options.method, 'PATCH');
+    assert.deepEqual(call.payload, { state: 'closed', state_reason: 'not_planned' });
+
+    await h.service.syncIssueState(statusChange(h.db, id, 'descartado', 'hecho'));
+    assert.deepEqual(h.calls.at(-1).payload, { state: 'closed', state_reason: 'completed' });
+
+    await h.service.syncIssueState(statusChange(h.db, id, 'hecho', 'en_revision'));
+    assert.deepEqual(h.calls.at(-1).payload, { state: 'open' });
+
+    // Nuevo ↔ En revisión: el issue ya está abierto, no se llama a GitHub.
+    const before = h.calls.length;
+    await h.service.syncIssueState(statusChange(h.db, id, 'en_revision', 'nuevo'));
+    await h.service.syncIssueState(statusChange(h.db, id, 'nuevo', 'nuevo'));
+    assert.equal(h.calls.length, before);
+});
+
+test('sin issue no se sincroniza; si GitHub falla queda issueSyncError y se limpia al lograrlo', async () => {
+    const noIssue = harness({ token: '' });
+    const a = await noIssue.service.submit(valid, context());
+    await noIssue.service.syncIssueState(statusChange(noIssue.db, a.id, 'nuevo', 'descartado'));
+    assert.equal(noIssue.calls.length, 0);
+
+    const h = harness({ response: [
+        { status: 201, ok: true, body: { number: 7, html_url: 'https://github.com/o/r/issues/7' } },
+        { status: 403, ok: false },
+        { status: 200, ok: true, body: {} }
+    ] });
+    const { id } = await h.service.submit(valid, context());
+    await h.service.syncIssueState(statusChange(h.db, id, 'nuevo', 'hecho'));
+    assert.match(h.db.data.get(`feedback/${id}`).issueSyncError, /no tiene permiso/);
+    assert.equal(h.db.data.get(`feedback/${id}`).status, 'hecho', 'el estado de la app se conserva');
+
+    await h.service.syncIssueState(statusChange(h.db, id, 'hecho', 'descartado'));
+    assert.ok(!('issueSyncError' in h.db.data.get(`feedback/${id}`)));
+});
